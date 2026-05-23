@@ -599,6 +599,7 @@ OPTION_DEFAULT_ON([xinput2],[don't use version 2 of the X Input Extension for in
 OPTION_DEFAULT_OFF([small-ja-dic],[generate a smaller-size Japanese dictionary])
 OPTION_DEFAULT_OFF([android],[cross-compile Android application package])
 OPTION_DEFAULT_ON([android-debug],[don't build Emacs as a debug package on Android])
+OPTION_DEFAULT_OFF([ios],[cross-compile iOS application bundle])
 
 # Find out of Android support is enabled and mailutils has defaulted
 # to `yes-unless-android'.  Disable it if so.
@@ -2622,6 +2623,13 @@ ANDROID_LIBS=
 # the cross-compiler.
 ANDROID_BUILD_CFLAGS=
 REALLY_ANDROID=
+# iOS substitutions; populated by the recursive XCONFIGURE=ios path
+# in a follow-up commit, otherwise left empty so the default Linux
+# /macOS host build is unaffected.
+IOS=
+IOS_OBJ=
+IOS_LIBS=
+IOS_BUILD_CFLAGS=
 CM_OBJ="cm.o"
 
 AS_IF([test "$ANDROID" = "yes"],[
@@ -2693,6 +2701,40 @@ AC_SUBST([ANDROID_LDFLAGS])
 AC_SUBST([ANDROID_BUILD_CFLAGS])
 AC_SUBST([ANDROID_SHARED_USER_ID])
 AC_SUBST([ANDROID_SHARED_USER_NAME])
+
+# iOS-specific objects, linker flags, and build-time CFLAGS.  The
+# pattern follows the Android port: the outer --with-ios invocation
+# (a host build that produces no iOS code by itself) is responsible
+# for recursively re-invoking configure with XCONFIGURE=ios and the
+# Apple toolchain.  Only the recursive cross-configure run sets
+# IOS=yes; on that pass the iOS translation units (src/ios.m,
+# iosterm.m, etc.) are pulled into IOS_OBJ and the iOS-specific
+# macros are defined.
+#
+# This commit only wires the substitutions; the recursive cross-
+# configure invocation (analogous to lines 1297-1302 for Android) and
+# the corresponding cross/xcode-build/ infrastructure land in
+# follow-up commits.  Until then --with-ios is a documented
+# placeholder that does not yet produce an iOS build.
+
+AS_IF([test "$IOS" = "yes"],[
+  window_system=ios
+  no_x=yes
+  IOS_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosvfs.o iosfont.o"
+  IOS_OBJ="$IOS_OBJ ios.o"
+  IOS_LIBS="-framework UIKit -framework Foundation"
+  IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
+  IOS_BUILD_CFLAGS="-fPIC -fvisibility=hidden -fobjc-arc"
+
+  AC_DEFINE([HAVE_IOS], [1], [Define to 1 if Emacs is being built
+with iOS support])
+  AC_DEFINE([NS_IMPL_IOS], [1], [Define to 1 to compile the NS-shared
+font and image code (nsfont.m, nsimage.m) in iOS mode])])
+
+AC_SUBST([IOS])
+AC_SUBST([IOS_OBJ])
+AC_SUBST([IOS_LIBS])
+AC_SUBST([IOS_BUILD_CFLAGS])
 
 # Check for pw_gecos in struct passwd; this is known to be missing on
 # Android.
