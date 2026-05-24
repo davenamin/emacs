@@ -375,6 +375,15 @@ bootstrap-all:
 
 actual-all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) src-depending-on-lisp blessmail
 
+## Convenience target for assembling the iOS application bundle.
+## Requires --with-ios was passed to configure (which becomes
+## meaningful once the recursive XCONFIGURE=ios cross-build lands in
+## a follow-up commit).  Mirrors how nextstep/Makefile is invoked
+## indirectly via `make install' on macOS.
+.PHONY: ios ios-bundle
+ios ios-bundle:
+	$(MAKE) -C ios all
+
 # ADVICE-ON-FAILURE-BEGIN:all
 # You could try to:
 # - run "make bootstrap", which might fix the problem
@@ -1026,7 +1035,7 @@ mostlyclean: $(mostlyclean_dirs:=_mostlyclean)
 ###      with them.
 ###
 ###      Delete '.dvi' files here if they are not part of the distribution.
-clean_dirs = $(mostlyclean_dirs) java cross nextstep admin/charsets \
+clean_dirs = $(mostlyclean_dirs) java cross nextstep ios admin/charsets \
   admin/unidata
 
 $(foreach dir,$(clean_dirs),$(eval $(call submake_template,$(dir),clean)))

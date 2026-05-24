@@ -1,0 +1,74 @@
+iOS port of GNU Emacs
+=====================
+
+This directory contains the iOS-specific scaffolding for building
+Emacs as an iOS application bundle distributable through the App
+Store.  The port is being landed incrementally; see the
+"Suggested implementation order" in the design document for the
+sequence of follow-up commits.
+
+The C-side terminal driver, font and pasteboard bridges live under
+src/ios*.{m,h,c} and src/iosvfs.c.  This directory holds only:
+
+  Emacs.base/                Bundle template (Info.plist, entitlements,
+                             launch screen, icons), assembled into the
+                             output .app at build time.
+  Emacs/                     Objective-C app shell (main.m,
+                             AppDelegate, SceneDelegate).  These are
+                             linked into the same Mach-O as the Emacs
+                             core, and call into ios_main() from
+                             src/ios.m once UIKit has finished
+                             launching.
+  Makefile.in                Bundle-assembly orchestration; mirrors
+                             nextstep/Makefile.in's tar + copy +
+                             codesign approach.
+
+Building
+--------
+
+Building the iOS port requires:
+
+  * A macOS host with Xcode installed.
+  * The iOS SDK (use `xcrun --sdk iphoneos --show-sdk-path').
+  * For on-device installation, an Apple Developer account and a
+    valid provisioning profile.
+
+The current scaffolding is not yet complete:
+
+  * The recursive XCONFIGURE=ios cross-configure path (analogous to
+    the XCONFIGURE=android path at configure.ac:29) is not yet
+    wired up.  Until it lands, ./configure --with-ios is a
+    documented placeholder and `make -C ios all' will report a
+    clear error explaining that the cross-compiled emacs binary is
+    missing.
+  * cross/xcode-build/ -- the Xcode/clang cross-compile rules that
+    produce the libemacs.a + emacs binary for iOS -- has not yet
+    been added.
+
+When both are in place the eventual build sequence will be:
+
+  ./autogen.sh
+  ./configure --with-ios --with-ios-deployment-target=15.0
+  make ios-bundle           # or: make && make -C ios all
+
+producing ios/Emacs.app, which can be installed in the Simulator with
+
+  xcrun simctl install booted ios/Emacs.app
+  xcrun simctl launch booted org.gnu.emacs
+
+On first launch Emacs writes its pdumper image into
+
+  <sandbox>/Library/Application Support/Emacs/emacs.pdmp
+
+(roughly 10-30 seconds depending on hardware), and subsequent
+launches mmap it sub-second.
+
+App Store compliance notes
+--------------------------
+
+* No JIT (no native compilation, no dynamic module loading).
+* No fork/exec; Emacs subprocess primitives error out.
+* Sandboxed filesystem; user files live in the per-app Documents
+  directory and Files-app picked URLs.
+* pdumper image is data, not executable code, and is generated on
+  first launch into the writable Application Support directory.

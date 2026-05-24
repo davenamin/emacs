@@ -7240,6 +7240,18 @@ AC_SUBST([ns_applibexecdir])
 AC_SUBST([ns_applibdir])
 AC_SUBST([ns_appresdir])
 AC_SUBST([ns_appsrc])
+
+## iOS bundle output path.  Defaults to ios/Emacs.app under the build
+## directory; ios/Makefile assembles the bundle template plus the
+## cross-compiled emacs binary into this location.
+AS_IF([test -z "$ios_appdir"], [ios_appdir=`pwd`/ios/Emacs.app])
+AC_SUBST([ios_appdir])
+
+## Minimum supported iOS version (passed into ios/Emacs.base/Info.plist
+## and, in a follow-up commit, into the -mios-version-min CFLAG of the
+## XCONFIGURE=ios cross-compile).
+AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
+AC_SUBST([IOS_DEPLOYMENT_TARGET])
 AC_SUBST([GNU_OBJC_CFLAGS])
 AC_SUBST([OTHER_FILES])
 
@@ -7827,12 +7839,13 @@ dnl config.status treats $srcdir specially, so I think this is ok...
 ARCH_INDEPENDENT_CONFIG_FILES([$srcdir/doc/man/emacs.1])
 
 AC_CONFIG_FILES([lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile
-                 lwlib/Makefile nextstep/Makefile nt/Makefile])
+                 lwlib/Makefile nextstep/Makefile nt/Makefile ios/Makefile
+                 ios/Emacs.base/Info.plist:ios/Emacs.base/Info.plist.in])
 ARCH_INDEPENDENT_CONFIG_FILES([doc/emacs/Makefile doc/misc/Makefile
                                doc/lispintro/Makefile doc/lispref/Makefile
 			       lisp/Makefile leim/Makefile])
 
-SUBDIR_MAKEFILES="lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile lwlib/Makefile nextstep/Makefile nt/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile lisp/Makefile leim/Makefile"
+SUBDIR_MAKEFILES="lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile lwlib/Makefile nextstep/Makefile nt/Makefile ios/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile lisp/Makefile leim/Makefile"
 
 dnl The test/ directory is missing if './make-dist --no-tests' was used.
 opt_makefile=test/Makefile
