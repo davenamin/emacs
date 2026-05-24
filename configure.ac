@@ -1409,11 +1409,16 @@ if test "$with_ios" = "yes"; then
   AS_IF([test "$XCONFIGURE" = "ios"], [],
     [AC_MSG_NOTICE([Configuring iOS cross-compile via XCONFIGURE=ios.])
 
-     # Resolve the Apple toolchain.  The helper aborts cleanly if
-     # we are not on macOS, if xcrun is missing, or if the SDK
-     # cannot be located.  Sourcing failures propagate to AC_MSG_ERROR
-     # so the user sees a single coherent diagnostic.
-     AS_IF([(. "$srcdir/cross/xcode-build/xcode-toolchain.sh") >/dev/null 2>&1], [],
+     # Sanity-check the toolchain in a subshell.  The helper aborts
+     # cleanly if we are not on macOS, if xcrun is missing, or if
+     # the SDK cannot be located.  We deliberately do NOT source
+     # the helper into the outer shell -- the iOS CC/CFLAGS/LDFLAGS
+     # must not leak into outer-pass probes, which are host-targeted.
+     # The recursive XCONFIGURE=ios run below sources the helper for
+     # real inside its own shell.
+     AS_IF([(IOS_DEPLOYMENT_TARGET=$IOS_DEPLOYMENT_TARGET \
+             . "$srcdir/cross/xcode-build/xcode-toolchain.sh") \
+           >/dev/null 2>&1], [],
        [AC_MSG_ERROR([--with-ios requires macOS with Xcode installed.
 The cross/xcode-build/xcode-toolchain.sh helper could not resolve the
 Apple toolchain.  Run
@@ -1422,10 +1427,6 @@ Apple toolchain.  Run
     . $srcdir/cross/xcode-build/xcode-toolchain.sh
 
 by hand to see the underlying error.])])
-
-     # Source the helper for real (above was just a sanity check in
-     # a subshell so its exports do not leak if it fails).
-     . "$srcdir/cross/xcode-build/xcode-toolchain.sh"
 
      # Save confdefs.h and config.log so the recursive run gets a
      # clean slate; restore them after it returns.
@@ -1443,27 +1444,30 @@ by hand to see the underlying error.])])
        [ios_passthrough="$ios_passthrough --cache-file=$cache_file.1"])
      ios_passthrough="$ios_passthrough --enable-check-lisp-object-type=$enable_check_lisp_object_type"
 
-     AS_IF([XCONFIGURE=ios CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
-            CFLAGS="$CFLAGS" OBJCFLAGS="$OBJCFLAGS" LDFLAGS="$LDFLAGS" \
+     # The recursive invocation gets only the iOS toolchain *inputs*
+     # (SDK, arch, deployment target).  CC/CFLAGS/LDFLAGS are resolved
+     # by xcode-toolchain.sh inside the recursive shell.  This mirrors
+     # the Android branch above, which passes ANDROID_CC/android_abi/
+     # android_ndk_path rather than the resolved CC.
+     AS_IF([XCONFIGURE=ios \
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
             $CONFIG_SHELL $0 $ios_passthrough], [],
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
 
-     # Move the generated cross artifacts aside.  The ios/Makefile
-     # picks the cross-built src/emacs out of the cross/ tree (added
-     # in a later commit); this commit only wires up the
-     # cross-configure itself, so the .ios-suffixed Makefiles are
-     # not yet consumed.
+     # Move the generated cross artifacts aside so the outer host
+     # pass can produce its own Makefiles into the same paths.
      for makefile in src/Makefile lib/Makefile lib-src/Makefile; do
        AS_IF([test -f "$makefile"], [mv -f "$makefile" "$makefile.ios"])
      done
      AS_IF([test -f src/config.h], [mv -f src/config.h src/config.h.ios])
 
-     IOS=yes
      REALLY_IOS=yes
 
-     # Restore the outer-pass state.
+     # Restore the outer-pass state.  Note: IOS is NOT set here --
+     # the outer pass continues as a plain host build, which is what
+     # produces ios/Makefile and ios/Emacs.base/Info.plist with host
+     # tools.  Only the recursive pass sets IOS=yes.
      mv -f _confdefs.h confdefs.h
      mv -f config.log config.log.ios
      mv -f _config.log config.log])
@@ -1471,8 +1475,12 @@ fi
 
 if test "$XCONFIGURE" = "ios"; then
   IOS=yes
-  # Inside the recursive pass, force cross_compiling on so AC_TRY_RUN
-  # tests fall back to AC_TRY_LINK semantics.
+  # Source the Apple toolchain helper *inside* the recursive shell so
+  # CC/CXX/AR/RANLIB/CFLAGS/OBJCFLAGS/LDFLAGS are set before
+  # AC_PROG_CC fires later in configure.ac.
+  . "$srcdir/cross/xcode-build/xcode-toolchain.sh"
+  # Force cross_compiling on so AC_TRY_RUN tests fall back to
+  # AC_TRY_LINK semantics.
   cross_compiling=yes
 fi
 
@@ -2745,10 +2753,12 @@ ANDROID_LIBS=
 # the cross-compiler.
 ANDROID_BUILD_CFLAGS=
 REALLY_ANDROID=
-# iOS substitutions; populated by the recursive XCONFIGURE=ios path
-# in a follow-up commit, otherwise left empty so the default Linux
-# /macOS host build is unaffected.
-IOS=
+# iOS substitutions.  IOS itself is *not* reset here: by the time we
+# reach this line the recursive XCONFIGURE=ios path has already set
+# IOS=yes (and the outer host pass left it empty), so resetting it
+# would mask the cross pass and prevent HAVE_IOS / IOS_OBJ from being
+# defined.  The remaining variables are computed below inside the
+# AS_IF([test "$IOS" = "yes"], ...) block and are safe to clear.
 IOS_OBJ=
 IOS_LIBS=
 IOS_BUILD_CFLAGS=
