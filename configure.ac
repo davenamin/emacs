@@ -1392,6 +1392,128 @@ if test "$ANDROID" = "yes"; then
   # zlib is available in android.
 fi
 
+dnl ---------------------------------------------------------------
+dnl iOS cross-configure: when --with-ios is given on a macOS host,
+dnl re-invoke configure with XCONFIGURE=ios and the Apple toolchain
+dnl resolved by cross/xcode-build/xcode-toolchain.sh.  The pattern
+dnl mirrors the Android block above; see commentary near
+dnl `IOS_OBJ' below for the architecture rationale.
+dnl ---------------------------------------------------------------
+
+if test "$with_ios" = "yes"; then
+  # Default the deployment target before the toolchain helper consumes
+  # it.  The AC_SUBST happens later (near the other iOS substitutions)
+  # but the value needs to exist now.
+  AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
+
+  AS_IF([test "$XCONFIGURE" = "ios"], [],
+    [AC_MSG_NOTICE([Configuring iOS cross-compile via XCONFIGURE=ios.])
+
+     # Resolve the Apple toolchain.  The helper aborts cleanly if
+     # we are not on macOS, if xcrun is missing, or if the SDK
+     # cannot be located.  Sourcing failures propagate to AC_MSG_ERROR
+     # so the user sees a single coherent diagnostic.
+     AS_IF([(. "$srcdir/cross/xcode-build/xcode-toolchain.sh") >/dev/null 2>&1], [],
+       [AC_MSG_ERROR([--with-ios requires macOS with Xcode installed.
+The cross/xcode-build/xcode-toolchain.sh helper could not resolve the
+Apple toolchain.  Run
+
+  IOS_DEPLOYMENT_TARGET=$IOS_DEPLOYMENT_TARGET \\
+    . $srcdir/cross/xcode-build/xcode-toolchain.sh
+
+by hand to see the underlying error.])])
+
+     # Source the helper for real (above was just a sanity check in
+     # a subshell so its exports do not leak if it fails).
+     . "$srcdir/cross/xcode-build/xcode-toolchain.sh"
+
+     # Save confdefs.h and config.log so the recursive run gets a
+     # clean slate; restore them after it returns.
+     mv -f confdefs.h _confdefs.h
+     mv -f config.log _config.log
+     trap "rm -rf _confdefs.h _config.log" 0
+
+     # Build the passthrough list.  iOS is even more restrictive than
+     # Android: no fork/exec, no dynamic loading of arbitrary code,
+     # so nearly every optional feature is disabled.  Only options
+     # the user explicitly cares about (cache file, lisp-object-type
+     # check) need to make it through.
+     ios_passthrough="--with-ios"
+     AS_IF([test -n "$cache_file" && test "$cache_file" != "/dev/null"],
+       [ios_passthrough="$ios_passthrough --cache-file=$cache_file.1"])
+     ios_passthrough="$ios_passthrough --enable-check-lisp-object-type=$enable_check_lisp_object_type"
+
+     AS_IF([XCONFIGURE=ios CC="$CC" CXX="$CXX" AR="$AR" RANLIB="$RANLIB" \
+            CFLAGS="$CFLAGS" OBJCFLAGS="$OBJCFLAGS" LDFLAGS="$LDFLAGS" \
+            IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
+            IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            $CONFIG_SHELL $0 $ios_passthrough], [],
+       [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
+
+     # Move the generated cross artifacts aside.  The ios/Makefile
+     # picks the cross-built src/emacs out of the cross/ tree (added
+     # in a later commit); this commit only wires up the
+     # cross-configure itself, so the .ios-suffixed Makefiles are
+     # not yet consumed.
+     for makefile in src/Makefile lib/Makefile lib-src/Makefile; do
+       AS_IF([test -f "$makefile"], [mv -f "$makefile" "$makefile.ios"])
+     done
+     AS_IF([test -f src/config.h], [mv -f src/config.h src/config.h.ios])
+
+     IOS=yes
+     REALLY_IOS=yes
+
+     # Restore the outer-pass state.
+     mv -f _confdefs.h confdefs.h
+     mv -f config.log config.log.ios
+     mv -f _config.log config.log])
+fi
+
+if test "$XCONFIGURE" = "ios"; then
+  IOS=yes
+  # Inside the recursive pass, force cross_compiling on so AC_TRY_RUN
+  # tests fall back to AC_TRY_LINK semantics.
+  cross_compiling=yes
+fi
+
+AC_SUBST([REALLY_IOS])
+
+if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
+  # iOS, like Android, disables nearly every optional feature.
+  # Apply the disables both in the outer host pass (so the bridging
+  # host build is minimal) and the inner cross pass.
+  with_xpm=no
+  with_png=no
+  with_webp=no
+  with_gif=no
+  with_jpeg=no
+  with_xml2=no
+  with_sqlite3=no
+  with_gnutls=no
+  with_tiff=no
+  with_selinux=no
+  with_modules=no
+  with_tree_sitter=no
+  with_imagemagick=no
+  with_lcms2=no
+  with_mailutils=no
+  with_pop=no
+  with_harfbuzz=no
+  with_native_compilation=no
+  with_threads=no
+  with_rsvg=no
+  with_libsystemd=no
+  with_cairo=no
+  with_xft=no
+  with_libotf=no
+  with_gpm=no
+  with_dbus=no
+  with_gsettings=no
+  with_ns=no
+  with_x=no
+  with_pgtk=no
+fi
+
 dnl This used to use changequote, but, apart from 'changequote is evil'
 dnl per the autoconf manual, we can speed up autoconf somewhat by quoting
 dnl the great gob of text.  Thus it's not processed for possible expansion.
