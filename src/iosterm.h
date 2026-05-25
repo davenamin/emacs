@@ -68,6 +68,22 @@ typedef void *Emacs_Window;
 #define XNegative 	0x0010
 #define YNegative 	0x0020
 
+/* Window-manager hint flags.  frame.c ORs these into
+   window_prompting to record which geometry properties were
+   user- vs program-supplied.  iOS has no window manager, so these
+   are read but never acted on; the constants exist so the shared
+   code compiles.  */
+#define USPosition	(1L << 0)
+#define USSize		(1L << 1)
+#define PPosition	(1L << 2)
+#define PSize		(1L << 3)
+#define PMinSize	(1L << 4)
+#define PMaxSize	(1L << 5)
+#define PResizeInc	(1L << 6)
+#define PAspect		(1L << 7)
+#define PBaseSize	(1L << 8)
+#define PWinGravity	(1L << 9)
+
 struct ios_display_info
 {
   struct ios_display_info *next;
@@ -108,6 +124,15 @@ struct ios_display_info
      screen's background window; on iOS there is no such concept and
      the value stays NULL, but frame.c reads it unconditionally.  */
   Emacs_Window root_window;
+
+  /* Mouse-tracking state.  frame.c (and xdisp/keyboard.c eventually)
+     reads these to drive mouse-region/hover logic that on iOS
+     corresponds to touch and pointer events.  Defaults to 0/NULL
+     until iosterm.m starts populating them.  */
+  int grabbed;
+  struct frame *last_mouse_frame;
+  struct frame *last_mouse_motion_frame;
+  int last_mouse_motion_x, last_mouse_motion_y;
 };
 
 struct ios_output
@@ -131,6 +156,9 @@ struct ios_output
   struct font *font;
   int baseline_offset;
 
+  /* Fontset ID.  Returned by FRAME_FONTSET below.  */
+  int fontset;
+
   /* Cursor colours.  */
   unsigned long cursor_pixel;
   unsigned long cursor_foreground_pixel;
@@ -140,6 +168,7 @@ struct ios_output
 #define FRAME_IOS_VIEW(f)          ((f)->output_data.ios->view)
 #define FRAME_DISPLAY_INFO(f)      ((f)->output_data.ios->display_info)
 #define FRAME_FONT(f)              ((f)->output_data.ios->font)
+#define FRAME_FONTSET(f)           ((f)->output_data.ios->fontset)
 #define FRAME_BASELINE_OFFSET(f)   ((f)->output_data.ios->baseline_offset)
 
 /* Port-neutral accessors that frame.c / xdisp.c expand on any
