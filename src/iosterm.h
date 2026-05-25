@@ -118,6 +118,12 @@ struct ios_display_info
   int smallest_char_width;
   int smallest_font_height;
 
+  /* Pixels per inch on each axis.  FRAME_RES_X / FRAME_RES_Y in
+     frame.h read these.  ios_term_init will populate them from
+     [UIScreen mainScreen] geometry (typically ~163 dpi for non-
+     Retina, ~326 for Retina, ~458 for Super Retina).  */
+  double resx, resy;
+
   /* Mouse-highlight state shared across all frames on this display.
      Expected by MOUSE_HL_INFO in frame.h.  */
   Mouse_HLInfo mouse_highlight;
@@ -170,6 +176,29 @@ struct ios_output
   /* Cursor colours.  */
   unsigned long cursor_pixel;
   unsigned long cursor_foreground_pixel;
+
+  /* Mouse-cursor handles for each role.  iOS does not have hardware
+     mouse cursors in the X11 sense; UIPointerInteraction (iPadOS
+     13.4+) provides system pointer effects keyed by UIPointerStyle.
+     For now these stay NULL (Emacs_Cursor is void *) and the
+     generic xdisp.c code that reads them just gets a no-op pointer
+     identity.  Future work: map each role to a UIPointerStyle.  */
+  Emacs_Cursor text_cursor;
+  Emacs_Cursor nontext_cursor;
+  Emacs_Cursor modeline_cursor;
+  Emacs_Cursor hand_cursor;
+  Emacs_Cursor hourglass_cursor;
+  Emacs_Cursor horizontal_drag_cursor;
+  Emacs_Cursor vertical_drag_cursor;
+  Emacs_Cursor current_cursor;
+  Emacs_Cursor left_edge_cursor;
+  Emacs_Cursor top_left_corner_cursor;
+  Emacs_Cursor top_edge_cursor;
+  Emacs_Cursor top_right_corner_cursor;
+  Emacs_Cursor right_edge_cursor;
+  Emacs_Cursor bottom_right_corner_cursor;
+  Emacs_Cursor bottom_edge_cursor;
+  Emacs_Cursor bottom_left_corner_cursor;
 };
 
 #define FRAME_IOS_WINDOW(f)        ((f)->output_data.ios->window)
