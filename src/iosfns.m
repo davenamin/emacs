@@ -43,10 +43,32 @@ backed by a UILabel-on-UIWindow overlay is a follow-up.  */)
   return Qnil;
 }
 
+DEFUN ("xw-display-color-p", Fxw_display_color_p, Sxw_display_color_p,
+       0, 1, 0,
+       doc: /* Return t if the display supports color.
+The optional argument TERMINAL is ignored on iOS; iOS devices always
+have a color display.  */)
+  (Lisp_Object terminal)
+{
+  return Qt;
+}
+
+DEFUN ("x-display-grayscale-p", Fx_display_grayscale_p,
+       Sx_display_grayscale_p, 0, 1, 0,
+       doc: /* Return t if the display supports grayscale.
+The optional argument TERMINAL is ignored on iOS.  Returns nil:
+iOS displays are full color, not grayscale-only.  */)
+  (Lisp_Object terminal)
+{
+  return Qnil;
+}
+
 void
 syms_of_iosfns (void)
 {
   defsubr (&Sx_hide_tip);
+  defsubr (&Sxw_display_color_p);
+  defsubr (&Sx_display_grayscale_p);
   /* Frame parameter and x-* primitive definitions will be added in
      follow-up commits, in parallel to syms_of_androidfns.  */
 }
