@@ -73,6 +73,17 @@ typedef void *Emacs_Window;
    user- vs program-supplied.  iOS has no window manager, so these
    are read but never acted on; the constants exist so the shared
    code compiles.  */
+/* Port-neutral rectangle alias.  Generic xdisp.c code expands
+   STORE_NATIVE_RECT to populate a NativeRectangle; without these
+   defines, NativeRectangle defaults to plain int (see dispextern.h)
+   and the field-store turns into nonsense.  Emacs_Rectangle itself
+   is defined in dispextern.h's non-X / non-Android fallback path
+   for HAVE_IOS, so it's already available here.  */
+#define NativeRectangle			Emacs_Rectangle
+#define STORE_NATIVE_RECT(nr, rx, ry, rwidth, rheight)	\
+  ((nr).x = (rx), (nr).y = (ry),			\
+   (nr).width = (rwidth), (nr).height = (rheight))
+
 #define USPosition	(1L << 0)
 #define USSize		(1L << 1)
 #define PPosition	(1L << 2)
