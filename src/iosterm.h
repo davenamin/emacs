@@ -35,6 +35,39 @@ typedef void *ios_drawable;     /* CALayer *  */
 typedef void *ios_pixmap;       /* CGImageRef */
 typedef void *ios_cursor;       /* unused on iOS, kept for parity */
 
+/* The frame.c / xdisp.c code uses Emacs_Window as a port-neutral
+   identifier for a top-level window.  On iOS there is exactly one
+   real top-level window per frame, backed by a UIWindow.  */
+typedef void *Emacs_Window;
+
+/* X11-compatibility constants used by the generic frame-geometry
+   code in frame.c (gui_set_frame_parameters_1 et al.).  These are
+   plain numeric tokens, copied verbatim from androidgui.h /
+   haikugui.h / pgtkgui.h -- every non-X port keeps a parallel set
+   so the shared code can name window-gravity and geometry-flag
+   constants without #ifdef'ing every reference.  */
+
+#define ForgetGravity		0
+#define NorthWestGravity	1
+#define NorthGravity		2
+#define NorthEastGravity	3
+#define WestGravity		4
+#define CenterGravity		5
+#define EastGravity		6
+#define SouthWestGravity	7
+#define SouthGravity		8
+#define SouthEastGravity	9
+#define StaticGravity		10
+
+#define NoValue		0x0000
+#define XValue  	0x0001
+#define YValue		0x0002
+#define WidthValue  	0x0004
+#define HeightValue  	0x0008
+#define AllValues 	0x000F
+#define XNegative 	0x0010
+#define YNegative 	0x0020
+
 struct ios_display_info
 {
   struct ios_display_info *next;
@@ -64,6 +97,17 @@ struct ios_display_info
   /* Mouse-highlight state shared across all frames on this display.
      Expected by MOUSE_HL_INFO in frame.h.  */
   Mouse_HLInfo mouse_highlight;
+
+  /* Frame-list-element of the form (name . display-name).  Stored
+     here so frame.c can XCAR it without each port reinventing the
+     bookkeeping.  iOS has only one display, so it's a single-element
+     list.  */
+  Lisp_Object name_list_element;
+
+  /* The "root window" of the display.  X uses this to identify the
+     screen's background window; on iOS there is no such concept and
+     the value stays NULL, but frame.c reads it unconditionally.  */
+  Emacs_Window root_window;
 };
 
 struct ios_output
@@ -77,6 +121,11 @@ struct ios_output
   /* UIKit objects backing the frame.  */
   ios_window window;
   ios_view view;
+
+  /* "Parent" window.  On X this is the actual parent in the window
+     hierarchy; on iOS there is no nesting and this stays NULL, but
+     frame.c reads it to fill the `parent-id' frame parameter.  */
+  Emacs_Window parent_desc;
 
   /* Default font for this frame.  */
   struct font *font;
@@ -92,6 +141,17 @@ struct ios_output
 #define FRAME_DISPLAY_INFO(f)      ((f)->output_data.ios->display_info)
 #define FRAME_FONT(f)              ((f)->output_data.ios->font)
 #define FRAME_BASELINE_OFFSET(f)   ((f)->output_data.ios->baseline_offset)
+
+/* Port-neutral accessors that frame.c / xdisp.c expand on any
+   window-system build.  FRAME_OUTPUT_DATA returns the per-port
+   output struct; FRAME_NATIVE_WINDOW returns the toplevel window
+   handle (an Emacs_Window).  */
+#define FRAME_OUTPUT_DATA(f)       ((f)->output_data.ios)
+#define FRAME_NATIVE_WINDOW(f)     ((f)->output_data.ios->window)
+
+/* Head of the singly-linked list of displays.  Defined in iosterm.m.
+   Generic code (frame.c) iterates this to enumerate displays.  */
+extern struct ios_display_info *x_display_list;
 
 /* Entry points implemented in src/ios.m and src/iosterm.m.  Declared
    here so plain C code (emacs.c, keyboard.c, pdumper.c) can call them

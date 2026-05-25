@@ -37,6 +37,12 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "termhooks.h"
 #include "keyboard.h"
 
+/* Head of the singly-linked list of iOS displays.  Generic code in
+   frame.c iterates this to enumerate displays.  iOS has exactly one
+   logical display per app, so the list is at most one element long;
+   ios_term_init prepends to it.  */
+struct ios_display_info *x_display_list = NULL;
+
 struct terminal *
 ios_term_init (void)
 {
