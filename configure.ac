@@ -8125,10 +8125,12 @@ if test "$XCONFIGURE" != "android"; then
   dnl machine.
   AS_MKDIR_P([cross/etc])
 
-  AS_IF([test "x$with_android" != "xno"], [
+  AS_IF([test "x$with_android" != "xno" || test "$with_ios" = "yes"], [
     dnl Link gnulib files to cross/lib as well.  af_alg.h and
     dnl lib/save-cwd.h are copied manually from gnulib, and as such
-    dnl aren't specified in gl_FILE_LIST.
+    dnl aren't specified in gl_FILE_LIST.  Same set of files for
+    dnl Android and iOS -- both cross-targets consume the same gnulib
+    dnl gnulib.mk, which lists the same .o files.
     emacs_files='gl_FILE_LIST lib/af_alg.h lib/save-cwd.h'
     dnl These files are specific to Emacs.
     emacs_files="$emacs_files lib/fingerprint.c lib/fingerprint.h \
