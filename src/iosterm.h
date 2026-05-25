@@ -54,6 +54,16 @@ struct ios_display_info
 
   /* Reference frame used for fallback resolution.  */
   struct frame *highlight_frame;
+
+  /* Smallest font dimensions seen on this display, in pixels.
+     Consumed by FRAME_SMALLEST_FONT_HEIGHT / FRAME_SMALLEST_CHAR_WIDTH
+     in frame.h; expected on every Display_Info regardless of port.  */
+  int smallest_char_width;
+  int smallest_font_height;
+
+  /* Mouse-highlight state shared across all frames on this display.
+     Expected by MOUSE_HL_INFO in frame.h.  */
+  Mouse_HLInfo mouse_highlight;
 };
 
 struct ios_output
