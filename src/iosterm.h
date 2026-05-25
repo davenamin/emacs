@@ -45,8 +45,8 @@ struct ios_display_info
   int pixel_width, pixel_height;
   double scale_factor;
 
-  /* Resource database, parallel to x_display_info::rdb.  */
-  XrmDatabase rdb;
+  /* No X-style resource database on iOS -- iOS frames are
+     configured via Lisp customization and Info.plist, not Xrm.  */
 
   /* Default font.  */
   struct font *font;

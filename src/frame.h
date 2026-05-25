@@ -659,6 +659,7 @@ struct frame
     struct pgtk_output *pgtk;		/* From pgtkterm.h. */
     struct haiku_output *haiku;		/* From haikuterm.h. */
     struct android_output *android;	/* From androidterm.h.  */
+    struct ios_output *ios;		/* From iosterm.h.  */
   }
   output_data;
 
