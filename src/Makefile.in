@@ -387,7 +387,8 @@ ANDROID_BUILD_CFLAGS = @ANDROID_BUILD_CFLAGS@
 
 ## iOS-specific objects, link flags, and build-time CFLAGS.
 ## All empty unless --with-ios was passed to configure.
-IOS_OBJ = @IOS_OBJ@
+IOS_OBJC_OBJ = @IOS_OBJC_OBJ@
+IOS_C_OBJ = @IOS_C_OBJ@
 IOS_LIBS = @IOS_LIBS@
 IOS_BUILD_CFLAGS = @IOS_BUILD_CFLAGS@
 
@@ -473,11 +474,11 @@ base_obj = dispnew.o frame.o scroll.o xdisp.o menu.o $(XMENU_OBJ) window.o     \
 	$(MSDOS_OBJ) $(MSDOS_X_OBJ) $(NS_OBJ) $(CYGWIN_OBJ) $(FONT_OBJ)        \
 	$(W32_OBJ) $(WINDOW_SYSTEM_OBJ) $(XGSELOBJ)			       \
 	$(HAIKU_OBJ) $(PGTK_OBJ) $(ANDROID_OBJ)
-## IOS_OBJ is here, not in base_obj, because every iOS source file is
-## Objective-C (.m).  base_obj is fed through $(base_obj:.o=.c) into
-## GLOBAL_SOURCES, which would produce nonexistent iosterm.c etc.
-## NS_OBJC_OBJ uses the same pattern.
-doc_obj = $(base_obj) $(NS_OBJC_OBJ) $(IOS_OBJ)
+## IOS_OBJC_OBJ is here, not in base_obj, because those files are .m;
+## base_obj is fed through :.o=.c into GLOBAL_SOURCES which would
+## look for nonexistent iosterm.c etc.  IOS_C_OBJ (just iosvfs.o)
+## could live in base_obj but is grouped here for clarity.
+doc_obj = $(base_obj) $(NS_OBJC_OBJ) $(IOS_OBJC_OBJ) $(IOS_C_OBJ)
 obj = $(doc_obj) $(HAIKU_CXX_OBJ)
 
 ## Object files used on some machine or other.
@@ -687,7 +688,8 @@ buildobj.h: Makefile
 	done >$@.tmp
 	$(AM_V_at)mv $@.tmp $@
 
-GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m) $(IOS_OBJ:.o=.m)
+GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m) \
+		 $(IOS_OBJC_OBJ:.o=.m) $(IOS_C_OBJ:.o=.c)
 
 gl-stamp: $(libsrc)/make-docfile$(EXEEXT) $(GLOBAL_SOURCES)
 	$(AM_V_GLOBALS)$(libsrc)/make-docfile -d $(srcdir) -g $(doc_obj) > globals.tmp

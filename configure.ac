@@ -2776,10 +2776,14 @@ REALLY_ANDROID=
 # iOS substitutions.  IOS itself is *not* reset here: by the time we
 # reach this line the recursive XCONFIGURE=ios path has already set
 # IOS=yes (and the outer host pass left it empty), so resetting it
-# would mask the cross pass and prevent HAVE_IOS / IOS_OBJ from being
+# would mask the cross pass and prevent HAVE_IOS / IOS_*_OBJ from being
 # defined.  The remaining variables are computed below inside the
 # AS_IF([test "$IOS" = "yes"], ...) block and are safe to clear.
-IOS_OBJ=
+# IOS_OBJC_OBJ lists Objective-C objects (every src/ios*.m); IOS_C_OBJ
+# lists C objects (src/iosvfs.c).  Split because src/Makefile.in feeds
+# them through different suffix substitutions into GLOBAL_SOURCES.
+IOS_OBJC_OBJ=
+IOS_C_OBJ=
 IOS_LIBS=
 IOS_BUILD_CFLAGS=
 CM_OBJ="cm.o"
@@ -2881,8 +2885,8 @@ AC_SUBST([CROSS_SUFFIX])
 AS_IF([test "$IOS" = "yes"],[
   window_system=ios
   no_x=yes
-  IOS_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosvfs.o iosfont.o"
-  IOS_OBJ="$IOS_OBJ ios.o"
+  IOS_OBJC_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosfont.o ios.o"
+  IOS_C_OBJ="iosvfs.o"
   IOS_LIBS="-framework UIKit -framework Foundation"
   IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
   IOS_BUILD_CFLAGS="-fPIC -fvisibility=hidden -fobjc-arc"
@@ -2893,7 +2897,8 @@ with iOS support])
 font and image code (nsfont.m, nsimage.m) in iOS mode])])
 
 AC_SUBST([IOS])
-AC_SUBST([IOS_OBJ])
+AC_SUBST([IOS_OBJC_OBJ])
+AC_SUBST([IOS_C_OBJ])
 AC_SUBST([IOS_LIBS])
 AC_SUBST([IOS_BUILD_CFLAGS])
 
