@@ -1456,8 +1456,11 @@ by hand to see the underlying error.])])
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
 
      # Move the generated cross artifacts aside so the outer host
-     # pass can produce its own Makefiles into the same paths.
-     for makefile in src/Makefile lib/Makefile lib-src/Makefile; do
+     # pass can produce its own Makefiles into the same paths.  The
+     # list mirrors $android_makefiles -- crucially it includes
+     # lib/gnulib.mk, which cross/Makefile consumes alongside the
+     # other *.ios files when building lib/libgnu.a.
+     for makefile in lib/Makefile lib/gnulib.mk lib-src/Makefile src/Makefile; do
        AS_IF([test -f "$makefile"], [mv -f "$makefile" "$makefile.ios"])
      done
      AS_IF([test -f src/config.h], [mv -f src/config.h src/config.h.ios])
