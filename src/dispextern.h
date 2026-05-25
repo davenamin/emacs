@@ -170,6 +170,20 @@ typedef struct android_image *Emacs_Pix_Container;
 typedef struct android_image *Emacs_Pix_Context;
 #endif
 
+#ifdef HAVE_IOS
+/* No iosgui.h yet -- the typedefs needed by dispextern.h /
+   termhooks.h / frame.h live inline here, and the full UIKit-backed
+   definitions of struct ios_display_info / ios_output are in
+   iosterm.h (included via TERM_HEADER from translation units that
+   want them).  Emacs_Pixmap / Emacs_Pix_Container / Emacs_Pix_Context
+   are opaque (void *) for now -- the iOS image code is a stub.  */
+typedef struct ios_display_info Display_Info;
+typedef void *Emacs_Pixmap;
+typedef void *Emacs_Pix_Container;
+typedef void *Emacs_Pix_Context;
+typedef void *Emacs_Cursor;
+#endif
+
 #ifdef HAVE_WINDOW_SYSTEM
 # include <time.h>
 # include "fontset.h"
@@ -3737,7 +3751,7 @@ ptrdiff_t lookup_image (struct frame *, Lisp_Object, int);
 Lisp_Object image_spec_value (Lisp_Object, Lisp_Object, bool *);
 
 #if defined HAVE_X_WINDOWS || defined USE_CAIRO || defined HAVE_NS \
-  || defined HAVE_HAIKU || defined HAVE_ANDROID
+  || defined HAVE_HAIKU || defined HAVE_ANDROID || defined HAVE_IOS
 #define RGB_PIXEL_COLOR unsigned long
 #endif
 

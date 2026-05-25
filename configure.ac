@@ -3422,6 +3422,9 @@ dnl use the toolkit if we have gtk, or X11R5 or newer.
   android )
     term_header=androidterm.h
   ;;
+  ios )
+    term_header=iosterm.h
+  ;;
 esac
 
 AC_SUBST([HAVE_PGTK])
