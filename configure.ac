@@ -1520,7 +1520,24 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_ns=no
   with_x=no
   with_pgtk=no
+
+  # Force the dumping strategy to "none" for iOS.  The recursive
+  # XCONFIGURE=ios cross-build can't run temacs on the host to
+  # produce a pdmp file (the binary targets iOS), so we skip
+  # build-time dumping entirely; the resulting emacs binary
+  # bootstraps Lisp from source on every startup (slower but
+  # correct).  with_pdumper / HAVE_PDUMPER / DUMPING are all
+  # overridden here even though the early dumping block at
+  # ~line 455 has already run -- the values these variables hold
+  # at AC_OUTPUT are what get substituted into the Makefiles.
+  with_dumping=none
+  with_pdumper=no
+  HAVE_PDUMPER=no
+  DUMPING=none
 fi
+
+# CROSS_SUFFIX is computed later (after REALLY_ANDROID is set), see
+# the AC_SUBST([CROSS_SUFFIX]) block near the iOS substitutions.
 
 dnl This used to use changequote, but, apart from 'changequote is evil'
 dnl per the autoconf manual, we can speed up autoconf somewhat by quoting
@@ -2833,6 +2850,15 @@ AC_SUBST([ANDROID_LDFLAGS])
 AC_SUBST([ANDROID_BUILD_CFLAGS])
 AC_SUBST([ANDROID_SHARED_USER_ID])
 AC_SUBST([ANDROID_SHARED_USER_NAME])
+
+# CROSS_SUFFIX names which set of *.<suffix> cross-configure artifacts
+# the cross/ harness should consume.  Set whenever a cross-build was
+# requested; left empty for plain host builds so cross/Makefile is a
+# no-op.  Consumed by cross/Makefile.in.
+CROSS_SUFFIX=
+AS_IF([test "$REALLY_ANDROID" = "yes"], [CROSS_SUFFIX=android])
+AS_IF([test "$REALLY_IOS" = "yes"], [CROSS_SUFFIX=ios])
+AC_SUBST([CROSS_SUFFIX])
 
 # iOS-specific objects, linker flags, and build-time CFLAGS.  The
 # pattern follows the Android port: the outer --with-ios invocation

@@ -436,7 +436,7 @@ EMACS_CFLAGS=-Demacs $(MYCPPFLAGS) -I. -I$(srcdir) \
   $(LIBSYSTEMD_CFLAGS) $(XSYNC_CFLAGS) $(TREE_SITTER_CFLAGS) \
   $(LIBGNUTLS_CFLAGS) $(NOTIFY_CFLAGS) $(CAIRO_CFLAGS) \
   $(WERROR_CFLAGS) $(HAIKU_CFLAGS) $(XCOMPOSITE_CFLAGS) $(XSHAPE_CFLAGS) \
-  $(ANDROID_BUILD_CFLAGS) $(GIF_CFLAGS) $(JPEG_CFLAGS) $(SQLITE3_CFLAGS) \
+  $(ANDROID_BUILD_CFLAGS) $(IOS_BUILD_CFLAGS) $(GIF_CFLAGS) $(JPEG_CFLAGS) $(SQLITE3_CFLAGS) \
   $(LIBGMP_CFLAGS) $(TIFF_CFLAGS) $(LIBSELINUX_CFLAGS)
 ALL_CFLAGS = $(EMACS_CFLAGS) $(WARN_CFLAGS) $(CFLAGS)
 ALL_OBJC_CFLAGS = $(EMACS_CFLAGS) \
@@ -590,13 +590,13 @@ LIBES = $(LIBS) $(W32_LIBS) $(LIBS_GNUSTEP) $(PGTK_LIBS) $(LIBX_BASE) $(LIBIMAGE
    $(NOTIFY_LIBS) $(LIB_MATH) $(LIBZ) $(LIBMODULES) $(LIBSYSTEMD_LIBS) \
    $(LIBGMP) $(LIBGCCJIT_LIBS) $(XINPUT_LIBS) $(HAIKU_LIBS) \
    $(TREE_SITTER_LIBS) $(SQLITE3_LIBS) $(XCOMPOSITE_LIBS) $(XSHAPE_LIBS) \
-   $(ANDROID_LIBS)
+   $(ANDROID_LIBS) $(IOS_LIBS)
 
 ## FORCE it so that admin/unidata can decide whether this file is
 ## up-to-date.  Although since charprop depends on bootstrap-emacs,
 ## and emacs depends on charprop, in practice this rule was always run
 ## anyway.
-ifneq ($(XCONFIGURE),android)
+ifeq ($(XCONFIGURE),)
 $(lispsource)/international/charprop.el: \
   FORCE | bootstrap-emacs$(EXEEXT) $(bootstrap_pdmp)
 	$(MAKE) -C ../admin/unidata all EMACS="../$(bootstrap_exe)"
@@ -893,7 +893,7 @@ tags: TAGS ../lisp/TAGS $(lwlibdir)/TAGS $(lib)/TAGS
 ## libemacs.so for Android, however, as the Lisp files have already
 ## been compiled by the top level `src' Makefile.
 
-ifneq ($(XCONFIGURE),android)
+ifeq ($(XCONFIGURE),)
 %.elc: %.el | bootstrap-emacs$(EXEEXT) $(bootstrap_pdmp)
 	@$(MAKE) $(AM_V_NO_PD) -C ../lisp EMACS="$(bootstrap_exe)"\
 		THEFILE=$< $<c
@@ -953,7 +953,7 @@ NATIVE_COMPILATION_AOT = @NATIVE_COMPILATION_AOT@
 	fi
 endif
 
-ifneq ($(XCONFIGURE),android)
+ifeq ($(XCONFIGURE),)
 $(lispsource)/loaddefs.el: |  		       \
     bootstrap-emacs$(EXEEXT) $(bootstrap_pdmp) \
     $(lispsource)/international/charprop.el

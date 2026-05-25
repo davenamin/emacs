@@ -376,12 +376,15 @@ bootstrap-all:
 actual-all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) src-depending-on-lisp blessmail
 
 ## Convenience target for assembling the iOS application bundle.
-## Requires --with-ios was passed to configure (which becomes
-## meaningful once the recursive XCONFIGURE=ios cross-build lands in
-## a follow-up commit).  Mirrors how nextstep/Makefile is invoked
-## indirectly via `make install' on macOS.
+## Requires --with-ios was passed to configure.  Drives the cross-
+## build harness in cross/ (which consumes the *.ios Makefile and
+## config.h produced by the recursive XCONFIGURE=ios pass), then
+## hands off to ios/Makefile to assemble and codesign Emacs.app.
+## Mirrors how nextstep/Makefile is invoked indirectly via `make
+## install' on macOS.
 .PHONY: ios ios-bundle
 ios ios-bundle:
+	$(MAKE) -C cross all
 	$(MAKE) -C ios all
 
 # ADVICE-ON-FAILURE-BEGIN:all
