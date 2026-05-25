@@ -2460,6 +2460,15 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 #endif /* !ANDROID_STUBIFY */
 #endif /* HAVE_ANDROID */
 
+#ifdef HAVE_IOS
+      syms_of_iosterm ();
+      syms_of_iosfns ();
+      syms_of_iosmenu ();
+      syms_of_iosselect ();
+      syms_of_iosfont ();
+      syms_of_fontset ();
+#endif /* HAVE_IOS */
+
       syms_of_gnutls ();
 
 #ifdef HAVE_INOTIFY

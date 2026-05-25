@@ -32,9 +32,21 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "lisp.h"
 #include "iosterm.h"
 
+DEFUN ("x-hide-tip", Fx_hide_tip, Sx_hide_tip, 0, 0, 0,
+       doc: /* Hide the current tooltip window, if there is any.
+Value is t if tooltip was open, nil otherwise.
+
+iOS stub: returns nil unconditionally.  A real tooltip implementation
+backed by a UILabel-on-UIWindow overlay is a follow-up.  */)
+  (void)
+{
+  return Qnil;
+}
+
 void
 syms_of_iosfns (void)
 {
+  defsubr (&Sx_hide_tip);
   /* Frame parameter and x-* primitive definitions will be added in
      follow-up commits, in parallel to syms_of_androidfns.  */
 }
