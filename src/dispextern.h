@@ -182,6 +182,12 @@ typedef void *Emacs_Pixmap;
 typedef void *Emacs_Pix_Container;
 typedef void *Emacs_Pix_Context;
 typedef void *Emacs_Cursor;
+/* Define NativeRectangle here, not in iosterm.h, so that function
+   prototypes in dispextern.h that mention NativeRectangle resolve
+   consistently with the implementations in xdisp.c.  iosterm.h is
+   included via TERM_HEADER much later, after these prototypes, so
+   defining the macro there would cause "conflicting types" errors.  */
+#define NativeRectangle Emacs_Rectangle
 #endif
 
 #ifdef HAVE_WINDOW_SYSTEM
