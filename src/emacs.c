@@ -1335,7 +1335,8 @@ android_emacs_init (int argc, char **argv, char *dump_file)
      for pointers.  */
   void *stack_bottom_variable;
   int old_argc;
-#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)
+#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY) \
+  && !defined HAVE_IOS
   char *dump_file;
 
   /* This is just a dummy argument used to avoid extra defines.  */
