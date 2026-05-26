@@ -38,6 +38,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "androidterm.h"
 #endif
 
+#ifdef HAVE_IOS
+#include "iosterm.h"
+#endif
+
 #if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
 #include "sfntfont.h"
 #endif

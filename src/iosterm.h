@@ -228,5 +228,15 @@ extern struct terminal *ios_term_init (void);
 extern int ios_read_socket (struct terminal *terminal,
                             struct input_event *hold_quit);
 
+/* syms_of_* registrars for each ios*.m translation unit.  emacs.c's
+   syms_of cascade calls each at startup so the DEFUNs inside become
+   visible to Lisp.  Parallel to androidterm.h's syms_of_android*
+   declarations.  */
+extern void syms_of_iosterm (void);
+extern void syms_of_iosfns (void);
+extern void syms_of_iosmenu (void);
+extern void syms_of_iosselect (void);
+extern void syms_of_iosfont (void);
+
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */
