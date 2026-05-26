@@ -6989,7 +6989,7 @@ image_to_emacs_colors (struct frame *f, struct image *img, bool rgb_p)
   for (y = 0; y < img->height; ++y)
     {
 #if !defined USE_CAIRO && !defined HAVE_NS && !defined HAVE_HAIKU	\
-  && !defined HAVE_ANDROID
+  && !defined HAVE_ANDROID && !defined HAVE_IOS
       Emacs_Color *row = p;
       for (x = 0; x < img->width; ++x, ++p)
 	p->pixel = GET_PIXEL (ximg, x, y);
@@ -6997,7 +6997,7 @@ image_to_emacs_colors (struct frame *f, struct image *img, bool rgb_p)
         {
           FRAME_TERMINAL (f)->query_colors (f, row, img->width);
         }
-#else  /* USE_CAIRO || HAVE_NS || HAVE_HAIKU || HAVE_ANDROID */
+#else  /* USE_CAIRO || HAVE_NS || HAVE_HAIKU || HAVE_ANDROID || HAVE_IOS */
       for (x = 0; x < img->width; ++x, ++p)
 	{
 	  p->pixel = GET_PIXEL (ximg, x, y);
@@ -7333,15 +7333,19 @@ image_disable_image (struct frame *f, struct image *img)
   if (n_planes < 2 || cross_disabled_images)
     {
 #ifndef HAVE_NTGUI
-#ifndef HAVE_NS  /* TODO: NS support, however this not needed for toolbars */
+#if !defined HAVE_NS && !defined HAVE_IOS
+/* TODO: NS support, however this not needed for toolbars; iOS skipped
+   here because image_pixmap_draw_cross isn't defined when neither
+   HAVE_X_WINDOWS nor USE_CAIRO nor HAVE_HAIKU nor HAVE_ANDROID is set
+   (see the conditional just above the function definition).  */
 
 #if !defined USE_CAIRO && !defined HAVE_HAIKU && !defined HAVE_ANDROID
 #define CrossForeground(f) BLACK_PIX_DEFAULT (f)
 #define MaskForeground(f)  WHITE_PIX_DEFAULT (f)
-#else  /* USE_CAIRO || HAVE_HAIKU */
+#else  /* USE_CAIRO || HAVE_HAIKU || HAVE_ANDROID */
 #define CrossForeground(f) 0
 #define MaskForeground(f)  PIX_MASK_DRAW
-#endif	/* USE_CAIRO || HAVE_HAIKU */
+#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_ANDROID */
 
 #if !defined USE_CAIRO && !defined HAVE_HAIKU
       image_sync_to_pixmaps (f, img);
@@ -7351,7 +7355,7 @@ image_disable_image (struct frame *f, struct image *img)
       if (img->mask)
 	image_pixmap_draw_cross (f, img->mask, 0, 0, img->width, img->height,
 				 MaskForeground (f));
-#endif /* !HAVE_NS */
+#endif /* !HAVE_NS && !HAVE_IOS */
 #else
       HDC hdc, bmpdc;
       HGDIOBJ prev;

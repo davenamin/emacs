@@ -146,6 +146,12 @@ struct ios_display_info
      Retina, ~326 for Retina, ~458 for Super Retina).  */
   double resx, resy;
 
+  /* Color depth in bits.  image.c branches on n_planes >= 2 to
+     decide between color and bitmap rendering paths.  iOS displays
+     are always 24-bit RGB (or 30-bit on newer devices); 24 is the
+     conservative answer.  */
+  int n_planes;
+
   /* Mouse-highlight state shared across all frames on this display.
      Expected by MOUSE_HL_INFO in frame.h.  */
   Mouse_HLInfo mouse_highlight;
