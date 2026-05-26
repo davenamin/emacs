@@ -150,6 +150,33 @@ typedef struct ns_bitmap_record Bitmap_Record;
 typedef struct pgtk_bitmap_record Bitmap_Record;
 #endif /* HAVE_PGTK */
 
+#ifdef HAVE_IOS
+#include "iosterm.h"
+
+/* iOS image scaffolding is a stub for now: ios_pixmap is void *,
+   the GET_PIXEL / PUT_PIXEL hooks aren't wired to a real CGImage
+   yet.  These defines satisfy image.c's compile-time references
+   so the file links into the cross-built emacs; runtime image
+   support comes later.  */
+typedef struct ios_bitmap_record Bitmap_Record;
+
+#define GET_PIXEL(ximg, x, y)        ((unsigned long) 0)
+#define PUT_PIXEL(ximg, x, y, pixel) ((void) 0)
+#define NO_PIXMAP                    0
+
+#define PIX_MASK_RETAIN	0
+#define PIX_MASK_DRAW	1
+
+#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define RED_FROM_ULONG(color)	(((color) >> 16) & 0xff)
+#define GREEN_FROM_ULONG(color)	(((color) >> 8) & 0xff)
+#define BLUE_FROM_ULONG(color)	((color) & 0xff)
+#define RED16_FROM_ULONG(color)		(RED_FROM_ULONG (color) * 0x101)
+#define GREEN16_FROM_ULONG(color)	(GREEN_FROM_ULONG (color) * 0x101)
+#define BLUE16_FROM_ULONG(color)	(BLUE_FROM_ULONG (color) * 0x101)
+
+#endif /* HAVE_IOS */
+
 #if (defined HAVE_X_WINDOWS \
      && ! (defined HAVE_NTGUI || defined USE_CAIRO || defined HAVE_NS))
 /* W32_TODO : Color tables on W32.  */

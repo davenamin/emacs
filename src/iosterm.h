@@ -92,6 +92,28 @@ typedef void *Emacs_Window;
 #define PBaseSize	(1L << 8)
 #define PWinGravity	(1L << 9)
 
+/* Bitmap allocation -- per-display ring of small image records that
+   image.c hands out IDs against.  Same shape as androidterm.h's
+   android_bitmap_record; the iOS image code is itself a stub for
+   now so the fields stay minimal.  */
+struct ios_bitmap_record
+{
+  /* The image backing the bitmap and its mask.  */
+  ios_pixmap pixmap, mask;
+
+  /* The file from which it comes.  */
+  char *file;
+
+  /* The number of references to it.  */
+  int refcount;
+
+  /* The height and width and the depth.  */
+  int height, width, depth;
+
+  /* Whether or not there is a mask.  */
+  bool have_mask;
+};
+
 struct ios_display_info
 {
   struct ios_display_info *next;
@@ -147,6 +169,13 @@ struct ios_display_info
   struct frame *last_mouse_frame;
   struct frame *last_mouse_motion_frame;
   int last_mouse_motion_x, last_mouse_motion_y;
+
+  /* Bitmap allocator: ring of ios_bitmap_record indexed by 1-based
+     bitmap IDs.  image.c expands/uses these to look up images by ID.
+     Starts NULL/0; first allocation triggers xpalloc.  */
+  struct ios_bitmap_record *bitmaps;
+  ptrdiff_t bitmaps_size;
+  ptrdiff_t bitmaps_last;
 };
 
 struct ios_output
