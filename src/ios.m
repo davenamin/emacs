@@ -108,4 +108,27 @@ ios_main (int argc, char **argv)
   return result;
 }
 
+/* Process entry point of the cross-built emacs Mach-O.
+
+   The bundle's CFBundleExecutable IS this binary, so on launch iOS
+   transfers control here directly.  We hand off to UIApplicationMain,
+   which spins up the run loop and instantiates EmacsAppDelegate
+   (defined in src/iosappdelegate.m once that file is folded into the
+   cross-build; for now it lives in ios/Emacs/AppDelegate.m and is
+   wired in via the bundle's Info.plist NSPrincipalClass).
+
+   The renamed emacs.c entry point (ios_emacs_init) is called from
+   ios_main() above, which the AppDelegate invokes after the UIKit
+   stack is up.  */
+
+int
+main (int argc, char *argv[])
+{
+  @autoreleasepool {
+    return UIApplicationMain
+      (argc, argv, nil,
+       NSStringFromClass ([NSClassFromString (@"EmacsAppDelegate") class]));
+  }
+}
+
 #endif /* HAVE_IOS */
