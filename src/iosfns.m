@@ -32,6 +32,20 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "lisp.h"
 #include "iosterm.h"
 
+/* Resolve OBJECT to a Display_Info -- frame.c's Fx_get_resource and
+   other frame-parameter primitives call this to find the display
+   that applies to a given frame/terminal/display-name argument.  iOS
+   has exactly one logical display, so this stub ignores OBJECT and
+   returns the head of x_display_list (or signals an error if the
+   display hasn't been initialized yet).  */
+Display_Info *
+check_x_display_info (Lisp_Object object)
+{
+  if (!x_display_list)
+    error ("iOS display is not initialized");
+  return x_display_list;
+}
+
 DEFUN ("x-hide-tip", Fx_hide_tip, Sx_hide_tip, 0, 0, 0,
        doc: /* Hide the current tooltip window, if there is any.
 Value is t if tooltip was open, nil otherwise.

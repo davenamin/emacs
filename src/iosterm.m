@@ -43,6 +43,21 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    ios_term_init prepends to it.  */
 struct ios_display_info *x_display_list = NULL;
 
+/* Translate a port-specific keysym to its Lisp symbol name.
+   keyboard.c's modify_event_symbol calls this when it can't find a
+   keysym in the prebuilt tables.  iOS doesn't surface raw keysyms
+   yet (input arrives as NSString via UIKeyCommand / UITextInput);
+   return an empty static buffer for now so the call links.  Once
+   UIKeyCommand handling lands, this will look up the matching
+   Emacs symbol name.  */
+char *
+get_keysym_name (int keysym)
+{
+  static char buffer[64];
+  buffer[0] = '\0';
+  return buffer;
+}
+
 struct terminal *
 ios_term_init (void)
 {

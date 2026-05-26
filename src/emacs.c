@@ -1320,9 +1320,12 @@ maybe_load_seccomp (int argc, char **argv)
 
 #endif  /* SECCOMP_USABLE */
 
-#if !defined HAVE_ANDROID || defined ANDROID_STUBIFY
+#if (!defined HAVE_ANDROID || defined ANDROID_STUBIFY) && !defined HAVE_IOS
 int
 main (int argc, char **argv)
+#elif defined HAVE_IOS
+int
+ios_emacs_init (int argc, char **argv, char *dump_file)
 #else
 int
 android_emacs_init (int argc, char **argv, char *dump_file)
