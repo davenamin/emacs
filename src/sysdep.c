@@ -56,7 +56,13 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #endif
 
 #ifdef DARWIN_OS
-# include <libproc.h>
+# ifndef HAVE_IOS
+/* libproc.h is in the macOS SDK but not the iOS SDK, and the
+   proc_pid* APIs it declares are blocked by the iOS sandbox in any
+   case.  iOS falls through to the generic stub at the bottom of
+   system_process_attributes() below.  */
+#  include <libproc.h>
+# endif
 #endif
 
 #ifdef __FreeBSD__
@@ -4263,7 +4269,7 @@ system_process_attributes (Lisp_Object pid)
   return attrs;
 }
 
-#elif defined DARWIN_OS
+#elif defined DARWIN_OS && !defined HAVE_IOS
 
 #define HAVE_RUSAGE_INFO_CURRENT (__MAC_OS_X_VERSION_MIN_REQUIRED >= 101000)
 #define HAVE_PROC_PIDINFO (__MAC_OS_X_VERSION_MIN_REQUIRED >= 1050)
