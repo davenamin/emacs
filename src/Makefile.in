@@ -638,9 +638,20 @@ SYSTEM_TYPE = @SYSTEM_TYPE@
 ## Strictly speaking, emacs does not depend directly on all of $lisp,
 ## since not all pieces are used on all platforms.  But DOC depends
 ## on all of $lisp, and emacs depends on DOC, so it is ok to use $lisp here.
+##
+## For cross-builds the heavy deps (DOC, lisp, charprop, charsets) are
+## either already present in the source tree from a prior host build
+## or are simply not needed at link time: with DUMPING=none the
+## cross-built emacs is just `cp temacs emacs', and the lisp tree is
+## consumed from the bundle at runtime.  Skip them so cross-builds
+## don't try to run emacs on the host (which they can't).
+ifneq ($(XCONFIGURE),)
+emacs$(EXEEXT): temacs$(EXEEXT)
+else
 emacs$(EXEEXT): temacs$(EXEEXT) \
                 $(abs_top_builddir)/src/lisp.mk $(etc)/DOC $(lisp) \
                 $(lispsource)/international/charprop.el ${charsets}
+endif
 ifeq ($(SYSTEM_TYPE),cygwin)
 	find ${top_builddir} -name '*.eln' | rebase -v -O -T -
 endif
