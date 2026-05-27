@@ -1,0 +1,107 @@
+# iOS cross-build CI for the claude/ios-port branch.
+#
+# Runs `make ios` on a GitHub-hosted macOS runner so the agent
+# can iterate on the iOS port without a human in the loop.  The
+# workflow installs the build dependencies via Homebrew, points
+# xcode-select at the latest Xcode, then runs the same recipe a
+# developer would run by hand:
+#
+#   ./autogen.sh
+#   mkdir -p build-ios && cd build-ios
+#   ../configure --with-ios
+#   make ios
+#
+# On success the assembled Emacs.app bundle is uploaded as an
+# artifact (capped at a few MB -- the Mach-O itself, plus the
+# bundle template).  On failure the tail of make-ios.out is
+# surfaced in the job summary so the diagnostic is one click
+# away in the GitHub UI (and visible via the MCP github tools
+# the agent uses).
+
+name: iOS cross-build
+
+on:
+  push:
+    branches:
+      - claude/ios-port
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-path
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install automake autoconf libtool pkg-config texinfo
+
+      - name: Regenerate configure
+        run: ./autogen.sh
+
+      - name: Configure --with-ios
+        id: configure
+        run: |
+          mkdir -p build-ios
+          cd build-ios
+          ../configure --with-ios 2>&1 | tee configure.out
+          tail -60 configure.out
+
+      - name: make ios
+        id: make
+        run: |
+          cd build-ios
+          set -o pipefail
+          make ios 2>&1 | tee make-ios.out
+
+      - name: Surface failure tail
+        if: failure() && steps.make.outcome == 'failure'
+        run: |
+          echo '## make ios failed' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '### First errors' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          grep -nE 'error:|fatal:' build-ios/make-ios.out | head -40 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          echo '' >> "$GITHUB_STEP_SUMMARY"
+          echo '### Last 80 lines' >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          tail -80 build-ios/make-ios.out >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Verify Mach-O
+        if: success()
+        run: |
+          cd build-ios
+          file ios/Emacs.app/emacs
+          otool -h ios/Emacs.app/emacs
+          otool -L ios/Emacs.app/emacs
+          otool -l ios/Emacs.app/emacs | grep -A3 LC_BUILD_VERSION
+
+      - name: Upload Emacs.app artifact
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: Emacs.app
+          path: build-ios/ios/Emacs.app
+          if-no-files-found: error
+          retention-days: 7
+
+      - name: Upload make-ios.out on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: make-ios-out
+          path: build-ios/make-ios.out
+          if-no-files-found: warn
+          retention-days: 7
