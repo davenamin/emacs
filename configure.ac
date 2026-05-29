@@ -1449,9 +1449,22 @@ by hand to see the underlying error.])])
      # by xcode-toolchain.sh inside the recursive shell.  This mirrors
      # the Android branch above, which passes ANDROID_CC/android_abi/
      # android_ndk_path rather than the resolved CC.
+     #
+     # ac_cv_func_pipe2=no preempts an autoconf/gnulib mismatch on the
+     # iphonesimulator SDK 26+: AC_CHECK_FUNCS([pipe2]) sees a pipe2
+     # prototype, sets HAVE_PIPE2=1, but inside gnulib's lib/pipe2.c
+     # the prototype is gated by feature-test macros and isn't
+     # actually visible at compile time -- so the call goes through
+     # clang's typo-correction, lands on pipe(int[2]), and fails with
+     # "too many arguments to function call" at lib/pipe2.c:57.
+     # Forcing the cache var to "no" makes gnulib fall through to its
+     # pipe()+fcntl() fallback, which compiles cleanly on every
+     # Apple SDK.  The iphoneos SDK reports pipe2 as unavailable on
+     # its own so this override is also harmless there.
      AS_IF([XCONFIGURE=ios \
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            ac_cv_func_pipe2=no \
             $CONFIG_SHELL $0 $ios_passthrough], [],
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
 
