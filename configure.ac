@@ -7434,6 +7434,27 @@ AC_SUBST([ios_appdir])
 ## XCONFIGURE=ios cross-compile).
 AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
 AC_SUBST([IOS_DEPLOYMENT_TARGET])
+
+## Platform identity for ios/Emacs.base/Info.plist.  CoreSimulator's
+## install path (IXPlaceholder) and MobileInstallation on device both
+## validate CFBundleSupportedPlatforms before reading the bundle ID;
+## a bundle that lacks it is rejected with a misleading "Missing
+## bundle ID" error.  Real Xcode-built apps always carry this key
+## plus DTPlatformName, with values that differ between device and
+## simulator builds -- so derive them from $IOS_SDK (the same
+## environment variable the cross-configure pass forwards to
+## xcode-toolchain.sh).  Empty / unset means a device build.
+case "$IOS_SDK" in
+  iphonesimulator)
+    IOS_PLATFORM_DISPLAY=iPhoneSimulator
+    IOS_PLATFORM_SDK=iphonesimulator ;;
+  *)
+    IOS_PLATFORM_DISPLAY=iPhoneOS
+    IOS_PLATFORM_SDK=iphoneos ;;
+esac
+AC_SUBST([IOS_PLATFORM_DISPLAY])
+AC_SUBST([IOS_PLATFORM_SDK])
+
 AC_SUBST([GNU_OBJC_CFLAGS])
 AC_SUBST([OTHER_FILES])
 

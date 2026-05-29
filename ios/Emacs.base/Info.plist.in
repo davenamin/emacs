@@ -20,6 +20,12 @@
 	<string>@version@</string>
 	<key>CFBundleVersion</key>
 	<string>@version@</string>
+	<key>CFBundleSupportedPlatforms</key>
+	<array>
+		<string>@IOS_PLATFORM_DISPLAY@</string>
+	</array>
+	<key>DTPlatformName</key>
+	<string>@IOS_PLATFORM_SDK@</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>MinimumOSVersion</key>
