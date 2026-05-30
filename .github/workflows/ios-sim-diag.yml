@@ -1,36 +1,17 @@
-# iOS simulator-install DIAGNOSTIC workflow.
-#
-# Purpose: figure out, without a human in the loop, why the
-# cross-built Emacs.app fails `xcrun simctl install` with the
-# misleading "Missing bundle ID" (IXPlaceholder) error, even though
-# the on-disk Info.plist has a valid CFBundleIdentifier.
-#
-# The agent driving this cannot read Actions logs via its tooling, so
-# this job writes ALL its output to ci-diag/sim-install.txt and
-# commits it back to the branch (with [skip ci] so it does not
-# re-trigger).  The agent then reads that file via the GitHub API.
-#
-# Two bundles are exercised on the same clean runner:
-#   (A) a MINIMAL hand-assembled reference app (tiny main.m compiled
-#       against the iphonesimulator SDK + a minimal Info.plist), and
-#   (B) our cross-built Emacs.app.
-# Installing both isolates whether the failure is specific to our
-# emacs binary / generated plist, or general to hand-assembled flat
-# bundles on this toolchain.
-#
-# Everything is best-effort: set +e and `|| true` throughout, and the
-# results are committed in an `if: always()` step, so even a partial
-# or crashing run still reports something the agent can read.
-
 name: iOS simulator-install diagnostic
 
+# Triggered on any push to claude/ios-port and via manual dispatch.
+# The earlier version had a paths: filter restricted to the workflow
+# file itself, which never fired -- GitHub Actions did not trigger
+# this workflow even on the commit that introduced it.  The simpler,
+# unfiltered push trigger matches the working ios-build.yml workflow
+# (which DID run on the same push).  This workflow is expensive (~20
+# min full cross-build), so push it sparingly.
 on:
-  workflow_dispatch: {}
   push:
     branches:
       - claude/ios-port
-    paths:
-      - .github/workflows/ios-sim-diag.yml
+  workflow_dispatch: {}
 
 permissions:
   contents: write
@@ -123,15 +104,16 @@ jobs:
           run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
 
           log ""
-          log "===== (B) OUR BUNDLE: CFBundle read via PlistBuddy on embedded plist ====="
-          run sh -c "otool -X -s __TEXT __info_plist '$APP/emacs' | xxd -r -p 2>/dev/null | plutil -p - 2>&1 | grep -i bundleident"
+          log "===== (B) OUR BUNDLE: embedded __info_plist contents ====="
+          # Extract the section's hex bytes and decode back to plist.
+          run sh -c "otool -X -s __TEXT __info_plist '$APP/emacs' | awk '{for(i=2;i<=NF;i++) printf \"%s\", \$i; print \"\"}' | tr -d ' ' | xxd -r -p > /tmp/embedded.plist 2>/dev/null && plutil -p /tmp/embedded.plist 2>&1 | head -25"
 
           log ""
           log "===== BOOT SIMULATOR ====="
-          DEV=$(xcrun simctl create ci-diag-phone com.apple.CoreSimulator.SimDeviceType.iPhone-15 2>>"$OUT")
-          if [ -z "$DEV" ]; then
-            DEV=$(xcrun simctl create ci-diag-phone com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation 2>>"$OUT")
-          fi
+          # Pick the first iPhone device type that exists on this runner.
+          DEVTYPE=$(xcrun simctl list devicetypes 2>/dev/null | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]+' | head -1)
+          echo "devicetype=$DEVTYPE" >> "$OUT"
+          DEV=$(xcrun simctl create ci-diag-phone "$DEVTYPE" 2>>"$OUT")
           log "device=$DEV"
           run xcrun simctl boot "$DEV"
           run xcrun simctl bootstatus "$DEV" -b
@@ -141,40 +123,42 @@ jobs:
           REF=ref-app/Hello.app
           mkdir -p ref-app
           rm -rf "$REF"; mkdir -p "$REF"
-          cat > ref-app/main.m <<'EOM'
-          #import <UIKit/UIKit.h>
-          int main(int argc, char *argv[]) {
-            @autoreleasepool { return UIApplicationMain(argc, argv, nil, nil); }
-          }
-          EOM
+          # Write main.m via printf (avoids heredoc indentation pitfalls).
+          printf '%s\n' \
+            '#import <UIKit/UIKit.h>' \
+            'int main(int argc, char *argv[]) {' \
+            '  @autoreleasepool { return UIApplicationMain(argc, argv, nil, nil); }' \
+            '}' > ref-app/main.m
           SIMSDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
           run xcrun --sdk iphonesimulator clang -arch arm64 \
               -mios-simulator-version-min=15.0 -isysroot "$SIMSDK" \
               -framework UIKit -framework Foundation \
               -o "$REF/Hello" ref-app/main.m
-          cat > "$REF/Info.plist" <<'EOP'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>CFBundleExecutable</key><string>Hello</string>
-            <key>CFBundleIdentifier</key><string>org.gnu.hello</string>
-            <key>CFBundleName</key><string>Hello</string>
-            <key>CFBundlePackageType</key><string>APPL</string>
-            <key>CFBundleShortVersionString</key><string>1.0</string>
-            <key>CFBundleVersion</key><string>1</string>
-            <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
-            <key>DTPlatformName</key><string>iphonesimulator</string>
-            <key>MinimumOSVersion</key><string>15.0</string>
-            <key>LSRequiresIPhoneOS</key><true/>
-            <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
-          </dict>
-          </plist>
-          EOP
+          # Write Info.plist via printf so there is NO leading whitespace
+          # on <?xml -- a parser requirement an indented heredoc would violate.
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>CFBundleExecutable</key><string>Hello</string>' \
+            '  <key>CFBundleIdentifier</key><string>org.gnu.hello</string>' \
+            '  <key>CFBundleName</key><string>Hello</string>' \
+            '  <key>CFBundlePackageType</key><string>APPL</string>' \
+            '  <key>CFBundleShortVersionString</key><string>1.0</string>' \
+            '  <key>CFBundleVersion</key><string>1</string>' \
+            '  <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>' \
+            '  <key>DTPlatformName</key><string>iphonesimulator</string>' \
+            '  <key>MinimumOSVersion</key><string>15.0</string>' \
+            '  <key>LSRequiresIPhoneOS</key><true/>' \
+            '  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>' \
+            '</dict>' \
+            '</plist>' > "$REF/Info.plist"
+          run plutil -lint "$REF/Info.plist"
           run codesign --force --sign - "$REF"
           run sh -c "codesign -dvvv '$REF' 2>&1 | grep -iE 'Identifier|flags'"
           run find "$REF"
-          log "--- install reference app (expect success) ---"
+          log "--- install reference app (expect SUCCESS -- this is the control) ---"
           run xcrun simctl install "$DEV" "$REF"
 
           log ""
