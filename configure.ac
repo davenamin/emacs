@@ -2902,6 +2902,21 @@ AS_IF([test "$IOS" = "yes"],[
   IOS_C_OBJ="iosvfs.o"
   IOS_LIBS="-framework UIKit -framework Foundation"
   IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
+  # Embed the bundle's Info.plist into the Mach-O's __TEXT,__info_plist
+  # section.  Real Xcode-built iOS apps always carry this; the modern
+  # iOS toolchain's IXPlaceholder (the install-coordination component
+  # in CoreSimulator / MobileInstallation) reads bundle metadata from
+  # this section, not from the file on disk, and a bundle without it
+  # is rejected with a misleading "Missing bundle ID" error.
+  #
+  # pwd at configure time is the build directory.  The same absolute
+  # path is reachable from the cross src/ directory at link time
+  # because we resolve it here (not at make-time).  Both the outer
+  # host pass and the inner XCONFIGURE=ios pass run config.status,
+  # which generates ios/Emacs.base/Info.plist with identical
+  # IOS_PLATFORM_DISPLAY values (both derived from $IOS_SDK), so
+  # whichever pass writes last gives the binary the right plist.
+  IOS_LIBS="$IOS_LIBS -Wl,-sectcreate,__TEXT,__info_plist,`pwd`/ios/Emacs.base/Info.plist"
   IOS_BUILD_CFLAGS="-fPIC -fvisibility=hidden -fobjc-arc"
 
   AC_DEFINE([HAVE_IOS], [1], [Define to 1 if Emacs is being built
