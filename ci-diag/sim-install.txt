@@ -100,8 +100,8 @@ Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
 ✔︎ Bottle Manifest m4 (1.4.21)
 ✔︎ Bottle m4 (1.4.21)
 ✔︎ Bottle autoconf (2.73)
-✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle libtool (2.5.4)
+✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake: [32mm4[39m and [32mautoconf[39m[0m
 [32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
@@ -231,11 +231,11 @@ build-ios-sim/ios/Emacs.app/Info.plist
 
 $ ls -la build-ios-sim/ios/Emacs.app
 total 5160
-drwxr-xr-x  5 runner  staff      160 May 30 21:44 .
-drwxr-xr-x  5 runner  staff      160 May 30 21:44 ..
--rwxr-xr-x  1 runner  staff  2634488 May 30 21:44 emacs
--rw-r--r--  1 runner  staff     2684 May 30 21:44 Info.plist
-drwxr-xr-x  3 runner  staff       96 May 30 21:40 Resources
+drwxr-xr-x  5 runner  staff      160 May 30 21:56 .
+drwxr-xr-x  5 runner  staff      160 May 30 21:56 ..
+-rwxr-xr-x  1 runner  staff  2634488 May 30 21:56 emacs
+-rw-r--r--  1 runner  staff     2684 May 30 21:56 Info.plist
+drwxr-xr-x  3 runner  staff       96 May 30 21:52 Resources
 [exit=0]
 
 ===== (B) OUR BUNDLE: Info.plist (root) =====
@@ -310,65 +310,14 @@ $ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | aw
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
-device=8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+device=724682B3-1183-4464-8FD1-CF248F2B71DE
 
-$ xcrun simctl boot 8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+$ xcrun simctl boot 724682B3-1183-4464-8FD1-CF248F2B71DE
 [exit=0]
 
-$ xcrun simctl bootstatus 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 -b
-Monitoring boot status for ci-diag-phone (8623203E-A1A4-4923-A94F-CE2F2A8A29A3).
-[2026-05-30 21:45:26 +0000] Status=2, isTerminal=NO, Elapsed=00:52.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:46 seconds
-
-[2026-05-30 21:45:27 +0000] Status=2, isTerminal=NO, Elapsed=00:53.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:47 seconds
-
-[2026-05-30 21:45:33 +0000] Status=2, isTerminal=NO, Elapsed=00:59.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:48 seconds
-
-[2026-05-30 21:45:36 +0000] Status=2, isTerminal=NO, Elapsed=01:02.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)
-		Migration Elapsed:00:53 seconds
-
-[2026-05-30 21:45:38 +0000] Status=4, isTerminal=NO, Elapsed=01:04.
-	Waiting on System App
-
-[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:06.
-	Waiting on System App
-
-[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
-	Waiting on System App
-
-[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
-	Waiting on System App
-
-[2026-05-30 21:45:41 +0000] Status=4, isTerminal=NO, Elapsed=01:08.
-	Waiting on System App
-
-[2026-05-30 21:45:42 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
-	Waiting on System App
-
-[2026-05-30 21:45:43 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
-	Waiting on System App
-
-[2026-05-30 21:45:44 +0000] Status=4, isTerminal=NO, Elapsed=01:10.
-	Waiting on System App
-
-[2026-05-30 21:45:45 +0000] Status=4, isTerminal=NO, Elapsed=01:11.
-	Waiting on System App
-
-[2026-05-30 21:45:46 +0000] Status=4, isTerminal=NO, Elapsed=01:12.
-	Waiting on System App
-
-[2026-05-30 21:45:53 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:20.
-	Finished
+$ xcrun simctl bootstatus 724682B3-1183-4464-8FD1-CF248F2B71DE -b
+Monitoring boot status for ci-diag-phone (724682B3-1183-4464-8FD1-CF248F2B71DE).
+Device already booted, nothing to do.
 
 [exit=0]
 
@@ -400,12 +349,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 ref-app/Hello.app
+$ xcrun simctl install 724682B3-1183-4464-8FD1-CF248F2B71DE ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 build-ios-sim/ios/Emacs.app
+$ xcrun simctl install 724682B3-1183-4464-8FD1-CF248F2B71DE build-ios-sim/ios/Emacs.app
 An error was encountered processing the command (domain=IXErrorDomain, code=13):
 Simulator device failed to install the application.
 Missing bundle ID.
@@ -422,7 +371,64 @@ $ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
 $ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
 {"CFBundleName":"Emacs","UILaunchStoryboardName":"LaunchScreen","UIFileSharingEnabled":true,"CFBundleDevelopmentRegion":"en","CFBundleVersion":"32.0.50","UIStatusBarStyle":"UIStatusBarStyleDefault","DTPlatformName":"iphonesimulator","CFBundlePackageType":"APPL","CFBundleShortVersionString":"32.0.50","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleDocumentTypes":[{"CFBundleTypeName":"Text Document","CFBundleTypeRole":"Editor","LSItemContentTypes":["public.text","public.plain-text","public.source-code"],"LSHandlerRank":"Alternate"}],"CFBundleInfoDictionaryVersion":"6.0","UIRequiredDeviceCapabilities":["arm64"],"CFBundleExecutable":"emacs","UISupportedInterfaceOrientations~ipad":["UIInterfaceOrientationPortrait","UIInterfaceOrientationPortraitUpsideDown","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"MinimumOSVersion":"15.0","CFBundleIdentifier":"org.gnu.emacs","LSSupportsOpeningDocumentsInPlace":true,"UIRequiresFullScreen":false,"UIApplicationSceneManifest":{"UIApplicationSupportsMultipleScenes":true,"UISceneConfigurations":{"UIWindowSceneSessionRoleApplication":[{"UISceneConfigurationName":"Default Configuration","UISceneDelegateClassName":"EmacsSceneDelegate"}]}},"LSRequiresIPhoneOS":true,"UISupportedInterfaceOrientations":["UIInterfaceOrientationPortrait","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"CFBundleDisplayName":"Emacs"}[exit=0]
 
-$ xcrun simctl delete 8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+===== BISECTION: which of {Resources/, Info.plist, binary} causes the fail =====
+
+$ plutil -lint /tmp/minimal-emacs.plist
+/tmp/minimal-emacs.plist: OK
+[exit=0]
+
+--- bisect [T1_no_resources]: rm -rf "$tgt/Resources" ---
+
+$ find /tmp/T1_no_resources.app -mindepth 1
+/tmp/T1_no_resources.app/_CodeSignature
+/tmp/T1_no_resources.app/_CodeSignature/CodeResources
+/tmp/T1_no_resources.app/emacs
+/tmp/T1_no_resources.app/Info.plist
+[exit=0]
+/tmp/T1_no_resources.app: replacing existing signature
+Identifier=org.gnu.emacs
+CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+TeamIdentifier=not set
+[bisect_install T1_no_resources exit=0]
+
+--- bisect [T2_min_plist]: cp "$MINPLIST" "$tgt/Info.plist" ---
+
+$ find /tmp/T2_min_plist.app -mindepth 1
+/tmp/T2_min_plist.app/_CodeSignature
+/tmp/T2_min_plist.app/_CodeSignature/CodeResources
+/tmp/T2_min_plist.app/Resources
+/tmp/T2_min_plist.app/Resources/LaunchScreen.storyboard
+/tmp/T2_min_plist.app/emacs
+/tmp/T2_min_plist.app/Info.plist
+[exit=0]
+/tmp/T2_min_plist.app: bundle format unrecognized, invalid, or unsuitable
+An error was encountered processing the command (domain=IXErrorDomain, code=13):
+Simulator device failed to install the application.
+Missing bundle ID.
+Underlying error (domain=IXErrorDomain, code=13):
+	Failed to get bundle ID from /tmp/T2_min_plist.app
+	Missing bundle ID.
+[bisect_install T2_min_plist exit=13]
+
+--- bisect [T3_no_resources_and_min_plist]: rm -rf "$tgt/Resources"; cp "$MINPLIST" "$tgt/Info.plist" ---
+
+$ find /tmp/T3_no_resources_and_min_plist.app -mindepth 1
+/tmp/T3_no_resources_and_min_plist.app/_CodeSignature
+/tmp/T3_no_resources_and_min_plist.app/_CodeSignature/CodeResources
+/tmp/T3_no_resources_and_min_plist.app/emacs
+/tmp/T3_no_resources_and_min_plist.app/Info.plist
+[exit=0]
+/tmp/T3_no_resources_and_min_plist.app: replacing existing signature
+Identifier=org.gnu.emacs
+CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+TeamIdentifier=not set
+[bisect_install T3_no_resources_and_min_plist exit=0]
+
+--- bisect [T4_ref_with_our_id]: tiny hello binary + plist relabeled to emacs ---
+/tmp/T4_ref_with_our_id.app: replacing existing signature
+[bisect_install T4_ref_with_our_id exit=0]
+
+$ xcrun simctl delete 724682B3-1183-4464-8FD1-CF248F2B71DE
 [exit=0]
 
 ===== END =====
