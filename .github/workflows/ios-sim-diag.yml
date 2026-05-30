@@ -170,6 +170,78 @@ jobs:
           run sh -c "plutil -convert json -o - '$REF/Info.plist' 2>&1"
           run sh -c "plutil -convert json -o - '$APP/Info.plist' 2>&1"
 
+          log ""
+          log "===== BISECTION: which of {Resources/, Info.plist, binary} causes the fail ====="
+          # Each test takes a fresh copy of our bundle, mutates ONE axis,
+          # re-signs, and tries to install.  Whichever variant succeeds
+          # tells us which axis the failure is on.
+
+          # Build a minimal Info.plist that mirrors the reference's shape
+          # but uses our bundle's identifier and executable name.  If
+          # CFBundle is failing on something specific in our generated
+          # plist, swapping in this minimal one should let install work.
+          MINPLIST=/tmp/minimal-emacs.plist
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>CFBundleExecutable</key><string>emacs</string>' \
+            '  <key>CFBundleIdentifier</key><string>org.gnu.emacs</string>' \
+            '  <key>CFBundleName</key><string>Emacs</string>' \
+            '  <key>CFBundlePackageType</key><string>APPL</string>' \
+            '  <key>CFBundleShortVersionString</key><string>1.0</string>' \
+            '  <key>CFBundleVersion</key><string>1</string>' \
+            '  <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>' \
+            '  <key>DTPlatformName</key><string>iphonesimulator</string>' \
+            '  <key>MinimumOSVersion</key><string>15.0</string>' \
+            '  <key>LSRequiresIPhoneOS</key><true/>' \
+            '  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>' \
+            '</dict>' \
+            '</plist>' > "$MINPLIST"
+          run plutil -lint "$MINPLIST"
+
+          bisect_install() {
+            label=$1; src=$2; mutate=$3
+            tgt=/tmp/$label.app
+            rm -rf "$tgt"
+            cp -a "$src" "$tgt"
+            eval "$mutate"
+            log ""
+            log "--- bisect [$label]: $mutate ---"
+            run find "$tgt" -mindepth 1
+            codesign --force --sign - "$tgt" >> "$OUT" 2>&1
+            sh -c "codesign -dvvv '$tgt' 2>&1 | grep -iE 'Identifier|flags'" >> "$OUT" 2>&1
+            xcrun simctl install "$DEV" "$tgt" >> "$OUT" 2>&1
+            rc=$?
+            echo "[bisect_install $label exit=$rc]" >> "$OUT"
+            xcrun simctl uninstall "$DEV" org.gnu.emacs >/dev/null 2>&1 || true
+          }
+
+          # T1: drop Resources/ subdirectory (suspect: macOS-style bundle confusion)
+          bisect_install T1_no_resources "$APP" 'rm -rf "$tgt/Resources"'
+
+          # T2: replace Info.plist with the minimal one
+          bisect_install T2_min_plist "$APP" 'cp "$MINPLIST" "$tgt/Info.plist"'
+
+          # T3: both
+          bisect_install T3_no_resources_and_min_plist "$APP" 'rm -rf "$tgt/Resources"; cp "$MINPLIST" "$tgt/Info.plist"'
+
+          # T4: control -- known-good ref bundle with name+id matching ours
+          # Demonstrates simctl install works on this runner with org.gnu.emacs ID
+          REF2=/tmp/T4_ref_with_our_id.app
+          rm -rf "$REF2"; cp -a "$REF" "$REF2"
+          sed -e 's|org.gnu.hello|org.gnu.emacs|' -e 's|>Hello<|>emacs<|' -i.bak "$REF2/Info.plist"
+          mv "$REF2/Hello" "$REF2/emacs"
+          rm -f "$REF2/Info.plist.bak"
+          log ""
+          log "--- bisect [T4_ref_with_our_id]: tiny hello binary + plist relabeled to emacs ---"
+          codesign --force --sign - "$REF2" >> "$OUT" 2>&1
+          xcrun simctl install "$DEV" "$REF2" >> "$OUT" 2>&1
+          rc=$?
+          echo "[bisect_install T4_ref_with_our_id exit=$rc]" >> "$OUT"
+          xcrun simctl uninstall "$DEV" org.gnu.emacs >/dev/null 2>&1 || true
+
           run xcrun simctl delete "$DEV"
           echo "" >> "$OUT"
           echo "===== END =====" >> "$OUT"
