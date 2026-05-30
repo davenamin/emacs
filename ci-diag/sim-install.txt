@@ -1,0 +1,428 @@
+===== ENVIRONMENT =====
+
+$ sw_vers
+ProductName:		macOS
+ProductVersion:		15.7.7
+BuildVersion:		24G720
+[exit=0]
+
+$ xcodebuild -version
+Xcode 16.4
+Build version 16F6
+[exit=0]
+
+$ xcrun --sdk iphonesimulator --show-sdk-path
+/Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk
+[exit=0]
+
+$ xcrun --sdk iphonesimulator --show-sdk-version
+18.5
+[exit=0]
+
+$ xcrun simctl list runtimes
+== Runtimes ==
+iOS 18.5 (18.5 - 22F77) - com.apple.CoreSimulator.SimRuntime.iOS-18-5
+iOS 18.6 (18.6 - 22G86) - com.apple.CoreSimulator.SimRuntime.iOS-18-6
+iOS 26.0 (26.0.1 - 23A8464) - com.apple.CoreSimulator.SimRuntime.iOS-26-0
+iOS 26.1 (26.1 - 23B86) - com.apple.CoreSimulator.SimRuntime.iOS-26-1
+iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+tvOS 18.5 (18.5 - 22L572) - com.apple.CoreSimulator.SimRuntime.tvOS-18-5
+tvOS 26.1 (26.1 - 23J579) - com.apple.CoreSimulator.SimRuntime.tvOS-26-1
+tvOS 26.2 (26.2 - 23K51) - com.apple.CoreSimulator.SimRuntime.tvOS-26-2
+watchOS 11.5 (11.5 - 22T572) - com.apple.CoreSimulator.SimRuntime.watchOS-11-5
+watchOS 26.1 (26.1 - 23S36) - com.apple.CoreSimulator.SimRuntime.watchOS-26-1
+watchOS 26.2 (26.2 - 23S303) - com.apple.CoreSimulator.SimRuntime.watchOS-26-2
+visionOS 2.3 (2.3 - 22N895) - com.apple.CoreSimulator.SimRuntime.xrOS-2-3
+visionOS 2.4 (2.4 - 22O237) - com.apple.CoreSimulator.SimRuntime.xrOS-2-4
+visionOS 2.5 (2.5 - 22O473) - com.apple.CoreSimulator.SimRuntime.xrOS-2-5
+visionOS 26.1 (26.1 - 23N47) - com.apple.CoreSimulator.SimRuntime.xrOS-26-1
+visionOS 26.2 (26.2 - 23N301) - com.apple.CoreSimulator.SimRuntime.xrOS-26-2
+[exit=0]
+
+===== BUILD DEPS =====
+
+$ brew update
+[34m==>[0m [1mUpdating Homebrew...[0m
+To restore the stashed changes to /opt/homebrew/Library/Taps/homebrew/homebrew-core, run:
+  cd /opt/homebrew/Library/Taps/homebrew/homebrew-core && git stash pop
+[34m==>[0m [1mHomebrew's analytics have entirely moved to our InfluxDB instance in the EU.[0m
+We gather less data than before and have destroyed all Google Analytics data:
+  [4mhttps://docs.brew.sh/Analytics[24m[0m
+Please reconsider re-enabling analytics to help our volunteer maintainers with:
+  brew analytics on
+[34m==>[0m [1mHomebrew is run entirely by unpaid volunteers. Please consider donating:[0m
+  [4mhttps://github.com/Homebrew/brew#donations[24m
+
+Updated 4 taps (hashicorp/tap, aws/tap, homebrew/core and homebrew/cask).
+[34m==>[0m [1mNew Formulae[0m
+btdu: Sampling disk usage profiler for btrfs
+bumblebee: Read-only developer endpoint scanner for supply-chain exposure
+cc-switch-cli: All-in-one assistant tool for Claude Code, Codex, Gemini, OpenCode and OpenClaw
+cozypkg: CLI for managing Cozystack packages
+ghcitty: Fast, friendly GHCi
+quien: Better WHOIS and domain intelligence toolkit
+ratty: GPU-rendered terminal emulator with inline 3D graphics
+sanity: Command-line interface for Sanity
+[34m==>[0m [1mNew Casks[0m
+activitywatch@beta: Time tracker
+airi: AI companion and VTuber application
+atomcode: Open-source terminal AI coding agent
+auto-subs: Subtitle generator for audio and video files
+dbx: Database management tool
+eurkey-next: Keyboard layout for Europeans, coders, and translators
+grok-build: Extensible coding agent for the terminal
+meetily: Meeting transcription and analysis application
+openpencil: Open-source design editor compatible with Figma
+smoothcapture: Screen recorder and video editor
+speechify-ai-assistant: AI-powered reading and voice assistant
+yojam: Open links in selected browser, profiles, or apps
+[34m==>[0m [1mOutdated Formulae[0m
+cmake
+gh
+rpds-py
+rustup
+
+You have [1m4[0m outdated formulae installed.
+You can upgrade them with [1mbrew upgrade[0m
+or list them with [1mbrew outdated[0m.
+[exit=0]
+
+$ brew install automake autoconf libtool pkg-config texinfo
+::warning::pkgconf 2.5.1 is already installed and up-to-date.%0ATo reinstall 2.5.1, run:%0A  brew reinstall pkgconf%0A
+Inspect the formula dependency plan before installing with `brew install --ask`.
+Enable ask mode by setting `HOMEBREW_ASK=1`.
+Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
+[32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m and [32mtexinfo[39m[0m
+✔︎ Bottle Manifest automake (1.18.1)
+✔︎ Bottle Manifest libtool (2.5.4)
+✔︎ Bottle Manifest texinfo (7.3)
+✔︎ Bottle Manifest autoconf (2.73)
+✔︎ Bottle Manifest m4 (1.4.21)
+✔︎ Bottle m4 (1.4.21)
+✔︎ Bottle autoconf (2.73)
+✔︎ Bottle automake (1.18.1)
+✔︎ Bottle libtool (2.5.4)
+✔︎ Bottle texinfo (7.3)
+[32m==>[0m [1mInstalling dependencies for automake: [32mm4[39m and [32mautoconf[39m[0m
+[32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
+[34m==>[0m [1mPouring m4--1.4.21.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/m4/1.4.21: 14 files, 817.6KB
+[32m==>[0m [1mInstalling automake dependency: [32mautoconf[39m[0m
+[34m==>[0m [1mPouring autoconf--2.73.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/autoconf/2.73: 73 files, 3.8MB
+[32m==>[0m [1mInstalling [32mautomake[39m[0m
+[34m==>[0m [1mPouring automake--1.18.1.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/automake/1.18.1: 134 files, 3.6MB
+[34m==>[0m [1mPouring libtool--2.5.4.arm64_sequoia.bottle.tar.gz[0m
+[34m==>[0m [1mCaveats[0m
+All commands have been installed with the prefix "g".
+If you need to use these commands with their normal names, you
+can add a "gnubin" directory to your PATH from your bashrc like:
+  PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH"
+[34m==>[0m [1mSummary[0m
+🍺  /opt/homebrew/Cellar/libtool/2.5.4: 76 files, 4.1MB
+[34m==>[0m [1mPouring texinfo--7.3.arm64_sequoia.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/texinfo/7.3: 529 files, 11.1MB
+[32m==>[0m [1mCaveats[0m
+[34m==>[0m [1mlibtool[0m
+All commands have been installed with the prefix "g".
+If you need to use these commands with their normal names, you
+can add a "gnubin" directory to your PATH from your bashrc like:
+  PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH"
+[exit=0]
+
+===== REGENERATE configure =====
+
+$ ./autogen.sh
+Checking whether you have the necessary tools...
+(Read INSTALL.REPO for more details on building Emacs)
+Checking for autoconf (need at least version 2.65) ... ok
+Your system has the required tools.
+Building aclocal.m4 ...
+Running 'autoreconf -fi -I m4' ...
+Building 'aclocal.m4' in exec ...
+Running 'autoreconf -fi' in exec ...
+Configuring local git repository...
+git config transfer.fsckObjects 'true'
+git config diff.cpp.xfuncname '!^[ 	]*[A-Za-z_][A-Za-z_0-9]*:[[:space:]]*($|/[/*])
+^((::[[:space:]]*)?[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(.*)$
+^((#define[[:space:]]|DEFUN).*)$'
+git config diff.elisp.xfuncname '^\([^[:space:]]*def[^[:space:]]+[[:space:]]+([^()[:space:]]+)'
+git config diff.m4.xfuncname '^((m4_)?define|A._DEFUN(_ONCE)?)\([^),]*'
+git config diff.make.xfuncname '^([$.[:alnum:]_].*:|[[:alnum:]_]+[[:space:]]*([*:+]?[:?]?|!?)=|define .*)'
+git config diff.shell.xfuncname '^([[:space:]]*[[:alpha:]_][[:alnum:]_]*[[:space:]]*\(\)|[[:alpha:]_][[:alnum:]_]*=)'
+git config diff.texinfo.xfuncname '^@node[[:space:]]+([^,[:space:]][^,]+)'
+Installing git hooks...
+You can now run './configure'.
+[exit=0]
+
+===== CONFIGURE (iphonesimulator) =====
+[configure exit=0]
+config.status: linking ../lib/time.in.h to cross/lib/time.in.h
+config.status: linking ../lib/time_r.c to cross/lib/time_r.c
+config.status: linking ../lib/time_rz.c to cross/lib/time_rz.c
+config.status: linking ../lib/timegm.c to cross/lib/timegm.c
+config.status: linking ../lib/timespec-add.c to cross/lib/timespec-add.c
+config.status: linking ../lib/timespec-sub.c to cross/lib/timespec-sub.c
+config.status: linking ../lib/timespec.c to cross/lib/timespec.c
+config.status: linking ../lib/timespec.h to cross/lib/timespec.h
+config.status: linking ../lib/u64.c to cross/lib/u64.c
+config.status: linking ../lib/u64.h to cross/lib/u64.h
+config.status: linking ../lib/unistd.c to cross/lib/unistd.c
+config.status: linking ../lib/unistd.in.h to cross/lib/unistd.in.h
+config.status: linking ../lib/unlocked-io.h to cross/lib/unlocked-io.h
+config.status: linking ../lib/utimens.c to cross/lib/utimens.c
+config.status: linking ../lib/utimens.h to cross/lib/utimens.h
+config.status: linking ../lib/utimensat.c to cross/lib/utimensat.c
+config.status: linking ../lib/verify.h to cross/lib/verify.h
+config.status: linking ../lib/warn-on-use.h to cross/lib/warn-on-use.h
+config.status: linking ../lib/af_alg.h to cross/lib/af_alg.h
+config.status: linking ../lib/save-cwd.h to cross/lib/save-cwd.h
+config.status: linking ../lib/fingerprint.c to cross/lib/fingerprint.c
+config.status: linking ../lib/fingerprint.h to cross/lib/fingerprint.h
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/openat-die.c to cross/lib/openat-die.c
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/min-max.h to cross/lib/min-max.h
+config.status: executing src/epaths.h commands
+config.status: executing src/.gdbinit commands
+config.status: executing doc/emacs/emacsver.texi commands
+config.status: executing etc-refcards-emacsver.tex commands
+
+===== MAKE IOS =====
+[make exit=0]
+--- last 25 lines of make-ios.out ---
+  GEN      ../../../etc/charsets/MULE-sisheng.map
+  GEN      ../../../etc/charsets/MULE-tibetan.map
+  GEN      ../../../etc/charsets/MULE-lviscii.map
+  GEN      ../../../etc/charsets/MULE-uviscii.map
+  GEN      ../../../lisp/international/cp51932.el
+  GEN      ../../../lisp/international/eucjp-ms.el
+  GEN      ../../../admin/charsets/charsets.stamp
+/Applications/Xcode_16.4.app/Contents/Developer/usr/bin/make -C ../../admin/unidata charscript.el
+  GEN      ../../../lisp/international/charscript.el
+/Applications/Xcode_16.4.app/Contents/Developer/usr/bin/make -C ../../admin/unidata emoji-zwj.el
+  GEN      ../../../lisp/international/emoji-zwj.el
+  CCLD     temacs
+mkdir -p ../etc
+rm -f emacs && cp -f temacs emacs
+/Applications/Xcode_16.4.app/Contents/Developer/usr/bin/make -C ios all
+rm -rf /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app
+mkdir -p /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app
+( cd ../../ios/Emacs.base ; tar cfh - \
+	    --exclude Info.plist.in --exclude Emacs.entitlements . ) | \
+	  ( cd /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app ; umask 022; tar xf - )
+cp Emacs.base/Info.plist /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app/Info.plist
+touch /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app
+cp -f /Users/runner/work/emacs/emacs/build-ios-sim/cross/src/emacs /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app/emacs
+ios/Makefile: CODESIGN_IDENTITY unset; producing
+  unsigned bundle suitable for the Simulator only.
+--- make errors (if any) ---
+
+===== (B) OUR BUNDLE: STRUCTURE =====
+
+$ find build-ios-sim/ios/Emacs.app
+build-ios-sim/ios/Emacs.app
+build-ios-sim/ios/Emacs.app/Resources
+build-ios-sim/ios/Emacs.app/Resources/LaunchScreen.storyboard
+build-ios-sim/ios/Emacs.app/emacs
+build-ios-sim/ios/Emacs.app/Info.plist
+[exit=0]
+
+$ ls -la build-ios-sim/ios/Emacs.app
+total 5160
+drwxr-xr-x  5 runner  staff      160 May 30 21:44 .
+drwxr-xr-x  5 runner  staff      160 May 30 21:44 ..
+-rwxr-xr-x  1 runner  staff  2634488 May 30 21:44 emacs
+-rw-r--r--  1 runner  staff     2684 May 30 21:44 Info.plist
+drwxr-xr-x  3 runner  staff       96 May 30 21:40 Resources
+[exit=0]
+
+===== (B) OUR BUNDLE: Info.plist (root) =====
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleIdentifier build-ios-sim/ios/Emacs.app/Info.plist
+org.gnu.emacs
+[exit=0]
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleExecutable build-ios-sim/ios/Emacs.app/Info.plist
+emacs
+[exit=0]
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleSupportedPlatforms build-ios-sim/ios/Emacs.app/Info.plist
+Array {
+    iPhoneSimulator
+}
+[exit=0]
+
+$ plutil -lint build-ios-sim/ios/Emacs.app/Info.plist
+build-ios-sim/ios/Emacs.app/Info.plist: OK
+[exit=0]
+
+$ file build-ios-sim/ios/Emacs.app/Info.plist
+build-ios-sim/ios/Emacs.app/Info.plist: XML 1.0 document text, ASCII text
+[exit=0]
+
+$ head -c 64 build-ios-sim/ios/Emacs.app/Info.plist
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-[exit=0]
+
+===== (B) OUR BUNDLE: binary =====
+
+$ file build-ios-sim/ios/Emacs.app/emacs
+build-ios-sim/ios/Emacs.app/emacs: Mach-O 64-bit executable arm64
+[exit=0]
+
+$ sh -c otool -l 'build-ios-sim/ios/Emacs.app/emacs' | grep -A4 LC_BUILD_VERSION
+      cmd LC_BUILD_VERSION
+  cmdsize 32
+ platform 7
+    minos 15.0
+      sdk 18.5
+[exit=0]
+
+===== (B) OUR BUNDLE: codesign BEFORE =====
+
+$ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
+Identifier=temacs.tmp
+Format=bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=20547 flags=0x20002(adhoc,linker-signed) hashes=639+0 location=embedded
+TeamIdentifier=not set
+[exit=0]
+--- ad-hoc re-sign the bundle ---
+
+$ codesign --force --sign - build-ios-sim/ios/Emacs.app
+build-ios-sim/ios/Emacs.app: replacing existing signature
+[exit=0]
+
+$ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
+Identifier=Emacs-5555494472b9864e5d543b60af1497040b043cdb
+Format=bundle with Mach-O thin (arm64)
+CodeDirectory v=20400 size=20679 flags=0x2(adhoc) hashes=639+3 location=embedded
+TeamIdentifier=not set
+[exit=0]
+
+===== (B) OUR BUNDLE: embedded __info_plist contents =====
+
+$ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | awk '{for(i=2;i<=NF;i++) printf "%s", $i; print ""}' | tr -d ' ' | xxd -r -p > /tmp/embedded.plist 2>/dev/null && plutil -p /tmp/embedded.plist 2>&1 | head -25
+/tmp/embedded.plist: Unexpected character m at line 1
+[exit=0]
+
+===== BOOT SIMULATOR =====
+devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
+No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
+device=8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+
+$ xcrun simctl boot 8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+[exit=0]
+
+$ xcrun simctl bootstatus 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 -b
+Monitoring boot status for ci-diag-phone (8623203E-A1A4-4923-A94F-CE2F2A8A29A3).
+[2026-05-30 21:45:26 +0000] Status=2, isTerminal=NO, Elapsed=00:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:46 seconds
+
+[2026-05-30 21:45:27 +0000] Status=2, isTerminal=NO, Elapsed=00:53.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:47 seconds
+
+[2026-05-30 21:45:33 +0000] Status=2, isTerminal=NO, Elapsed=00:59.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:48 seconds
+
+[2026-05-30 21:45:36 +0000] Status=2, isTerminal=NO, Elapsed=01:02.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.message.AccountsMigrator (MessageAccountsMigrator.migrator)
+		Migration Elapsed:00:53 seconds
+
+[2026-05-30 21:45:38 +0000] Status=4, isTerminal=NO, Elapsed=01:04.
+	Waiting on System App
+
+[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:06.
+	Waiting on System App
+
+[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
+	Waiting on System App
+
+[2026-05-30 21:45:40 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
+	Waiting on System App
+
+[2026-05-30 21:45:41 +0000] Status=4, isTerminal=NO, Elapsed=01:08.
+	Waiting on System App
+
+[2026-05-30 21:45:42 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
+	Waiting on System App
+
+[2026-05-30 21:45:43 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
+	Waiting on System App
+
+[2026-05-30 21:45:44 +0000] Status=4, isTerminal=NO, Elapsed=01:10.
+	Waiting on System App
+
+[2026-05-30 21:45:45 +0000] Status=4, isTerminal=NO, Elapsed=01:11.
+	Waiting on System App
+
+[2026-05-30 21:45:46 +0000] Status=4, isTerminal=NO, Elapsed=01:12.
+	Waiting on System App
+
+[2026-05-30 21:45:53 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:20.
+	Finished
+
+[exit=0]
+
+===== (A) MINIMAL REFERENCE APP =====
+
+$ xcrun --sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=15.0 -isysroot /Applications/Xcode_16.4.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator18.5.sdk -framework UIKit -framework Foundation -o ref-app/Hello.app/Hello ref-app/main.m
+[exit=0]
+
+$ plutil -lint ref-app/Hello.app/Info.plist
+ref-app/Hello.app/Info.plist: OK
+[exit=0]
+
+$ codesign --force --sign - ref-app/Hello.app
+ref-app/Hello.app: replacing existing signature
+[exit=0]
+
+$ sh -c codesign -dvvv 'ref-app/Hello.app' 2>&1 | grep -iE 'Identifier|flags'
+Identifier=org.gnu.hello
+CodeDirectory v=20400 size=486 flags=0x2(adhoc) hashes=9+3 location=embedded
+TeamIdentifier=not set
+[exit=0]
+
+$ find ref-app/Hello.app
+ref-app/Hello.app
+ref-app/Hello.app/_CodeSignature
+ref-app/Hello.app/_CodeSignature/CodeResources
+ref-app/Hello.app/Hello
+ref-app/Hello.app/Info.plist
+[exit=0]
+--- install reference app (expect SUCCESS -- this is the control) ---
+
+$ xcrun simctl install 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 ref-app/Hello.app
+[exit=0]
+
+===== (B) INSTALL OUR BUNDLE (the real test) =====
+
+$ xcrun simctl install 8623203E-A1A4-4923-A94F-CE2F2A8A29A3 build-ios-sim/ios/Emacs.app
+An error was encountered processing the command (domain=IXErrorDomain, code=13):
+Simulator device failed to install the application.
+Missing bundle ID.
+Underlying error (domain=IXErrorDomain, code=13):
+	Failed to get bundle ID from /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app
+	Missing bundle ID.
+[exit=13]
+
+===== STRUCTURED DIFF: reference vs ours (Info.plist keys) =====
+
+$ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
+{"CFBundleShortVersionString":"1.0","CFBundleIdentifier":"org.gnu.hello","CFBundleVersion":"1","CFBundleName":"Hello","DTPlatformName":"iphonesimulator","LSRequiresIPhoneOS":true,"UIDeviceFamily":[1,2],"CFBundleExecutable":"Hello","CFBundlePackageType":"APPL","MinimumOSVersion":"15.0","CFBundleSupportedPlatforms":["iPhoneSimulator"]}[exit=0]
+
+$ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
+{"CFBundleName":"Emacs","UILaunchStoryboardName":"LaunchScreen","UIFileSharingEnabled":true,"CFBundleDevelopmentRegion":"en","CFBundleVersion":"32.0.50","UIStatusBarStyle":"UIStatusBarStyleDefault","DTPlatformName":"iphonesimulator","CFBundlePackageType":"APPL","CFBundleShortVersionString":"32.0.50","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleDocumentTypes":[{"CFBundleTypeName":"Text Document","CFBundleTypeRole":"Editor","LSItemContentTypes":["public.text","public.plain-text","public.source-code"],"LSHandlerRank":"Alternate"}],"CFBundleInfoDictionaryVersion":"6.0","UIRequiredDeviceCapabilities":["arm64"],"CFBundleExecutable":"emacs","UISupportedInterfaceOrientations~ipad":["UIInterfaceOrientationPortrait","UIInterfaceOrientationPortraitUpsideDown","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"MinimumOSVersion":"15.0","CFBundleIdentifier":"org.gnu.emacs","LSSupportsOpeningDocumentsInPlace":true,"UIRequiresFullScreen":false,"UIApplicationSceneManifest":{"UIApplicationSupportsMultipleScenes":true,"UISceneConfigurations":{"UIWindowSceneSessionRoleApplication":[{"UISceneConfigurationName":"Default Configuration","UISceneDelegateClassName":"EmacsSceneDelegate"}]}},"LSRequiresIPhoneOS":true,"UISupportedInterfaceOrientations":["UIInterfaceOrientationPortrait","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"CFBundleDisplayName":"Emacs"}[exit=0]
+
+$ xcrun simctl delete 8623203E-A1A4-4923-A94F-CE2F2A8A29A3
+[exit=0]
+
+===== END =====
