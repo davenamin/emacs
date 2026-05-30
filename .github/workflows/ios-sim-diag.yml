@@ -1,0 +1,207 @@
+# iOS simulator-install DIAGNOSTIC workflow.
+#
+# Purpose: figure out, without a human in the loop, why the
+# cross-built Emacs.app fails `xcrun simctl install` with the
+# misleading "Missing bundle ID" (IXPlaceholder) error, even though
+# the on-disk Info.plist has a valid CFBundleIdentifier.
+#
+# The agent driving this cannot read Actions logs via its tooling, so
+# this job writes ALL its output to ci-diag/sim-install.txt and
+# commits it back to the branch (with [skip ci] so it does not
+# re-trigger).  The agent then reads that file via the GitHub API.
+#
+# Two bundles are exercised on the same clean runner:
+#   (A) a MINIMAL hand-assembled reference app (tiny main.m compiled
+#       against the iphonesimulator SDK + a minimal Info.plist), and
+#   (B) our cross-built Emacs.app.
+# Installing both isolates whether the failure is specific to our
+# emacs binary / generated plist, or general to hand-assembled flat
+# bundles on this toolchain.
+#
+# Everything is best-effort: set +e and `|| true` throughout, and the
+# results are committed in an `if: always()` step, so even a partial
+# or crashing run still reports something the agent can read.
+
+name: iOS simulator-install diagnostic
+
+on:
+  workflow_dispatch: {}
+  push:
+    branches:
+      - claude/ios-port
+    paths:
+      - .github/workflows/ios-sim-diag.yml
+
+permissions:
+  contents: write
+
+jobs:
+  diag:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/ios-port
+
+      - name: Run diagnostics
+        if: always()
+        run: |
+          set +e
+          OUT=ci-diag/sim-install.txt
+          mkdir -p ci-diag
+          : > "$OUT"
+          log() { echo "$@" | tee -a "$OUT"; }
+          run() {
+            echo "" >> "$OUT"
+            echo "\$ $*" >> "$OUT"
+            "$@" >> "$OUT" 2>&1
+            echo "[exit=$?]" >> "$OUT"
+          }
+
+          log "===== ENVIRONMENT ====="
+          run sw_vers
+          run xcodebuild -version
+          run xcrun --sdk iphonesimulator --show-sdk-path
+          run xcrun --sdk iphonesimulator --show-sdk-version
+          run xcrun simctl list runtimes
+
+          log ""
+          log "===== BUILD DEPS ====="
+          run brew update
+          run brew install automake autoconf libtool pkg-config texinfo
+
+          log ""
+          log "===== REGENERATE configure ====="
+          run ./autogen.sh
+
+          log ""
+          log "===== CONFIGURE (iphonesimulator) ====="
+          mkdir -p build-ios-sim
+          ( cd build-ios-sim && \
+            IOS_SDK=iphonesimulator IOS_ARCH=arm64 IOS_DEPLOYMENT_TARGET=15.0 \
+              ../configure --with-ios > configure.out 2>&1 )
+          echo "[configure exit=$?]" >> "$OUT"
+          tail -30 build-ios-sim/configure.out >> "$OUT" 2>&1
+
+          log ""
+          log "===== MAKE IOS ====="
+          ( cd build-ios-sim && make ios > make-ios.out 2>&1 )
+          echo "[make exit=$?]" >> "$OUT"
+          echo "--- last 25 lines of make-ios.out ---" >> "$OUT"
+          tail -25 build-ios-sim/make-ios.out >> "$OUT" 2>&1
+          echo "--- make errors (if any) ---" >> "$OUT"
+          grep -nE 'error:|fatal:' build-ios-sim/make-ios.out >> "$OUT" 2>&1
+
+          APP=build-ios-sim/ios/Emacs.app
+
+          log ""
+          log "===== (B) OUR BUNDLE: STRUCTURE ====="
+          run find "$APP"
+          run ls -la "$APP"
+
+          log ""
+          log "===== (B) OUR BUNDLE: Info.plist (root) ====="
+          run /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleSupportedPlatforms" "$APP/Info.plist"
+          run plutil -lint "$APP/Info.plist"
+          run file "$APP/Info.plist"
+          run head -c 64 "$APP/Info.plist"
+
+          log ""
+          log "===== (B) OUR BUNDLE: binary ====="
+          run file "$APP/emacs"
+          run sh -c "otool -l '$APP/emacs' | grep -A4 LC_BUILD_VERSION"
+
+          log ""
+          log "===== (B) OUR BUNDLE: codesign BEFORE ====="
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+          log "--- ad-hoc re-sign the bundle ---"
+          run codesign --force --sign - "$APP"
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+
+          log ""
+          log "===== (B) OUR BUNDLE: CFBundle read via PlistBuddy on embedded plist ====="
+          run sh -c "otool -X -s __TEXT __info_plist '$APP/emacs' | xxd -r -p 2>/dev/null | plutil -p - 2>&1 | grep -i bundleident"
+
+          log ""
+          log "===== BOOT SIMULATOR ====="
+          DEV=$(xcrun simctl create ci-diag-phone com.apple.CoreSimulator.SimDeviceType.iPhone-15 2>>"$OUT")
+          if [ -z "$DEV" ]; then
+            DEV=$(xcrun simctl create ci-diag-phone com.apple.CoreSimulator.SimDeviceType.iPhone-SE-3rd-generation 2>>"$OUT")
+          fi
+          log "device=$DEV"
+          run xcrun simctl boot "$DEV"
+          run xcrun simctl bootstatus "$DEV" -b
+
+          log ""
+          log "===== (A) MINIMAL REFERENCE APP ====="
+          REF=ref-app/Hello.app
+          mkdir -p ref-app
+          rm -rf "$REF"; mkdir -p "$REF"
+          cat > ref-app/main.m <<'EOM'
+          #import <UIKit/UIKit.h>
+          int main(int argc, char *argv[]) {
+            @autoreleasepool { return UIApplicationMain(argc, argv, nil, nil); }
+          }
+          EOM
+          SIMSDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          run xcrun --sdk iphonesimulator clang -arch arm64 \
+              -mios-simulator-version-min=15.0 -isysroot "$SIMSDK" \
+              -framework UIKit -framework Foundation \
+              -o "$REF/Hello" ref-app/main.m
+          cat > "$REF/Info.plist" <<'EOP'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleExecutable</key><string>Hello</string>
+            <key>CFBundleIdentifier</key><string>org.gnu.hello</string>
+            <key>CFBundleName</key><string>Hello</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>1.0</string>
+            <key>CFBundleVersion</key><string>1</string>
+            <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>
+            <key>DTPlatformName</key><string>iphonesimulator</string>
+            <key>MinimumOSVersion</key><string>15.0</string>
+            <key>LSRequiresIPhoneOS</key><true/>
+            <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>
+          </dict>
+          </plist>
+          EOP
+          run codesign --force --sign - "$REF"
+          run sh -c "codesign -dvvv '$REF' 2>&1 | grep -iE 'Identifier|flags'"
+          run find "$REF"
+          log "--- install reference app (expect success) ---"
+          run xcrun simctl install "$DEV" "$REF"
+
+          log ""
+          log "===== (B) INSTALL OUR BUNDLE (the real test) ====="
+          run xcrun simctl install "$DEV" "$APP"
+
+          log ""
+          log "===== STRUCTURED DIFF: reference vs ours (Info.plist keys) ====="
+          run sh -c "plutil -convert json -o - '$REF/Info.plist' 2>&1"
+          run sh -c "plutil -convert json -o - '$APP/Info.plist' 2>&1"
+
+          run xcrun simctl delete "$DEV"
+          echo "" >> "$OUT"
+          echo "===== END =====" >> "$OUT"
+          true
+
+      - name: Commit diagnostics back to branch
+        if: always()
+        run: |
+          set +e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add ci-diag/sim-install.txt
+          git commit -m "ci-diag: simulator-install diagnostic results [skip ci]" || {
+            echo "nothing to commit"; exit 0; }
+          for i in 1 2 3 4; do
+            git pull --rebase origin claude/ios-port && git push origin HEAD:claude/ios-port && break
+            sleep $((i*2))
+          done
+          true
