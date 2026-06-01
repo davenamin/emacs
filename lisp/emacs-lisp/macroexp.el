@@ -941,7 +941,7 @@ test of free variables in the following ways:
        ;; Hopefully this shouldn't happen thanks to the cycle detection,
        ;; but in case it does happen, let's catch the error and give the
        ;; code a chance to macro-expand later.
-       (let* ((culprit nil)
+       (let* ((culprit nil) (culprit-err nil)
               ;; Walk inwards to find the smallest subform that
               ;; reproduces ERR, so the diagnostic points at the bad
               ;; node rather than the whole outer wrap.
@@ -955,19 +955,25 @@ test of free variables in the following ways:
                            (dolist (c sub)
                              (when (not culprit) (funcall walk c)))
                            (unless culprit
-                             (condition-case _e
+                             (condition-case e
                                  (if full-p
                                      (macroexpand--all-toplevel sub)
                                    (macroexpand sub))
-                               (error (setq culprit sub))))))))
+                               (error (setq culprit sub)
+                                      (setq culprit-err e))))))))
                    (funcall walk form)))
+              (mfn (and (fboundp 'macroexp-file-name) (macroexp-file-name)))
               (print-level 6)
               (print-length 12))
-         (error "Eager macro-expansion failure in %s\n  err=%S\n  form head=%S\n  culprit=%S"
+         (error "Eager macro-expansion failure in %s\n  err=%S\n  form head=%S\n  culprit=%S\n  culprit-err=%S\n  macroexp-file-name=%S\n  load-file-name=%S\n  current-load-list-tail=%S"
                 load-file-name
                 err
                 (and (consp form) (list (car form) (car-safe (cdr form))))
-                culprit))
+                culprit
+                culprit-err
+                mfn
+                load-file-name
+                (car (last current-load-list))))
        form)))))
 
 ;; ¡¡¡ Big Ugly Hack !!!
