@@ -81,8 +81,8 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 void
 syms_of_iosterm (void)
 {
-  /* Will define ios-specific symbols and variables in follow-up
-     commits (parallel to syms_of_androidterm).  */
+  DEFSYM (Qios, "ios");
+  Fprovide (Qios, Qnil);
 }
 
 #endif /* HAVE_IOS */
