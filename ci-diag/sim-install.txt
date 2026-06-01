@@ -60,29 +60,43 @@ bumblebee: Read-only developer endpoint scanner for supply-chain exposure
 cc-switch-cli: All-in-one assistant tool for Claude Code, Codex, Gemini, OpenCode and OpenClaw
 cozypkg: CLI for managing Cozystack packages
 ghcitty: Fast, friendly GHCi
+libredwg: DWG utilities
 quien: Better WHOIS and domain intelligence toolkit
 ratty: GPU-rendered terminal emulator with inline 3D graphics
 sanity: Command-line interface for Sanity
+sdl3_net: Simple cross-platform wrapper over TCP/IP sockets
+tdf: TUI-based PDF viewer
+telegram-send: Command-line tool to send Telegram messages
+wl-clipboard: Command-line copy/paste utilities for Wayland
 [34m==>[0m [1mNew Casks[0m
 activitywatch@beta: Time tracker
 airi: AI companion and VTuber application
 atomcode: Open-source terminal AI coding agent
 auto-subs: Subtitle generator for audio and video files
 dbx: Database management tool
+devin-cli: Coding agent with Devin Cloud integration
 eurkey-next: Keyboard layout for Europeans, coders, and translators
+facescreen: Camera and text overlay for presentations and screen sharing
+font-montenegrin-gothic-one
+ghostvm: Native macOS Virtual Machines for Apple Silicon
 grok-build: Extensible coding agent for the terminal
+harvest: Time tracking application
 meetily: Meeting transcription and analysis application
 openpencil: Open-source design editor compatible with Figma
 smoothcapture: Screen recorder and video editor
 speechify-ai-assistant: AI-powered reading and voice assistant
 yojam: Open links in selected browser, profiles, or apps
 [34m==>[0m [1mOutdated Formulae[0m
+aws-sam-cli
 cmake
 gh
+libnghttp3
+libngtcp2
+pipx
 rpds-py
 rustup
 
-You have [1m4[0m outdated formulae installed.
+You have [1m8[0m outdated formulae installed.
 You can upgrade them with [1mbrew upgrade[0m
 or list them with [1mbrew outdated[0m.
 [exit=0]
@@ -93,14 +107,14 @@ Inspect the formula dependency plan before installing with `brew install --ask`.
 Enable ask mode by setting `HOMEBREW_ASK=1`.
 Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m and [32mtexinfo[39m[0m
-✔︎ Bottle Manifest automake (1.18.1)
 ✔︎ Bottle Manifest autoconf (2.73)
-✔︎ Bottle Manifest libtool (2.5.4)
 ✔︎ Bottle Manifest texinfo (7.3)
+✔︎ Bottle Manifest automake (1.18.1)
+✔︎ Bottle Manifest libtool (2.5.4)
 ✔︎ Bottle Manifest m4 (1.4.21)
 ✔︎ Bottle m4 (1.4.21)
-✔︎ Bottle autoconf (2.73)
 ✔︎ Bottle automake (1.18.1)
+✔︎ Bottle autoconf (2.73)
 ✔︎ Bottle libtool (2.5.4)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake: [32mm4[39m and [32mautoconf[39m[0m
@@ -229,12 +243,12 @@ build-ios-sim/ios/Emacs.app/Info.plist
 [exit=0]
 
 $ ls -la build-ios-sim/ios/Emacs.app
-total 5168
-drwxr-xr-x  5 runner  staff      160 May 30 22:07 .
-drwxr-xr-x  5 runner  staff      160 May 30 22:07 ..
--rwxr-xr-x  1 runner  staff  2634488 May 30 22:07 emacs
--rw-r--r--  1 runner  staff     2684 May 30 22:07 Info.plist
--rw-r--r--  1 runner  staff     1879 May 30 22:03 LaunchScreen.storyboard
+total 5208
+drwxr-xr-x  5 runner  staff      160 Jun  1 01:41 .
+drwxr-xr-x  5 runner  staff      160 Jun  1 01:41 ..
+-rwxr-xr-x  1 runner  staff  2656392 Jun  1 01:41 emacs
+-rw-r--r--  1 runner  staff     2252 Jun  1 01:41 Info.plist
+-rw-r--r--  1 runner  staff     1879 Jun  1 01:38 LaunchScreen.storyboard
 [exit=0]
 
 ===== (B) OUR BUNDLE: Info.plist (root) =====
@@ -284,7 +298,7 @@ $ sh -c otool -l 'build-ios-sim/ios/Emacs.app/emacs' | grep -A4 LC_BUILD_VERSION
 $ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
 Identifier=temacs.tmp
 Format=app bundle with Mach-O thin (arm64)
-CodeDirectory v=20400 size=20547 flags=0x20002(adhoc,linker-signed) hashes=639+0 location=embedded
+CodeDirectory v=20400 size=20707 flags=0x20002(adhoc,linker-signed) hashes=644+0 location=embedded
 TeamIdentifier=not set
 [exit=0]
 --- ad-hoc re-sign the bundle ---
@@ -296,7 +310,7 @@ build-ios-sim/ios/Emacs.app: replacing existing signature
 $ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
 Identifier=org.gnu.emacs
 Format=app bundle with Mach-O thin (arm64)
-CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
 TeamIdentifier=not set
 [exit=0]
 
@@ -309,81 +323,85 @@ $ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | aw
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
-device=1895AFAE-467B-438F-BCFA-A8DBE4546227
+device=0A003943-2118-40A7-9A59-46FB2DFCA8FB
 
-$ xcrun simctl boot 1895AFAE-467B-438F-BCFA-A8DBE4546227
+$ xcrun simctl boot 0A003943-2118-40A7-9A59-46FB2DFCA8FB
 [exit=0]
 
-$ xcrun simctl bootstatus 1895AFAE-467B-438F-BCFA-A8DBE4546227 -b
-Monitoring boot status for ci-diag-phone (1895AFAE-467B-438F-BCFA-A8DBE4546227).
-[2026-05-30 22:08:45 +0000] Status=2, isTerminal=NO, Elapsed=00:49.
+$ xcrun simctl bootstatus 0A003943-2118-40A7-9A59-46FB2DFCA8FB -b
+Monitoring boot status for ci-diag-phone (0A003943-2118-40A7-9A59-46FB2DFCA8FB).
+[2026-06-01 01:42:00 +0000] Status=2, isTerminal=NO, Elapsed=00:32.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:43 seconds
+		Migration Elapsed:00:25 seconds
 
-[2026-05-30 22:08:46 +0000] Status=2, isTerminal=NO, Elapsed=00:50.
+[2026-06-01 01:42:01 +0000] Status=2, isTerminal=NO, Elapsed=00:33.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:44 seconds
+		Migration Elapsed:00:26 seconds
 
-[2026-05-30 22:08:47 +0000] Status=2, isTerminal=NO, Elapsed=00:51.
+[2026-06-01 01:42:02 +0000] Status=2, isTerminal=NO, Elapsed=00:34.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:45 seconds
+		Migration Elapsed:00:27 seconds
 
-[2026-05-30 22:08:48 +0000] Status=2, isTerminal=NO, Elapsed=00:52.
+[2026-06-01 01:42:03 +0000] Status=2, isTerminal=NO, Elapsed=00:35.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:46 seconds
+		Migration Elapsed:00:28 seconds
 
-[2026-05-30 22:08:49 +0000] Status=2, isTerminal=NO, Elapsed=00:53.
+[2026-06-01 01:42:04 +0000] Status=2, isTerminal=NO, Elapsed=00:36.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:47 seconds
+		Migration Elapsed:00:29 seconds
 
-[2026-05-30 22:08:51 +0000] Status=2, isTerminal=NO, Elapsed=00:55.
+[2026-06-01 01:42:05 +0000] Status=2, isTerminal=NO, Elapsed=00:37.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:48 seconds
+		Migration Elapsed:00:30 seconds
 
-[2026-05-30 22:08:54 +0000] Status=2, isTerminal=NO, Elapsed=00:58.
+[2026-06-01 01:42:09 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:50 seconds
+		Migration Elapsed:00:32 seconds
 
-[2026-05-30 22:08:57 +0000] Status=2, isTerminal=NO, Elapsed=01:01.
+[2026-06-01 01:42:09 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
 	Waiting on Data Migration
-		Reason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)
-		Migration Elapsed:00:53 seconds
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:00:34 seconds
 
-[2026-05-30 22:08:59 +0000] Status=4, isTerminal=NO, Elapsed=01:02.
+[2026-06-01 01:42:11 +0000] Status=2, isTerminal=NO, Elapsed=00:42.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:00:34 seconds
+
+[2026-06-01 01:42:12 +0000] Status=2, isTerminal=NO, Elapsed=00:43.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.PreferencesMigrator (PreferencesMigrator.migrator)
+		Migration Elapsed:00:36 seconds
+
+[2026-06-01 01:42:14 +0000] Status=4, isTerminal=NO, Elapsed=00:45.
 	Waiting on System App
 
-[2026-05-30 22:08:59 +0000] Status=4, isTerminal=NO, Elapsed=01:03.
+[2026-06-01 01:42:14 +0000] Status=4, isTerminal=NO, Elapsed=00:45.
 	Waiting on System App
 
-[2026-05-30 22:09:00 +0000] Status=4, isTerminal=NO, Elapsed=01:04.
+[2026-06-01 01:42:15 +0000] Status=4, isTerminal=NO, Elapsed=00:46.
 	Waiting on System App
 
-[2026-05-30 22:09:01 +0000] Status=4, isTerminal=NO, Elapsed=01:05.
+[2026-06-01 01:42:16 +0000] Status=4, isTerminal=NO, Elapsed=00:47.
 	Waiting on System App
 
-[2026-05-30 22:09:02 +0000] Status=4, isTerminal=NO, Elapsed=01:06.
+[2026-06-01 01:42:17 +0000] Status=4, isTerminal=NO, Elapsed=00:48.
 	Waiting on System App
 
-[2026-05-30 22:09:03 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
+[2026-06-01 01:42:18 +0000] Status=4, isTerminal=NO, Elapsed=00:49.
 	Waiting on System App
 
-[2026-05-30 22:09:04 +0000] Status=4, isTerminal=NO, Elapsed=01:08.
+[2026-06-01 01:42:19 +0000] Status=4, isTerminal=NO, Elapsed=00:50.
 	Waiting on System App
 
-[2026-05-30 22:09:05 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
-	Waiting on System App
-
-[2026-05-30 22:09:06 +0000] Status=4, isTerminal=NO, Elapsed=01:10.
-	Waiting on System App
-
-[2026-05-30 22:09:13 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:17.
+[2026-06-01 01:42:24 +0000] Status=4294967295, isTerminal=YES, Elapsed=00:55.
 	Finished
 
 [exit=0]
@@ -416,12 +434,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 1895AFAE-467B-438F-BCFA-A8DBE4546227 ref-app/Hello.app
+$ xcrun simctl install 0A003943-2118-40A7-9A59-46FB2DFCA8FB ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 1895AFAE-467B-438F-BCFA-A8DBE4546227 build-ios-sim/ios/Emacs.app
+$ xcrun simctl install 0A003943-2118-40A7-9A59-46FB2DFCA8FB build-ios-sim/ios/Emacs.app
 [exit=0]
 
 ===== STRUCTURED DIFF: reference vs ours (Info.plist keys) =====
@@ -430,7 +448,7 @@ $ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
 {"CFBundleShortVersionString":"1.0","CFBundleIdentifier":"org.gnu.hello","CFBundleVersion":"1","CFBundleName":"Hello","DTPlatformName":"iphonesimulator","LSRequiresIPhoneOS":true,"UIDeviceFamily":[1,2],"CFBundleExecutable":"Hello","CFBundlePackageType":"APPL","MinimumOSVersion":"15.0","CFBundleSupportedPlatforms":["iPhoneSimulator"]}[exit=0]
 
 $ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
-{"CFBundleName":"Emacs","UILaunchStoryboardName":"LaunchScreen","UIFileSharingEnabled":true,"CFBundleDevelopmentRegion":"en","CFBundleVersion":"32.0.50","UIStatusBarStyle":"UIStatusBarStyleDefault","DTPlatformName":"iphonesimulator","CFBundlePackageType":"APPL","CFBundleShortVersionString":"32.0.50","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleDocumentTypes":[{"CFBundleTypeName":"Text Document","CFBundleTypeRole":"Editor","LSItemContentTypes":["public.text","public.plain-text","public.source-code"],"LSHandlerRank":"Alternate"}],"CFBundleInfoDictionaryVersion":"6.0","UIRequiredDeviceCapabilities":["arm64"],"CFBundleExecutable":"emacs","UISupportedInterfaceOrientations~ipad":["UIInterfaceOrientationPortrait","UIInterfaceOrientationPortraitUpsideDown","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"MinimumOSVersion":"15.0","CFBundleIdentifier":"org.gnu.emacs","LSSupportsOpeningDocumentsInPlace":true,"UIRequiresFullScreen":false,"UIApplicationSceneManifest":{"UIApplicationSupportsMultipleScenes":true,"UISceneConfigurations":{"UIWindowSceneSessionRoleApplication":[{"UISceneConfigurationName":"Default Configuration","UISceneDelegateClassName":"EmacsSceneDelegate"}]}},"LSRequiresIPhoneOS":true,"UISupportedInterfaceOrientations":["UIInterfaceOrientationPortrait","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"CFBundleDisplayName":"Emacs"}[exit=0]
+{"CFBundleName":"Emacs","UILaunchStoryboardName":"LaunchScreen","UIFileSharingEnabled":true,"CFBundleDevelopmentRegion":"en","CFBundleVersion":"32.0.50","UIStatusBarStyle":"UIStatusBarStyleDefault","DTPlatformName":"iphonesimulator","CFBundlePackageType":"APPL","CFBundleShortVersionString":"32.0.50","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleDocumentTypes":[{"CFBundleTypeName":"Text Document","CFBundleTypeRole":"Editor","LSItemContentTypes":["public.text","public.plain-text","public.source-code"],"LSHandlerRank":"Alternate"}],"CFBundleInfoDictionaryVersion":"6.0","UIRequiredDeviceCapabilities":["arm64"],"CFBundleExecutable":"emacs","UISupportedInterfaceOrientations~ipad":["UIInterfaceOrientationPortrait","UIInterfaceOrientationPortraitUpsideDown","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"MinimumOSVersion":"15.0","CFBundleIdentifier":"org.gnu.emacs","LSSupportsOpeningDocumentsInPlace":true,"UIRequiresFullScreen":false,"LSRequiresIPhoneOS":true,"UISupportedInterfaceOrientations":["UIInterfaceOrientationPortrait","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"CFBundleDisplayName":"Emacs"}[exit=0]
 
 ===== BISECTION: which of {Resources/, Info.plist, binary} causes the fail =====
 
@@ -449,7 +467,7 @@ $ find /tmp/T1_no_resources.app -mindepth 1
 [exit=0]
 /tmp/T1_no_resources.app: replacing existing signature
 Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
 TeamIdentifier=not set
 [bisect_install T1_no_resources exit=0]
 
@@ -464,7 +482,7 @@ $ find /tmp/T2_min_plist.app -mindepth 1
 [exit=0]
 /tmp/T2_min_plist.app: replacing existing signature
 Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
 TeamIdentifier=not set
 [bisect_install T2_min_plist exit=0]
 
@@ -479,7 +497,7 @@ $ find /tmp/T3_no_resources_and_min_plist.app -mindepth 1
 [exit=0]
 /tmp/T3_no_resources_and_min_plist.app: replacing existing signature
 Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20646 flags=0x2(adhoc) hashes=639+3 location=embedded
+CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
 TeamIdentifier=not set
 [bisect_install T3_no_resources_and_min_plist exit=0]
 
@@ -487,7 +505,7 @@ TeamIdentifier=not set
 /tmp/T4_ref_with_our_id.app: replacing existing signature
 [bisect_install T4_ref_with_our_id exit=0]
 
-$ xcrun simctl delete 1895AFAE-467B-438F-BCFA-A8DBE4546227
+$ xcrun simctl delete 0A003943-2118-40A7-9A59-46FB2DFCA8FB
 [exit=0]
 
 ===== END =====
