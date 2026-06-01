@@ -55,6 +55,7 @@ Please reconsider re-enabling analytics to help our volunteer maintainers with:
 
 Updated 4 taps (hashicorp/tap, aws/tap, homebrew/core and homebrew/cask).
 [34m==>[0m [1mNew Formulae[0m
+aube: Fast Node.js package manager
 btdu: Sampling disk usage profiler for btrfs
 bumblebee: Read-only developer endpoint scanner for supply-chain exposure
 cc-switch-cli: All-in-one assistant tool for Claude Code, Codex, Gemini, OpenCode and OpenClaw
@@ -64,27 +65,37 @@ libredwg: DWG utilities
 quien: Better WHOIS and domain intelligence toolkit
 ratty: GPU-rendered terminal emulator with inline 3D graphics
 sanity: Command-line interface for Sanity
+sdl2-compat: SDL2 compatibility layer that uses SDL3 behind the scenes
 sdl3_net: Simple cross-platform wrapper over TCP/IP sockets
 tdf: TUI-based PDF viewer
 telegram-send: Command-line tool to send Telegram messages
 wl-clipboard: Command-line copy/paste utilities for Wayland
 [34m==>[0m [1mNew Casks[0m
 activitywatch@beta: Time tracker
+agentsmesh: AI agent workforce platform
 airi: AI companion and VTuber application
 atomcode: Open-source terminal AI coding agent
 auto-subs: Subtitle generator for audio and video files
+choragus: Sonos controller
 dbx: Database management tool
 devin-cli: Coding agent with Devin Cloud integration
 eurkey-next: Keyboard layout for Europeans, coders, and translators
 facescreen: Camera and text overlay for presentations and screen sharing
 font-montenegrin-gothic-one
+font-xiaolai
+font-xiaolai-mono
 ghostvm: Native macOS Virtual Machines for Apple Silicon
 grok-build: Extensible coding agent for the terminal
 harvest: Time tracking application
+mactools: Menu bar toolbox
 meetily: Meeting transcription and analysis application
+mirai: Inference engine for AI models
 openpencil: Open-source design editor compatible with Figma
+ping-island: Menu bar status for coding agent sessions
 smoothcapture: Screen recorder and video editor
 speechify-ai-assistant: AI-powered reading and voice assistant
+vmlx: Run local AI models on Apple Silicon
+whatcable: Menu bar app for USB-C cable diagnostics
 yojam: Open links in selected browser, profiles, or apps
 [34m==>[0m [1mOutdated Formulae[0m
 aws-sam-cli
@@ -107,14 +118,14 @@ Inspect the formula dependency plan before installing with `brew install --ask`.
 Enable ask mode by setting `HOMEBREW_ASK=1`.
 Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m and [32mtexinfo[39m[0m
-✔︎ Bottle Manifest autoconf (2.73)
 ✔︎ Bottle Manifest texinfo (7.3)
 ✔︎ Bottle Manifest automake (1.18.1)
+✔︎ Bottle Manifest autoconf (2.73)
 ✔︎ Bottle Manifest libtool (2.5.4)
 ✔︎ Bottle Manifest m4 (1.4.21)
 ✔︎ Bottle m4 (1.4.21)
-✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle autoconf (2.73)
+✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle libtool (2.5.4)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake: [32mm4[39m and [32mautoconf[39m[0m
@@ -244,11 +255,11 @@ build-ios-sim/ios/Emacs.app/Info.plist
 
 $ ls -la build-ios-sim/ios/Emacs.app
 total 5208
-drwxr-xr-x  5 runner  staff      160 Jun  1 01:41 .
-drwxr-xr-x  5 runner  staff      160 Jun  1 01:41 ..
--rwxr-xr-x  1 runner  staff  2656392 Jun  1 01:41 emacs
--rw-r--r--  1 runner  staff     2252 Jun  1 01:41 Info.plist
--rw-r--r--  1 runner  staff     1879 Jun  1 01:38 LaunchScreen.storyboard
+drwxr-xr-x  5 runner  staff      160 Jun  1 23:00 .
+drwxr-xr-x  5 runner  staff      160 Jun  1 23:00 ..
+-rwxr-xr-x  1 runner  staff  2656392 Jun  1 23:00 emacs
+-rw-r--r--  1 runner  staff     2252 Jun  1 23:00 Info.plist
+-rw-r--r--  1 runner  staff     1879 Jun  1 22:56 LaunchScreen.storyboard
 [exit=0]
 
 ===== (B) OUR BUNDLE: Info.plist (root) =====
@@ -323,85 +334,93 @@ $ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | aw
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
-device=0A003943-2118-40A7-9A59-46FB2DFCA8FB
+device=3B932037-49EE-4A1A-9FB7-581D8569ABE9
 
-$ xcrun simctl boot 0A003943-2118-40A7-9A59-46FB2DFCA8FB
+$ xcrun simctl boot 3B932037-49EE-4A1A-9FB7-581D8569ABE9
 [exit=0]
 
-$ xcrun simctl bootstatus 0A003943-2118-40A7-9A59-46FB2DFCA8FB -b
-Monitoring boot status for ci-diag-phone (0A003943-2118-40A7-9A59-46FB2DFCA8FB).
-[2026-06-01 01:42:00 +0000] Status=2, isTerminal=NO, Elapsed=00:32.
+$ xcrun simctl bootstatus 3B932037-49EE-4A1A-9FB7-581D8569ABE9 -b
+Monitoring boot status for ci-diag-phone (3B932037-49EE-4A1A-9FB7-581D8569ABE9).
+[2026-06-01 23:01:36 +0000] Status=2, isTerminal=NO, Elapsed=00:44.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:25 seconds
+		Migration Elapsed:00:37 seconds
 
-[2026-06-01 01:42:01 +0000] Status=2, isTerminal=NO, Elapsed=00:33.
+[2026-06-01 23:01:37 +0000] Status=2, isTerminal=NO, Elapsed=00:45.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:26 seconds
+		Migration Elapsed:00:38 seconds
 
-[2026-06-01 01:42:02 +0000] Status=2, isTerminal=NO, Elapsed=00:34.
+[2026-06-01 23:01:38 +0000] Status=2, isTerminal=NO, Elapsed=00:46.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:27 seconds
+		Migration Elapsed:00:39 seconds
 
-[2026-06-01 01:42:03 +0000] Status=2, isTerminal=NO, Elapsed=00:35.
+[2026-06-01 23:01:39 +0000] Status=2, isTerminal=NO, Elapsed=00:47.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:28 seconds
+		Migration Elapsed:00:40 seconds
 
-[2026-06-01 01:42:04 +0000] Status=2, isTerminal=NO, Elapsed=00:36.
+[2026-06-01 23:01:40 +0000] Status=2, isTerminal=NO, Elapsed=00:48.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:29 seconds
+		Migration Elapsed:00:41 seconds
 
-[2026-06-01 01:42:05 +0000] Status=2, isTerminal=NO, Elapsed=00:37.
+[2026-06-01 23:01:41 +0000] Status=2, isTerminal=NO, Elapsed=00:49.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:30 seconds
+		Migration Elapsed:00:42 seconds
 
-[2026-06-01 01:42:09 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
+[2026-06-01 23:01:42 +0000] Status=2, isTerminal=NO, Elapsed=00:50.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:43 seconds
+
+[2026-06-01 23:01:43 +0000] Status=2, isTerminal=NO, Elapsed=00:51.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:44 seconds
+
+[2026-06-01 23:01:44 +0000] Status=2, isTerminal=NO, Elapsed=00:52.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
+		Migration Elapsed:00:45 seconds
+
+[2026-06-01 23:01:48 +0000] Status=2, isTerminal=NO, Elapsed=00:57.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:32 seconds
+		Migration Elapsed:00:47 seconds
 
-[2026-06-01 01:42:09 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
+[2026-06-01 23:01:50 +0000] Status=2, isTerminal=NO, Elapsed=00:59.
 	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:00:34 seconds
+		Reason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)
+		Migration Elapsed:00:50 seconds
 
-[2026-06-01 01:42:11 +0000] Status=2, isTerminal=NO, Elapsed=00:42.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:00:34 seconds
-
-[2026-06-01 01:42:12 +0000] Status=2, isTerminal=NO, Elapsed=00:43.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.PreferencesMigrator (PreferencesMigrator.migrator)
-		Migration Elapsed:00:36 seconds
-
-[2026-06-01 01:42:14 +0000] Status=4, isTerminal=NO, Elapsed=00:45.
+[2026-06-01 23:01:52 +0000] Status=4, isTerminal=NO, Elapsed=01:00.
 	Waiting on System App
 
-[2026-06-01 01:42:14 +0000] Status=4, isTerminal=NO, Elapsed=00:45.
+[2026-06-01 23:01:53 +0000] Status=4, isTerminal=NO, Elapsed=01:02.
 	Waiting on System App
 
-[2026-06-01 01:42:15 +0000] Status=4, isTerminal=NO, Elapsed=00:46.
+[2026-06-01 23:01:54 +0000] Status=4, isTerminal=NO, Elapsed=01:03.
 	Waiting on System App
 
-[2026-06-01 01:42:16 +0000] Status=4, isTerminal=NO, Elapsed=00:47.
+[2026-06-01 23:01:56 +0000] Status=4, isTerminal=NO, Elapsed=01:05.
 	Waiting on System App
 
-[2026-06-01 01:42:17 +0000] Status=4, isTerminal=NO, Elapsed=00:48.
+[2026-06-01 23:01:58 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
 	Waiting on System App
 
-[2026-06-01 01:42:18 +0000] Status=4, isTerminal=NO, Elapsed=00:49.
+[2026-06-01 23:02:00 +0000] Status=4, isTerminal=NO, Elapsed=01:08.
 	Waiting on System App
 
-[2026-06-01 01:42:19 +0000] Status=4, isTerminal=NO, Elapsed=00:50.
+[2026-06-01 23:02:01 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
 	Waiting on System App
 
-[2026-06-01 01:42:24 +0000] Status=4294967295, isTerminal=YES, Elapsed=00:55.
+[2026-06-01 23:02:03 +0000] Status=4, isTerminal=NO, Elapsed=01:12.
+	Waiting on System App
+
+[2026-06-01 23:02:13 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:22.
 	Finished
 
 [exit=0]
@@ -434,12 +453,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 0A003943-2118-40A7-9A59-46FB2DFCA8FB ref-app/Hello.app
+$ xcrun simctl install 3B932037-49EE-4A1A-9FB7-581D8569ABE9 ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 0A003943-2118-40A7-9A59-46FB2DFCA8FB build-ios-sim/ios/Emacs.app
+$ xcrun simctl install 3B932037-49EE-4A1A-9FB7-581D8569ABE9 build-ios-sim/ios/Emacs.app
 [exit=0]
 
 ===== STRUCTURED DIFF: reference vs ours (Info.plist keys) =====
@@ -450,62 +469,173 @@ $ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
 $ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
 {"CFBundleName":"Emacs","UILaunchStoryboardName":"LaunchScreen","UIFileSharingEnabled":true,"CFBundleDevelopmentRegion":"en","CFBundleVersion":"32.0.50","UIStatusBarStyle":"UIStatusBarStyleDefault","DTPlatformName":"iphonesimulator","CFBundlePackageType":"APPL","CFBundleShortVersionString":"32.0.50","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleDocumentTypes":[{"CFBundleTypeName":"Text Document","CFBundleTypeRole":"Editor","LSItemContentTypes":["public.text","public.plain-text","public.source-code"],"LSHandlerRank":"Alternate"}],"CFBundleInfoDictionaryVersion":"6.0","UIRequiredDeviceCapabilities":["arm64"],"CFBundleExecutable":"emacs","UISupportedInterfaceOrientations~ipad":["UIInterfaceOrientationPortrait","UIInterfaceOrientationPortraitUpsideDown","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"MinimumOSVersion":"15.0","CFBundleIdentifier":"org.gnu.emacs","LSSupportsOpeningDocumentsInPlace":true,"UIRequiresFullScreen":false,"LSRequiresIPhoneOS":true,"UISupportedInterfaceOrientations":["UIInterfaceOrientationPortrait","UIInterfaceOrientationLandscapeLeft","UIInterfaceOrientationLandscapeRight"],"CFBundleDisplayName":"Emacs"}[exit=0]
 
-===== BISECTION: which of {Resources/, Info.plist, binary} causes the fail =====
+===== LAUNCH OUR APP AND CAPTURE LOGS =====
 
-$ plutil -lint /tmp/minimal-emacs.plist
-/tmp/minimal-emacs.plist: OK
+$ xcrun simctl launch booted org.gnu.emacs
+org.gnu.emacs: 38372
 [exit=0]
+--- sleeping 20s for Emacs init to do something ---
 
---- bisect [T1_no_resources]: rm -rf "$tgt/Resources" ---
+$ xcrun simctl terminate booted org.gnu.emacs
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):
+Simulator device failed to terminate org.gnu.emacs.
+found nothing to terminate
+Underlying error (domain=NSPOSIXErrorDomain, code=3):
+	The request to terminate "org.gnu.emacs" failed. found nothing to terminate
+	found nothing to terminate
+[exit=3]
+data_container=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Data/Application/24863D11-84F4-4A88-A8D6-6A683DDA4A21
+--- Documents/ listing ---
+total 16
+drwxr-xr-x  4 runner  staff   128 Jun  1 23:04 .
+drwxr-xr-x@ 7 runner  staff   224 Jun  1 23:03 ..
+-rw-r--r--  1 runner  staff   917 Jun  1 23:04 emacs-launch.log
+-rw-r--r--  1 runner  staff  1314 Jun  1 23:04 emacs-stdout.log
 
-$ find /tmp/T1_no_resources.app -mindepth 1
-/tmp/T1_no_resources.app/_CodeSignature
-/tmp/T1_no_resources.app/_CodeSignature/CodeResources
-/tmp/T1_no_resources.app/LaunchScreen.storyboard
-/tmp/T1_no_resources.app/emacs
-/tmp/T1_no_resources.app/Info.plist
-[exit=0]
-/tmp/T1_no_resources.app: replacing existing signature
-Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
-TeamIdentifier=not set
-[bisect_install T1_no_resources exit=0]
+--- emacs-launch.log ---
+2026-06-01 23:04:03 +0000 main: entered, calling UIApplicationMain
+2026-06-01 23:04:04 +0000 AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:04:04 +0000 AppDelegate window visible (red placeholder)
+2026-06-01 23:04:04 +0000 emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:04:04 +0000 AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:04:04 +0000 emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Bundle/Application/966302EF-0E35-41CB-8FD1-F3CFF1DCA1B2/Emacs.app/emacs
+2026-06-01 23:04:04 +0000 ios_main: entered
+2026-06-01 23:04:04 +0000 ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Data/Application/24863D11-84F4-4A88-A8D6-6A683DDA4A21/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
 
---- bisect [T2_min_plist]: cp "$MINPLIST" "$tgt/Info.plist" ---
+--- emacs-stdout.log ---
+2026-06-01 23:04:04.181 emacs[38372:83546] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:04:04.268 emacs[38372:83546] emacs-launch: AppDelegate window visible (red placeholder)
+2026-06-01 23:04:04.269 emacs[38372:83546] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:04:04.269 emacs[38372:83564] emacs-launch: emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:04:04.269 emacs[38372:83564] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Bundle/Application/966302EF-0E35-41CB-8FD1-F3CFF1DCA1B2/Emacs.app/emacs
+2026-06-01 23:04:04.269 emacs[38372:83564] emacs-launch: ios_main: entered
+2026-06-01 23:04:04.277 emacs[38372:83564] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Data/Application/24863D11-84F4-4A88-A8D6-6A683DDA4A21/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
+Warning: arch-dependent data dir '/usr/local/libexec/emacs/32.0.50/aarch64-apple-darwin24.6.0/': No such file or directory
+Warning: Lisp directory '/usr/local/share/emacs/32.0.50/lisp': No such file or directory
+emacs: standard input is not a tty
 
-$ find /tmp/T2_min_plist.app -mindepth 1
-/tmp/T2_min_plist.app/_CodeSignature
-/tmp/T2_min_plist.app/_CodeSignature/CodeResources
-/tmp/T2_min_plist.app/LaunchScreen.storyboard
-/tmp/T2_min_plist.app/emacs
-/tmp/T2_min_plist.app/Info.plist
-[exit=0]
-/tmp/T2_min_plist.app: replacing existing signature
-Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
-TeamIdentifier=not set
-[bisect_install T2_min_plist exit=0]
-
---- bisect [T3_no_resources_and_min_plist]: rm -rf "$tgt/Resources"; cp "$MINPLIST" "$tgt/Info.plist" ---
-
-$ find /tmp/T3_no_resources_and_min_plist.app -mindepth 1
-/tmp/T3_no_resources_and_min_plist.app/_CodeSignature
-/tmp/T3_no_resources_and_min_plist.app/_CodeSignature/CodeResources
-/tmp/T3_no_resources_and_min_plist.app/LaunchScreen.storyboard
-/tmp/T3_no_resources_and_min_plist.app/emacs
-/tmp/T3_no_resources_and_min_plist.app/Info.plist
-[exit=0]
-/tmp/T3_no_resources_and_min_plist.app: replacing existing signature
-Identifier=org.gnu.emacs
-CodeDirectory v=20400 size=20806 flags=0x2(adhoc) hashes=644+3 location=embedded
-TeamIdentifier=not set
-[bisect_install T3_no_resources_and_min_plist exit=0]
-
---- bisect [T4_ref_with_our_id]: tiny hello binary + plist relabeled to emacs ---
-/tmp/T4_ref_with_our_id.app: replacing existing signature
-[bisect_install T4_ref_with_our_id exit=0]
-
-$ xcrun simctl delete 0A003943-2118-40A7-9A59-46FB2DFCA8FB
-[exit=0]
+--- unified log (process=emacs, last 2m) ---
+getpwuid_r did not find a match for uid 501
+Timestamp               Ty Process[PID:TID]
+2026-06-01 23:04:03.803 Df emacs[38372:1465a] emacs-launch: main: entered, calling UIApplicationMain
+2026-06-01 23:04:03.816 Df emacs[38372:1465a] [com.apple.xpc:connection] [0x105322000] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon
+2026-06-01 23:04:03.826 A  emacs[38372:14662] (CoreFoundation) Loading Preferences From User Session CFPrefsD
+2026-06-01 23:04:03.830 Df emacs[38372:1465a] (libMobileGestalt.dylib) No persisted cache on this platform.
+2026-06-01 23:04:03.834 Df emacs[38372:14664] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-06-01 23:04:03.836 Df emacs[38372:14664] [com.apple.xpc:connection] [0x105406300] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-01 23:04:03.854 Df emacs[38372:14660] [com.apple.UIKit:BackgroundTask] Creating new assertion because there is no existing background assertion.
+2026-06-01 23:04:03.854 Df emacs[38372:14660] [com.apple.UIKit:BackgroundTask] Creating new background assertion
+2026-06-01 23:04:03.854 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason added: 10; deactivation reasons: 0 -> 1024; animating application lifecycle event: 0
+2026-06-01 23:04:03.854 Df emacs[38372:14660] [com.apple.UIKit:BackgroundTask] Created new background assertion <BKSProcessAssertion: 0x60000210a300>
+2026-06-01 23:04:03.854 Df emacs[38372:14660] [com.apple.runningboard:connection] Initializing connection
+2026-06-01 23:04:03.855 Df emacs[38372:14660] [com.apple.runningboard:process] Removing all cached process handles
+2026-06-01 23:04:03.855 Df emacs[38372:1465a] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.open
+2026-06-01 23:04:03.855 Df emacs[38372:14660] [com.apple.runningboard:connection] Creating connection to com.apple.runningboard
+2026-06-01 23:04:03.856 Df emacs[38372:1465a] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.workspace-service
+2026-06-01 23:04:03.856 Df emacs[38372:14660] [com.apple.xpc:connection] [0x105306200] activating connection: mach=true listener=false peer=false name=com.apple.runningboard
+2026-06-01 23:04:03.857 Df emacs[38372:14662] [com.apple.runningboard:connection] Sending handshake request attempt #1 to server
+2026-06-01 23:04:03.857 Df emacs[38372:1465a] [com.apple.FrontBoard:Common] FBSWorkspace registering source: com.apple.frontboard.systemappservices
+2026-06-01 23:04:03.859 Df emacs[38372:14662] [com.apple.runningboard:connection] Handshake succeeded
+2026-06-01 23:04:03.859 Df emacs[38372:14662] [com.apple.runningboard:connection] Identity resolved as app<org.gnu.emacs((null))>
+2026-06-01 23:04:03.862 Df emacs[38372:14660] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x60000210a300>
+2026-06-01 23:04:03.862 Df emacs[38372:14660] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x600001700540>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 559 (elapsed = 0).
+2026-06-01 23:04:03.864 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UIApplicationSceneKeyboardSettings on FBSSceneSettings
+2026-06-01 23:04:03.866 A  emacs[38372:14664] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:04:03.866 Df emacs[38372:1465a] [com.apple.FrontBoard:Common] FBSWorkspace connected to endpoint : <BSServiceConnectionEndpoint: 0x600000210140; target: com.apple.frontboard.systemappservices; service: com.apple.frontboard.workspace-service>
+2026-06-01 23:04:03.867 Df emacs[38372:1465a] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x600003000630 com.apple.frontboard.systemappservices> attempting immediate handshake from activate
+2026-06-01 23:04:03.868 Df emacs[38372:1465a] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x600003000630 com.apple.frontboard.systemappservices> sent handshake
+2026-06-01 23:04:03.869 Df emacs[38372:1465a] [com.apple.runningboard:general] Added observer for process assertions expiration warning: <_RBSExpirationWarningClient: 0x6000002120a0>
+2026-06-01 23:04:03.879 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneOcclusionSettings> on FBSSceneSettings
+2026-06-01 23:04:03.882 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneInterfaceProtectionSettings> on FBSSceneSettings
+2026-06-01 23:04:03.882 Df emacs[38372:1465a] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x105408f30> for initial
+2026-06-01 23:04:03.882 Df emacs[38372:1465a] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x105408f30> for CADisplay KVO
+2026-06-01 23:04:03.883 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferencesHostSettingsExtension on FBSSceneSettings
+2026-06-01 23:04:03.884 Df emacs[38372:1465a] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 1, category name = (null)
+2026-06-01 23:04:03.884 Df emacs[38372:1465a] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 0, category name = (null)
+2026-06-01 23:04:03.885 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneSafeAreaSettingsExtension on FBSSceneSettings
+2026-06-01 23:04:03.890 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferenceClientSettingsExtension on FBSSceneClientSettings
+2026-06-01 23:04:03.894 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIHomeAffordanceHostSceneSettings> on FBSSceneSettings
+2026-06-01 23:04:03.898 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISystemShellSceneHostingEnvironmentSettings on FBSSceneSettings
+2026-06-01 23:04:03.901 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneRenderingEnvironmentSettings on FBSSceneSettings
+2026-06-01 23:04:03.901 Df emacs[38372:1465a] [com.apple.dt.xctest:Default] Registering for test daemon availability notify post.
+2026-06-01 23:04:03.901 Df emacs[38372:1465a] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:04:03.901 Df emacs[38372:1465a] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:04:03.902 Df emacs[38372:1465a] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:04:03.902 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneRenderingEnvironmentClientSettings> on FBSSceneClientSettings
+2026-06-01 23:04:03.903 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneTransitioningHostSettings> on FBSSceneSettings
+2026-06-01 23:04:03.903 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneFocusSystemSettings> on FBSSceneSettings
+2026-06-01 23:04:03.905 Df emacs[38372:1465a] [com.apple.UIKit:UpdateScheduler] Selected display: name=LCD (PurpleMain), id=1
+2026-06-01 23:04:03.905 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationSettingsExtension on FBSSceneSettings
+2026-06-01 23:04:03.905 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationClientSettingsExtension on FBSSceneClientSettings
+2026-06-01 23:04:03.906 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneWindowingControlClientSettings on FBSSceneClientSettings
+2026-06-01 23:04:03.908 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingContentSizePreferenceClientSettings> on FBSSceneClientSettings
+2026-06-01 23:04:03.908 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneHostingTraitCollectionPropagationSettings on FBSSceneSettings
+2026-06-01 23:04:03.910 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationSettings> on FBSSceneSettings
+2026-06-01 23:04:03.911 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationClientSettings> on FBSSceneClientSettings
+2026-06-01 23:04:03.911 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingEventDeferringSettings> on FBSSceneSettings
+2026-06-01 23:04:03.913 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneSettings
+2026-06-01 23:04:03.913 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneClientSettings
+2026-06-01 23:04:03.913 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingViewControllerPreferencePropagationClientSettings> on FBSSceneClientSettings
+2026-06-01 23:04:03.915 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneZoomTransitionSettings> on FBSSceneSettings
+2026-06-01 23:04:04.020 A  emacs[38372:14660] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:04:04.034 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneSettingsCore on FBSSceneSettings
+2026-06-01 23:04:04.037 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneClientSettingsCore on FBSSceneClientSettings
+2026-06-01 23:04:04.047 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneSettings setting counterpart class: UIApplicationSceneSettings
+2026-06-01 23:04:04.047 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneClientSettings setting counterpart class: UIApplicationSceneClientSettings
+2026-06-01 23:04:04.047 Df emacs[38372:14660] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneTransitionContextCore on FBSSceneTransitionContext
+2026-06-01 23:04:04.057 Df emacs[38372:1465a] [com.apple.UIKit:BackgroundTask] Will add backgroundTask with taskName: Persistent SceneSession Map Update, expirationHandler: <__NSGlobalBlock__: 0x1e61729e0>
+2026-06-01 23:04:04.057 Df emacs[38372:1465a] [com.apple.UIKit:BackgroundTask] Reusing background assertion <BKSProcessAssertion: 0x60000210a300>
+2026-06-01 23:04:04.057 Df emacs[38372:1465a] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x60000210a300>
+2026-06-01 23:04:04.057 Df emacs[38372:1465a] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x600001715300>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 559 (elapsed = 0).
+2026-06-01 23:04:04.058 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason added: 5; deactivation reasons: 1024 -> 1056; animating application lifecycle event: 1
+2026-06-01 23:04:04.059 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.059 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Should send trait collection or coordinate space update, interface style 1 -> 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.063 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.063 Df emacs[38372:1465a] [com.apple.UIKit:HomeAffordanceObservation] Initializing: <_UIHomeAffordanceSceneNotifier: 0x60000290c070>; with scene: <UIWindowScene: 0x1055104c0>
+2026-06-01 23:04:04.064 Df emacs[38372:1465a] [com.apple.BacklightServices:scenes] 0x600000c0e3a0 setDelegate:<0x600000c15e60 _UIBacklightEnvironment> hasDelegate:YES for environment:sceneID:org.gnu.emacs-default
+2026-06-01 23:04:04.065 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.066 Df emacs[38372:1465a] [com.apple.UIKit:EventDeferring] [0x600002901650] Initialized with scene: <UIWindowScene: 0x1055104c0>; behavior: <_UIEventDeferringBehavior_iOS: 0x60000021b020>; availableForProcess: 1, systemShellManagesKeyboardFocus: 1
+2026-06-01 23:04:04.067 Df emacs[38372:1465a] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-06-01 23:04:04.067 Df emacs[38372:1465a] [com.apple.xpc:connection] [0x1055112a0] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-01 23:04:04.069 Df emacs[38372:14662] [com.apple.BackBoard:EventDelivery] BKSHIDEventObserver - connection activation
+2026-06-01 23:04:04.069 Df emacs[38372:1465a] [com.apple.BackBoard:EventDelivery] policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x6000026069a0; process scope; status: none> was:none
+2026-06-01 23:04:04.069 Df emacs[38372:1465a] [com.apple.UIKit:KeyWindow] Setting default evaluation strategy for UIUserInterfaceIdiomPhone to LastOneWins
+2026-06-01 23:04:04.070 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.071 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.076 F  emacs[38372:1465a] [com.apple.runtime-issues:UIKit App Config] `UIScene` lifecycle will soon be required. Failure to adopt will result in an assert in the future.
+2026-06-01 23:04:04.076 A  emacs[38372:1465a] (libsystem_trace.dylib) Activity for state dumps
+2026-06-01 23:04:04.076 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.079 Df emacs[38372:1465a] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: FAE0EBEB-F825-433F-ADBD-3E01D45A7D14
+2026-06-01 23:04:04.079 Df emacs[38372:1465a] [com.apple.UIKit:Application] Ignoring already applied deactivation reason: 5; deactivation reasons: 1056
+2026-06-01 23:04:04.079 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason added: 11; deactivation reasons: 1056 -> 3104; animating application lifecycle event: 1
+2026-06-01 23:04:04.080 Df emacs[38372:1465a] [com.apple.KeyboardArbiter:Client] startConnection
+2026-06-01 23:04:04.083 Df emacs[38372:1465a] [com.apple.xpc:connection] [0x105511bf0] activating connection: mach=true listener=false peer=false name=com.apple.UIKit.KeyboardManagement.hosted
+2026-06-01 23:04:04.087 Df emacs[38372:1465a] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:04:04.111 Df emacs[38372:14663] [com.apple.xpc:connection] [0x10530f720] activating connection: mach=true listener=false peer=false name=com.apple.fontservicesd
+2026-06-01 23:04:04.134 Df emacs[38372:1465a] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIApplicationSceneDisplaySettings> on FBSSceneSettings
+2026-06-01 23:04:04.162 Df emacs[38372:1465a] [com.apple.UIKit:Orientation] <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14) Scene updated orientation preferences: none -> ( Pu Ll Lr )
+2026-06-01 23:04:04.163 Df emacs[38372:1465a] [com.apple.UIKit:KeyWindow] Key window API is scene-level: YES
+2026-06-01 23:04:04.164 Df emacs[38372:1465a] [com.apple.UIKit:KeyWindow] UIWindowScene: 0x1055104c0: Window became key in scene: UIWindow: 0x10530a770; contextId: 0x8DBF3836: reason: UIWindowScene: 0x1055104c0: Window requested to become key in scene: 0x10530a770
+2026-06-01 23:04:04.165 Df emacs[38372:1465a] [com.apple.UIKit:KeyWindow] Key window needs update: 1; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x1055104c0; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x10530a770; reason: UIWindowScene: 0x1055104c0: Window requested to become key in scene: 0x10530a770
+2026-06-01 23:04:04.165 Df emacs[38372:1465a] [com.apple.UIKit:KeyWindow] Window did become application key: UIWindow: 0x10530a770; contextId: 0x8DBF3836; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
+2026-06-01 23:04:04.165 Df emacs[38372:1465a] [com.apple.UIKit:EventDeferring] [0x600002901650] Begin local event deferring requested for token: 0x600002601ec0; environments: 1; reason: UIWindowScene: 0x1055104c0: Begin event deferring in keyboardFocus for window: 0x10530a770
+2026-06-01 23:04:04.170 Df emacs[38372:1466c] [com.apple.BackBoard:EventDelivery] BKSHIDEventDeliveryManager - connection activation
+2026-06-01 23:04:04.174 Df emacs[38372:1465a] emacs-launch: AppDelegate window visible (red placeholder)
+2026-06-01 23:04:04.174 Df emacs[38372:1465a] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:04:04.174 Df emacs[38372:1466c] emacs-launch: emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:04:04.174 Df emacs[38372:1466c] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Bundle/Application/966302EF-0E35-41CB-8FD1-F3CFF1DCA1B2/Emacs.app/emacs
+2026-06-01 23:04:04.175 Df emacs[38372:1466c] emacs-launch: ios_main: entered
+2026-06-01 23:04:04.181 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason removed: 10; deactivation reasons: 3104 -> 2080; animating application lifecycle event: 1
+2026-06-01 23:04:04.182 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason added: 12; deactivation reasons: 2080 -> 6176; animating application lifecycle event: 1
+2026-06-01 23:04:04.182 Df emacs[38372:1465a] [com.apple.UIKit:Application] Deactivation reason removed: 11; deactivation reasons: 6176 -> 4128; animating application lifecycle event: 1
+2026-06-01 23:04:04.182 Df emacs[38372:1466c] [com.apple.FileURL:default] kExcludedFromBackupXattrName set on path: /Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Data/Application/24863D11-84F4-4A88-A8D6-6A683DDA4A21/Library/Application Support/Emacs
+2026-06-01 23:04:04.182 Df emacs[38372:1466c] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/3B932037-49EE-4A1A-9FB7-581D8569ABE9/data/Containers/Data/Application/24863D11-84F4-4A88-A8D6-6A683DDA4A21/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
+2026-06-01 23:04:04.183 Df emacs[38372:1465a] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneIntelligenceSupportSettings> on FBSSceneSettings
+2026-06-01 23:04:04.191 Df emacs[38372:14663] [com.apple.UIIntelligenceSupport:xpc] establishing connection to agent
+2026-06-01 23:04:04.192 Df emacs[38372:14663] [com.apple.xpc:session] [0x600002104be0] Session created.
+2026-06-01 23:04:04.192 Df emacs[38372:14663] [com.apple.xpc:session] [0x600002104be0] Session created from connection [0x10540d660]
+2026-06-01 23:04:04.192 Df emacs[38372:1465a] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x1055104c0> (FAE0EBEB-F825-433F-ADBD-3E01D45A7D14)
+2026-06-01 23:04:04.193 Df emacs[38372:14663] [com.apple.xpc:connection] [0x10540d660] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
+2026-06-01 23:04:04.193 Df emacs[38372:14663] [com.apple.xpc:session] [0x600002104be0] Session activated
 
 ===== END =====
