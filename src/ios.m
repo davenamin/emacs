@@ -270,10 +270,33 @@ ios_dump_path (void)
    the renamed emacs.c main().  Wraps the call with launch-log lines
    so a hang inside ios_emacs_init can be localized.  */
 
+/* Point Emacs at the bundled lisp/ and etc/ trees.  Without this the
+   stock $prefix/share/emacs/$VERSION paths apply -- those resolve
+   into /usr/local on the runner and into the simulator's sandbox
+   root on a device, neither of which exists.  Setting EMACSLOADPATH
+   and EMACSDATA before ios_emacs_init is the same mechanism the
+   Android port uses; the load-path bootstrap in emacs.c reads these
+   envvars before computing the built-in fallback list.  */
+static void
+ios_setenv_bundle_paths (void)
+{
+  NSString *bundle = [NSBundle mainBundle].bundlePath;
+  if (!bundle)
+    return;
+  NSString *lisp = [bundle stringByAppendingPathComponent:@"lisp"];
+  NSString *etc  = [bundle stringByAppendingPathComponent:@"etc"];
+  setenv ("EMACSLOADPATH", lisp.UTF8String, 1);
+  setenv ("EMACSDATA",     etc.UTF8String,  1);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"ios_setenv_bundle_paths: EMACSLOADPATH=%@ EMACSDATA=%@",
+                   lisp, etc]);
+}
+
 int
 ios_main (int argc, char **argv)
 {
   ios_launch_log (@"ios_main: entered");
+  ios_setenv_bundle_paths ();
   char *dump_file = ios_dump_path ();
   ios_launch_log ([NSString stringWithFormat:
                    @"ios_main: dump_file=%s, calling ios_emacs_init",

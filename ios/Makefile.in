@@ -72,9 +72,33 @@ $(ios_appdir): $(srcdir)/$(ios_appsrc) Emacs.base/Info.plist
 	cp Emacs.base/Info.plist $(ios_appdir)/Info.plist
 	touch $(ios_appdir)
 
+## Step 1b: copy the Lisp tree and data files into the bundle.  iOS
+## apps run from a sandboxed location with no /usr/local, so the
+## install-prefix-relative default paths Emacs hard-codes are useless.
+## ios.m sets EMACSLOADPATH and EMACSDATA from the bundle path at
+## launch so loadup.el and etc/ resolve here.
+##
+## Use rsync (preinstalled on macOS runners) to copy the trees;
+## tar-pipe would also work but rsync gives a clean exclude rule for
+## the Makefile / .gitignore noise.
+$(ios_appdir)/lisp/loadup.el: $(ios_appdir)
+	rsync -a --delete \
+	  --exclude='*.elc' --exclude='.git*' --exclude='Makefile*' \
+	  $(abs_top_srcdir)/lisp/ $(ios_appdir)/lisp/
+	touch $@
+
+$(ios_appdir)/etc/charsets: $(ios_appdir)
+	rsync -a --delete \
+	  --exclude='.git*' --exclude='Makefile*' --exclude='emacs.1' \
+	  $(abs_top_srcdir)/etc/ $(ios_appdir)/etc/
+	touch $@ || true
+
 ## Step 2: drop the cross-compiled emacs binary into the bundle and
-## codesign.
-$(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary)
+## codesign.  Depend on the Lisp + data copy so an `all' build
+## produces a runnable bundle in one shot.
+$(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
+                     $(ios_appdir)/lisp/loadup.el \
+                     $(ios_appdir)/etc/charsets
 	cp -f $(ios_emacs_binary) $@
 	@if [ -n "$(CODESIGN_IDENTITY)" ]; then \
 	  codesign --force --sign $(CODESIGN_IDENTITY) \
