@@ -92,6 +92,7 @@ meetily: Meeting transcription and analysis application
 mirai: Inference engine for AI models
 openpencil: Open-source design editor compatible with Figma
 ping-island: Menu bar status for coding agent sessions
+rcmd: App switcher driven by the Right Command key
 smoothcapture: Screen recorder and video editor
 speechify-ai-assistant: AI-powered reading and voice assistant
 vmlx: Run local AI models on Apple Silicon
@@ -120,13 +121,13 @@ Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m and [32mtexinfo[39m[0m
 ✔︎ Bottle Manifest automake (1.18.1)
 ✔︎ Bottle Manifest autoconf (2.73)
-✔︎ Bottle Manifest texinfo (7.3)
 ✔︎ Bottle Manifest libtool (2.5.4)
+✔︎ Bottle Manifest texinfo (7.3)
 ✔︎ Bottle Manifest m4 (1.4.21)
-✔︎ Bottle autoconf (2.73)
-✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle m4 (1.4.21)
+✔︎ Bottle autoconf (2.73)
 ✔︎ Bottle libtool (2.5.4)
+✔︎ Bottle automake (1.18.1)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake: [32mm4[39m and [32mautoconf[39m[0m
 [32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
@@ -2957,13 +2958,13 @@ build-ios-sim/ios/Emacs.app/Info.plist
 
 $ ls -la build-ios-sim/ios/Emacs.app
 total 5208
-drwxr-xr-x    7 runner  staff      224 Jun  1 23:23 .
-drwxr-xr-x    5 runner  staff      160 Jun  1 23:23 ..
--rwxr-xr-x    1 runner  staff  2656616 Jun  1 23:23 emacs
-drwxr-xr-x   80 runner  staff     2560 Jun  1 23:20 etc
--rw-r--r--    1 runner  staff     2252 Jun  1 23:23 Info.plist
--rw-r--r--    1 runner  staff     1879 Jun  1 23:20 LaunchScreen.storyboard
-drwxr-xr-x  333 runner  staff    10656 Jun  1 23:20 lisp
+drwxr-xr-x    7 runner  staff      224 Jun  1 23:34 .
+drwxr-xr-x    5 runner  staff      160 Jun  1 23:34 ..
+-rwxr-xr-x    1 runner  staff  2656616 Jun  1 23:34 emacs
+drwxr-xr-x   80 runner  staff     2560 Jun  1 23:29 etc
+-rw-r--r--    1 runner  staff     2252 Jun  1 23:34 Info.plist
+-rw-r--r--    1 runner  staff     1879 Jun  1 23:29 LaunchScreen.storyboard
+drwxr-xr-x  333 runner  staff    10656 Jun  1 23:29 lisp
 [exit=0]
 
 ===== (B) OUR BUNDLE: Info.plist (root) =====
@@ -3038,101 +3039,68 @@ $ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | aw
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
-device=6C165256-7708-40E2-876B-9E8DE5A80FB3
+device=4F21E32C-4611-4BBD-86E8-24FB2D5D72F1
 
-$ xcrun simctl boot 6C165256-7708-40E2-876B-9E8DE5A80FB3
+$ xcrun simctl boot 4F21E32C-4611-4BBD-86E8-24FB2D5D72F1
 [exit=0]
 
-$ xcrun simctl bootstatus 6C165256-7708-40E2-876B-9E8DE5A80FB3 -b
-Monitoring boot status for ci-diag-phone (6C165256-7708-40E2-876B-9E8DE5A80FB3).
-[2026-06-01 23:24:03 +0000] Status=2, isTerminal=NO, Elapsed=00:31.
+$ xcrun simctl bootstatus 4F21E32C-4611-4BBD-86E8-24FB2D5D72F1 -b
+Monitoring boot status for ci-diag-phone (4F21E32C-4611-4BBD-86E8-24FB2D5D72F1).
+[2026-06-01 23:35:29 +0000] Status=2, isTerminal=NO, Elapsed=00:58.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:27 seconds
+		Migration Elapsed:00:51 seconds
 
-[2026-06-01 23:24:04 +0000] Status=2, isTerminal=NO, Elapsed=00:32.
+[2026-06-01 23:35:30 +0000] Status=2, isTerminal=NO, Elapsed=00:59.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:28 seconds
+		Migration Elapsed:00:52 seconds
 
-[2026-06-01 23:24:05 +0000] Status=2, isTerminal=NO, Elapsed=00:33.
+[2026-06-01 23:35:31 +0000] Status=2, isTerminal=NO, Elapsed=01:00.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:29 seconds
+		Migration Elapsed:00:53 seconds
 
-[2026-06-01 23:24:06 +0000] Status=2, isTerminal=NO, Elapsed=00:34.
+[2026-06-01 23:35:32 +0000] Status=2, isTerminal=NO, Elapsed=01:01.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:30 seconds
+		Migration Elapsed:00:54 seconds
 
-[2026-06-01 23:24:07 +0000] Status=2, isTerminal=NO, Elapsed=00:35.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:31 seconds
-
-[2026-06-01 23:24:08 +0000] Status=2, isTerminal=NO, Elapsed=00:36.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:32 seconds
-
-[2026-06-01 23:24:09 +0000] Status=2, isTerminal=NO, Elapsed=00:37.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:33 seconds
-
-[2026-06-01 23:24:10 +0000] Status=2, isTerminal=NO, Elapsed=00:38.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:34 seconds
-
-[2026-06-01 23:24:11 +0000] Status=2, isTerminal=NO, Elapsed=00:39.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:35 seconds
-
-[2026-06-01 23:24:15 +0000] Status=2, isTerminal=NO, Elapsed=00:43.
+[2026-06-01 23:35:39 +0000] Status=2, isTerminal=NO, Elapsed=01:07.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:36 seconds
+		Migration Elapsed:00:55 seconds
 
-[2026-06-01 23:24:16 +0000] Status=2, isTerminal=NO, Elapsed=00:44.
+[2026-06-01 23:35:42 +0000] Status=2, isTerminal=NO, Elapsed=01:10.
 	Waiting on Data Migration
-		Reason:Running plugin com.apple.WebBookmarks.migrator (WebBookmarks.migrator)
-		Migration Elapsed:00:39 seconds
+		Reason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)
+		Migration Elapsed:01:00 seconds
 
-[2026-06-01 23:24:17 +0000] Status=2, isTerminal=NO, Elapsed=00:45.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.locationd.migrator (CoreLocationMigrator.migrator)
-		Migration Elapsed:00:40 seconds
-
-[2026-06-01 23:24:18 +0000] Status=4, isTerminal=NO, Elapsed=00:47.
+[2026-06-01 23:35:43 +0000] Status=4, isTerminal=NO, Elapsed=01:12.
 	Waiting on System App
 
-[2026-06-01 23:24:19 +0000] Status=4, isTerminal=NO, Elapsed=00:47.
+[2026-06-01 23:35:46 +0000] Status=4, isTerminal=NO, Elapsed=01:15.
 	Waiting on System App
 
-[2026-06-01 23:24:20 +0000] Status=4, isTerminal=NO, Elapsed=00:49.
+[2026-06-01 23:35:47 +0000] Status=4, isTerminal=NO, Elapsed=01:16.
 	Waiting on System App
 
-[2026-06-01 23:24:22 +0000] Status=4, isTerminal=NO, Elapsed=00:50.
+[2026-06-01 23:35:47 +0000] Status=4, isTerminal=NO, Elapsed=01:16.
 	Waiting on System App
 
-[2026-06-01 23:24:22 +0000] Status=4, isTerminal=NO, Elapsed=00:50.
+[2026-06-01 23:35:49 +0000] Status=4, isTerminal=NO, Elapsed=01:17.
 	Waiting on System App
 
-[2026-06-01 23:24:23 +0000] Status=4, isTerminal=NO, Elapsed=00:51.
+[2026-06-01 23:35:49 +0000] Status=4, isTerminal=NO, Elapsed=01:18.
 	Waiting on System App
 
-[2026-06-01 23:24:23 +0000] Status=4, isTerminal=NO, Elapsed=00:51.
+[2026-06-01 23:35:50 +0000] Status=4, isTerminal=NO, Elapsed=01:18.
 	Waiting on System App
 
-[2026-06-01 23:24:24 +0000] Status=4, isTerminal=NO, Elapsed=00:52.
+[2026-06-01 23:35:51 +0000] Status=4, isTerminal=NO, Elapsed=01:20.
 	Waiting on System App
 
-[2026-06-01 23:24:25 +0000] Status=4, isTerminal=NO, Elapsed=00:54.
-	Waiting on System App
-
-[2026-06-01 23:24:31 +0000] Status=4294967295, isTerminal=YES, Elapsed=00:59.
+[2026-06-01 23:35:59 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:28.
 	Finished
 
 [exit=0]
@@ -3165,12 +3133,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 6C165256-7708-40E2-876B-9E8DE5A80FB3 ref-app/Hello.app
+$ xcrun simctl install 4F21E32C-4611-4BBD-86E8-24FB2D5D72F1 ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 6C165256-7708-40E2-876B-9E8DE5A80FB3 build-ios-sim/ios/Emacs.app
+$ xcrun simctl install 4F21E32C-4611-4BBD-86E8-24FB2D5D72F1 build-ios-sim/ios/Emacs.app
 [exit=0]
 
 ===== STRUCTURED DIFF: reference vs ours (Info.plist keys) =====
@@ -3184,7 +3152,7 @@ $ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
 ===== LAUNCH OUR APP AND CAPTURE LOGS =====
 
 $ xcrun simctl launch booted org.gnu.emacs
-org.gnu.emacs: 48012
+org.gnu.emacs: 37496
 [exit=0]
 --- sleeping 20s for Emacs init to do something ---
 
@@ -3196,39 +3164,39 @@ Underlying error (domain=NSPOSIXErrorDomain, code=3):
 	The request to terminate "org.gnu.emacs" failed. found nothing to terminate
 	found nothing to terminate
 [exit=3]
-data_container=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Data/Application/3F4D153C-FE9B-49B0-B893-6EE14A71506A
+data_container=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Data/Application/9B5A7F32-B5A0-45E4-8E61-82F1EA8F8E04
 --- Documents/ listing ---
 total 88
-drwxr-xr-x  4 runner  staff    128 Jun  1 23:26 .
-drwxr-xr-x@ 7 runner  staff    224 Jun  1 23:26 ..
--rw-r--r--  1 runner  staff   1412 Jun  1 23:26 emacs-launch.log
--rw-r--r--  1 runner  staff  39719 Jun  1 23:26 emacs-stdout.log
+drwxr-xr-x  4 runner  staff    128 Jun  1 23:38 .
+drwxr-xr-x@ 7 runner  staff    224 Jun  1 23:38 ..
+-rw-r--r--  1 runner  staff   1412 Jun  1 23:38 emacs-launch.log
+-rw-r--r--  1 runner  staff  39965 Jun  1 23:38 emacs-stdout.log
 
 --- emacs-launch.log ---
-2026-06-01 23:26:05 +0000 main: entered, calling UIApplicationMain
-2026-06-01 23:26:06 +0000 AppDelegate didFinishLaunchingWithOptions: enter
-2026-06-01 23:26:06 +0000 AppDelegate window visible (red placeholder)
-2026-06-01 23:26:06 +0000 AppDelegate didFinishLaunchingWithOptions: returning YES
-2026-06-01 23:26:06 +0000 emacs-bg: dispatched, about to call ios_main
-2026-06-01 23:26:06 +0000 emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/emacs
-2026-06-01 23:26:06 +0000 ios_main: entered
-2026-06-01 23:26:06 +0000 ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/etc
-2026-06-01 23:26:06 +0000 ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Data/Application/3F4D153C-FE9B-49B0-B893-6EE14A71506A/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
-2026-06-01 23:26:06 +0000 AppDelegate applicationDidBecomeActive
+2026-06-01 23:38:32 +0000 main: entered, calling UIApplicationMain
+2026-06-01 23:38:33 +0000 AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:38:33 +0000 AppDelegate window visible (red placeholder)
+2026-06-01 23:38:33 +0000 AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:38:33 +0000 emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:38:33 +0000 emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/emacs
+2026-06-01 23:38:33 +0000 ios_main: entered
+2026-06-01 23:38:33 +0000 ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/etc
+2026-06-01 23:38:33 +0000 ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Data/Application/9B5A7F32-B5A0-45E4-8E61-82F1EA8F8E04/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
+2026-06-01 23:38:33 +0000 AppDelegate applicationDidBecomeActive
 
 --- emacs-stdout.log ---
-2026-06-01 23:26:06.003 emacs[48012:113461] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
-2026-06-01 23:26:06.082 emacs[48012:113461] emacs-launch: AppDelegate window visible (red placeholder)
-2026-06-01 23:26:06.083 emacs[48012:113461] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
-2026-06-01 23:26:06.087 emacs[48012:113479] emacs-launch: emacs-bg: dispatched, about to call ios_main
-2026-06-01 23:26:06.098 emacs[48012:113479] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/emacs
-2026-06-01 23:26:06.103 emacs[48012:113479] emacs-launch: ios_main: entered
-2026-06-01 23:26:06.106 emacs[48012:113479] emacs-launch: ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/etc
-2026-06-01 23:26:06.113 emacs[48012:113479] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Data/Application/3F4D153C-FE9B-49B0-B893-6EE14A71506A/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
+2026-06-01 23:38:33.160 emacs[37496:83364] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:38:33.260 emacs[37496:83364] emacs-launch: AppDelegate window visible (red placeholder)
+2026-06-01 23:38:33.264 emacs[37496:83364] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:38:33.264 emacs[37496:83374] emacs-launch: emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:38:33.265 emacs[37496:83374] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/emacs
+2026-06-01 23:38:33.266 emacs[37496:83374] emacs-launch: ios_main: entered
+2026-06-01 23:38:33.270 emacs[37496:83374] emacs-launch: ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/etc
+2026-06-01 23:38:33.272 emacs[37496:83374] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Data/Application/9B5A7F32-B5A0-45E4-8E61-82F1EA8F8E04/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
 Warning: arch-dependent data dir '/usr/local/libexec/emacs/32.0.50/aarch64-apple-darwin24.6.0/': No such file or directory
 Loading loadup.el (source)...
 Dump mode: nil
-Using load-path (/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/progmodes /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/vc)
+Using load-path (/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/progmodes /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/vc)
 Loading emacs-lisp/debug-early (source)...
 Loading emacs-lisp/debug-early (source)...done
 Loading emacs-lisp/byte-run (source)...
@@ -3259,335 +3227,341 @@ Loading bindings (source)...
 Loading bindings (source)...done
 Loading window (source)...
 Loading window (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/files.el (source)...
-2026-06-01 23:26:06.456 emacs[48012:113461] emacs-launch: AppDelegate applicationDidBecomeActive
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/files.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/pcase.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/pcase.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/cus-face.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/cus-face.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/faces.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/faces.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/ldefs-boot.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/ldefs-boot.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/button.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/button.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/cl-preloaded.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/cl-preloaded.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/oclosure.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/oclosure.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/obarray.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/obarray.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/abbrev.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/abbrev.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/help.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/help.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/jka-cmpr-hook.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/jka-cmpr-hook.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/epa-hook.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/epa-hook.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/mule-cmds.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/mule-cmds.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/case-table.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/case-table.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/characters.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/characters.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/composite.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/composite.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/chinese.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/chinese.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/cyrillic.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/cyrillic.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/indian.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/indian.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/sinhala.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/sinhala.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/english.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/english.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/ethiopic.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/ethiopic.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/european.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/european.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/czech.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/czech.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/slovak.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/slovak.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/romanian.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/romanian.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/greek.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/greek.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/hebrew.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/hebrew.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/cp51932.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/cp51932.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/eucjp-ms.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/international/eucjp-ms.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/japanese.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/japanese.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/korean.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/korean.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/lao.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/lao.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/tai-viet.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/tai-viet.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/thai.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/thai.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/tibetan.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/tibetan.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/vietnamese.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/vietnamese.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/misc-lang.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/misc-lang.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/utf-8-lang.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/utf-8-lang.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/georgian.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/georgian.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/khmer.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/khmer.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/burmese.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/burmese.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/cham.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/cham.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/philippine.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/philippine.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/indonesian.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/language/indonesian.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/indent.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/indent.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/cl-generic.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/cl-generic.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/simple.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/simple.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/seq.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/seq.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/nadvice.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/nadvice.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/minibuffer.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/minibuffer.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/frame.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/frame.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/startup.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/startup.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/term/tty-colors.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/term/tty-colors.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/font-core.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/font-core.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/syntax.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/syntax.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/font-lock.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/font-lock.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/jit-lock.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/jit-lock.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/mouse.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/mouse.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/select.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/select.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/timer.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/timer.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/easymenu.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/easymenu.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/isearch.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/isearch.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/rfn-eshadow.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/rfn-eshadow.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/menu-bar.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/menu-bar.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/tab-bar.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/tab-bar.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/lisp.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/lisp.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/page.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/page.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/register.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/register.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/paragraphs.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/paragraphs.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/progmodes/prog-mode.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/progmodes/prog-mode.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/lisp-mode.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/lisp-mode.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/text-mode.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/text-mode.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/fill.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/textmodes/fill.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/newcomment.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/newcomment.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/replace.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/replace.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/tabulated-list.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/emacs-lisp/tabulated-list.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/buff-menu.el (source)...
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/buff-menu.el (source)...done
-Loading /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp/progmodes/elisp-mode.el (source)...
-Eager macro-expansion failure: (wrong-type-argument stringp nil)
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/files.el (source)...
+2026-06-01 23:38:33.627 emacs[37496:83364] emacs-launch: AppDelegate applicationDidBecomeActive
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/files.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/pcase.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/pcase.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/macroexp.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/cus-face.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/cus-face.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/faces.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/faces.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/ldefs-boot.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/ldefs-boot.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/button.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/button.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/cl-preloaded.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/cl-preloaded.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/oclosure.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/oclosure.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/obarray.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/obarray.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/abbrev.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/abbrev.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/help.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/help.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/jka-cmpr-hook.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/jka-cmpr-hook.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/epa-hook.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/epa-hook.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/mule-cmds.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/mule-cmds.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/case-table.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/case-table.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/characters.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/characters.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/composite.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/composite.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/chinese.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/chinese.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/cyrillic.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/cyrillic.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/indian.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/indian.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/sinhala.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/sinhala.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/english.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/english.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/ethiopic.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/ethiopic.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/european.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/european.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/czech.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/czech.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/slovak.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/slovak.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/romanian.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/romanian.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/greek.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/greek.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/hebrew.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/hebrew.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/cp51932.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/cp51932.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/eucjp-ms.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/international/eucjp-ms.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/japanese.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/japanese.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/korean.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/korean.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/lao.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/lao.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/tai-viet.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/tai-viet.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/thai.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/thai.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/tibetan.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/tibetan.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/vietnamese.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/vietnamese.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/misc-lang.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/misc-lang.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/utf-8-lang.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/utf-8-lang.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/georgian.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/georgian.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/khmer.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/khmer.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/burmese.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/burmese.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/cham.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/cham.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/philippine.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/philippine.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/indonesian.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/language/indonesian.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/indent.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/indent.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/cl-generic.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/cl-generic.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/simple.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/simple.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/seq.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/seq.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/nadvice.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/nadvice.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/minibuffer.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/minibuffer.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/frame.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/frame.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/startup.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/startup.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/term/tty-colors.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/term/tty-colors.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/font-core.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/font-core.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/syntax.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/syntax.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/font-lock.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/font-lock.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/jit-lock.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/jit-lock.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/mouse.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/mouse.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/select.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/select.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/timer.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/timer.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/easymenu.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/easymenu.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/isearch.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/isearch.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/rfn-eshadow.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/rfn-eshadow.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/menu-bar.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/menu-bar.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/tab-bar.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/tab-bar.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/lisp.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/lisp.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/page.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/page.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/register.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/register.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/paragraphs.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/paragraphs.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/progmodes/prog-mode.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/progmodes/prog-mode.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/lisp-mode.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/lisp-mode.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/text-mode.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/text-mode.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/fill.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/textmodes/fill.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/newcomment.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/newcomment.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/replace.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/replace.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/tabulated-list.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/emacs-lisp/tabulated-list.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/buff-menu.el (source)...
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/buff-menu.el (source)...done
+Loading /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/progmodes/elisp-mode.el (source)...
+Eager macro-expansion failure in /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp/progmodes/elisp-mode.el, form head=(defalias 'elisp-flymake-byte-compile): (wrong-type-argument stringp nil)
 
 --- unified log (process=emacs, last 2m) ---
 getpwuid_r did not find a match for uid 501
 Timestamp               Ty Process[PID:TID]
-2026-06-01 23:26:05.735 Df emacs[48012:1bb35] emacs-launch: main: entered, calling UIApplicationMain
-2026-06-01 23:26:05.738 Df emacs[48012:1bb35] [com.apple.xpc:connection] [0x1034061d0] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon
-2026-06-01 23:26:05.742 A  emacs[48012:1bb42] (CoreFoundation) Loading Preferences From User Session CFPrefsD
-2026-06-01 23:26:05.749 Df emacs[48012:1bb35] (libMobileGestalt.dylib) No persisted cache on this platform.
-2026-06-01 23:26:05.754 Df emacs[48012:1bb43] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
-2026-06-01 23:26:05.755 Df emacs[48012:1bb43] [com.apple.xpc:connection] [0x103606a30] activating connection: mach=false listener=false peer=false name=(anonymous)
-2026-06-01 23:26:05.763 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason added: 10; deactivation reasons: 0 -> 1024; animating application lifecycle event: 0
-2026-06-01 23:26:05.763 Df emacs[48012:1bb35] [com.apple.runningboard:connection] Initializing connection
-2026-06-01 23:26:05.764 Df emacs[48012:1bb35] [com.apple.runningboard:process] Removing all cached process handles
-2026-06-01 23:26:05.764 Df emacs[48012:1bb35] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.open
-2026-06-01 23:26:05.765 Df emacs[48012:1bb35] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.workspace-service
-2026-06-01 23:26:05.765 Df emacs[48012:1bb35] [com.apple.FrontBoard:Common] FBSWorkspace registering source: com.apple.frontboard.systemappservices
-2026-06-01 23:26:05.766 Df emacs[48012:1bb35] [com.apple.FrontBoard:Common] FBSWorkspace connected to endpoint : <BSServiceConnectionEndpoint: 0x600000211600; target: com.apple.frontboard.systemappservices; service: com.apple.frontboard.workspace-service>
-2026-06-01 23:26:05.766 Df emacs[48012:1bb35] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x6000030083f0 com.apple.frontboard.systemappservices> attempting immediate handshake from activate
-2026-06-01 23:26:05.767 Df emacs[48012:1bb35] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x6000030083f0 com.apple.frontboard.systemappservices> sent handshake
-2026-06-01 23:26:05.767 Df emacs[48012:1bb40] [com.apple.UIKit:BackgroundTask] Creating new assertion because there is no existing background assertion.
-2026-06-01 23:26:05.767 Df emacs[48012:1bb40] [com.apple.UIKit:BackgroundTask] Creating new background assertion
-2026-06-01 23:26:05.767 Df emacs[48012:1bb40] [com.apple.UIKit:BackgroundTask] Created new background assertion <BKSProcessAssertion: 0x600002100e10>
-2026-06-01 23:26:05.768 Df emacs[48012:1bb40] [com.apple.runningboard:connection] Creating connection to com.apple.runningboard
-2026-06-01 23:26:05.768 Df emacs[48012:1bb40] [com.apple.xpc:connection] [0x1036074b0] activating connection: mach=true listener=false peer=false name=com.apple.runningboard
-2026-06-01 23:26:05.768 Df emacs[48012:1bb35] [com.apple.runningboard:general] Added observer for process assertions expiration warning: <_RBSExpirationWarningClient: 0x6000002068e0>
-2026-06-01 23:26:05.768 Df emacs[48012:1bb42] [com.apple.runningboard:connection] Sending handshake request attempt #1 to server
-2026-06-01 23:26:05.769 Df emacs[48012:1bb42] [com.apple.runningboard:connection] Handshake succeeded
-2026-06-01 23:26:05.769 Df emacs[48012:1bb42] [com.apple.runningboard:connection] Identity resolved as app<org.gnu.emacs((null))>
-2026-06-01 23:26:05.770 Df emacs[48012:1bb40] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x600002100e10>
-2026-06-01 23:26:05.770 Df emacs[48012:1bb40] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x60000170c180>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 1082 (elapsed = 0).
-2026-06-01 23:26:05.770 A  emacs[48012:1bb47] (RunningBoardServices) didChangeInheritances
-2026-06-01 23:26:05.770 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UIApplicationSceneKeyboardSettings on FBSSceneSettings
-2026-06-01 23:26:05.774 Df emacs[48012:1bb35] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x1036064a0> for initial
-2026-06-01 23:26:05.774 Df emacs[48012:1bb35] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x1036064a0> for CADisplay KVO
-2026-06-01 23:26:05.775 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneOcclusionSettings> on FBSSceneSettings
-2026-06-01 23:26:05.776 Df emacs[48012:1bb35] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 1, category name = (null)
-2026-06-01 23:26:05.776 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneInterfaceProtectionSettings> on FBSSceneSettings
-2026-06-01 23:26:05.776 Df emacs[48012:1bb35] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 0, category name = (null)
-2026-06-01 23:26:05.777 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferencesHostSettingsExtension on FBSSceneSettings
-2026-06-01 23:26:05.779 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneSafeAreaSettingsExtension on FBSSceneSettings
-2026-06-01 23:26:05.781 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferenceClientSettingsExtension on FBSSceneClientSettings
-2026-06-01 23:26:05.782 Df emacs[48012:1bb35] [com.apple.dt.xctest:Default] Registering for test daemon availability notify post.
-2026-06-01 23:26:05.782 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIHomeAffordanceHostSceneSettings> on FBSSceneSettings
-2026-06-01 23:26:05.782 Df emacs[48012:1bb35] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
-2026-06-01 23:26:05.782 Df emacs[48012:1bb35] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
-2026-06-01 23:26:05.782 Df emacs[48012:1bb35] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
-2026-06-01 23:26:05.783 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISystemShellSceneHostingEnvironmentSettings on FBSSceneSettings
-2026-06-01 23:26:05.783 Df emacs[48012:1bb35] [com.apple.UIKit:UpdateScheduler] Selected display: name=LCD (PurpleMain), id=1
-2026-06-01 23:26:05.783 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneRenderingEnvironmentSettings on FBSSceneSettings
-2026-06-01 23:26:05.784 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneRenderingEnvironmentClientSettings> on FBSSceneClientSettings
-2026-06-01 23:26:05.785 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneTransitioningHostSettings> on FBSSceneSettings
-2026-06-01 23:26:05.785 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneFocusSystemSettings> on FBSSceneSettings
-2026-06-01 23:26:05.786 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationSettingsExtension on FBSSceneSettings
-2026-06-01 23:26:05.786 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationClientSettingsExtension on FBSSceneClientSettings
-2026-06-01 23:26:05.786 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneWindowingControlClientSettings on FBSSceneClientSettings
-2026-06-01 23:26:05.788 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingContentSizePreferenceClientSettings> on FBSSceneClientSettings
-2026-06-01 23:26:05.788 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneHostingTraitCollectionPropagationSettings on FBSSceneSettings
-2026-06-01 23:26:05.790 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationSettings> on FBSSceneSettings
-2026-06-01 23:26:05.791 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationClientSettings> on FBSSceneClientSettings
-2026-06-01 23:26:05.791 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingEventDeferringSettings> on FBSSceneSettings
-2026-06-01 23:26:05.792 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneSettings
-2026-06-01 23:26:05.792 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneClientSettings
-2026-06-01 23:26:05.792 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingViewControllerPreferencePropagationClientSettings> on FBSSceneClientSettings
-2026-06-01 23:26:05.793 Df emacs[48012:1bb40] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneZoomTransitionSettings> on FBSSceneSettings
-2026-06-01 23:26:05.883 A  emacs[48012:1bb40] (RunningBoardServices) didChangeInheritances
-2026-06-01 23:26:05.887 Df emacs[48012:1bb42] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneSettingsCore on FBSSceneSettings
-2026-06-01 23:26:05.889 Df emacs[48012:1bb42] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneClientSettingsCore on FBSSceneClientSettings
-2026-06-01 23:26:05.893 Df emacs[48012:1bb42] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneSettings setting counterpart class: UIApplicationSceneSettings
-2026-06-01 23:26:05.894 Df emacs[48012:1bb42] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneClientSettings setting counterpart class: UIApplicationSceneClientSettings
-2026-06-01 23:26:05.894 Df emacs[48012:1bb42] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneTransitionContextCore on FBSSceneTransitionContext
-2026-06-01 23:26:05.900 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Will add backgroundTask with taskName: Persistent SceneSession Map Update, expirationHandler: <__NSGlobalBlock__: 0x1e61729e0>
-2026-06-01 23:26:05.900 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Reusing background assertion <BKSProcessAssertion: 0x600002100e10>
-2026-06-01 23:26:05.900 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x600002100e10>
-2026-06-01 23:26:05.900 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x60000170eb80>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 1082 (elapsed = 0).
-2026-06-01 23:26:05.901 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason added: 5; deactivation reasons: 1024 -> 1056; animating application lifecycle event: 1
-2026-06-01 23:26:05.901 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.902 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Should send trait collection or coordinate space update, interface style 1 -> 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.904 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.904 Df emacs[48012:1bb35] [com.apple.UIKit:HomeAffordanceObservation] Initializing: <_UIHomeAffordanceSceneNotifier: 0x600002910700>; with scene: <UIWindowScene: 0x10350a4d0>
-2026-06-01 23:26:05.905 Df emacs[48012:1bb35] [com.apple.BacklightServices:scenes] 0x600000c140c0 setDelegate:<0x600000c140f0 _UIBacklightEnvironment> hasDelegate:YES for environment:sceneID:org.gnu.emacs-default
-2026-06-01 23:26:05.906 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.907 Df emacs[48012:1bb35] [com.apple.UIKit:EventDeferring] [0x6000029101c0] Initialized with scene: <UIWindowScene: 0x10350a4d0>; behavior: <_UIEventDeferringBehavior_iOS: 0x600000217040>; availableForProcess: 1, systemShellManagesKeyboardFocus: 1
-2026-06-01 23:26:05.907 Df emacs[48012:1bb35] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
-2026-06-01 23:26:05.907 Df emacs[48012:1bb35] [com.apple.xpc:connection] [0x1036088e0] activating connection: mach=false listener=false peer=false name=(anonymous)
-2026-06-01 23:26:05.909 Df emacs[48012:1bb35] [com.apple.BackBoard:EventDelivery] policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x600002605ce0; process scope; status: none> was:none
-2026-06-01 23:26:05.910 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Setting default evaluation strategy for UIUserInterfaceIdiomPhone to LastOneWins
-2026-06-01 23:26:05.911 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.912 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.915 F  emacs[48012:1bb35] [com.apple.runtime-issues:UIKit App Config] `UIScene` lifecycle will soon be required. Failure to adopt will result in an assert in the future.
-2026-06-01 23:26:05.915 A  emacs[48012:1bb35] (libsystem_trace.dylib) Activity for state dumps
-2026-06-01 23:26:05.916 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:05.920 Df emacs[48012:1bb40] [com.apple.BackBoard:EventDelivery] BKSHIDEventObserver - connection activation
-2026-06-01 23:26:05.921 Df emacs[48012:1bb35] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 7B2FB4A4-50BB-42FD-89C2-17A8530C46B1
-2026-06-01 23:26:05.921 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Ignoring already applied deactivation reason: 5; deactivation reasons: 1056
-2026-06-01 23:26:05.921 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason added: 11; deactivation reasons: 1056 -> 3104; animating application lifecycle event: 1
-2026-06-01 23:26:05.922 Df emacs[48012:1bb35] [com.apple.KeyboardArbiter:Client] startConnection
-2026-06-01 23:26:05.924 Df emacs[48012:1bb35] [com.apple.xpc:connection] [0x103509dd0] activating connection: mach=true listener=false peer=false name=com.apple.UIKit.KeyboardManagement.hosted
-2026-06-01 23:26:05.927 Df emacs[48012:1bb35] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
-2026-06-01 23:26:05.960 Df emacs[48012:1bb42] [com.apple.xpc:connection] [0x10350b9b0] activating connection: mach=true listener=false peer=false name=com.apple.fontservicesd
-2026-06-01 23:26:05.988 Df emacs[48012:1bb35] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIApplicationSceneDisplaySettings> on FBSSceneSettings
-2026-06-01 23:26:06.001 Df emacs[48012:1bb35] [com.apple.UIKit:Orientation] <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1) Scene updated orientation preferences: none -> ( Pu Ll Lr )
-2026-06-01 23:26:06.002 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Key window API is scene-level: YES
-2026-06-01 23:26:06.002 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] UIWindowScene: 0x10350a4d0: Window became key in scene: UIWindow: 0x10360da80; contextId: 0x624DFF90: reason: UIWindowScene: 0x10350a4d0: Window requested to become key in scene: 0x10360da80
-2026-06-01 23:26:06.003 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Key window needs update: 1; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x10350a4d0; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x10360da80; reason: UIWindowScene: 0x10350a4d0: Window requested to become key in scene: 0x10360da80
-2026-06-01 23:26:06.003 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Window did become application key: UIWindow: 0x10360da80; contextId: 0x624DFF90; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
-2026-06-01 23:26:06.003 Df emacs[48012:1bb35] [com.apple.UIKit:EventDeferring] [0x6000029101c0] Begin local event deferring requested for token: 0x6000026062e0; environments: 1; reason: UIWindowScene: 0x10350a4d0: Begin event deferring in keyboardFocus for window: 0x10360da80
-2026-06-01 23:26:06.006 Df emacs[48012:1bb35] emacs-launch: AppDelegate window visible (red placeholder)
-2026-06-01 23:26:06.006 Df emacs[48012:1bb35] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
-2026-06-01 23:26:06.007 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason removed: 10; deactivation reasons: 3104 -> 2080; animating application lifecycle event: 1
-2026-06-01 23:26:06.007 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason added: 12; deactivation reasons: 2080 -> 6176; animating application lifecycle event: 1
-2026-06-01 23:26:06.007 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason removed: 11; deactivation reasons: 6176 -> 4128; animating application lifecycle event: 1
-2026-06-01 23:26:06.008 Df emacs[48012:1bb42] [com.apple.BackBoard:EventDelivery] BKSHIDEventDeliveryManager - connection activation
-2026-06-01 23:26:06.008 Df emacs[48012:1bb47] emacs-launch: emacs-bg: dispatched, about to call ios_main
-2026-06-01 23:26:06.008 Df emacs[48012:1bb35] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneIntelligenceSupportSettings> on FBSSceneSettings
-2026-06-01 23:26:06.009 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:06.011 Df emacs[48012:1bb42] [com.apple.UIIntelligenceSupport:xpc] establishing connection to agent
-2026-06-01 23:26:06.014 Df emacs[48012:1bb47] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/emacs
-2026-06-01 23:26:06.022 Df emacs[48012:1bb42] [com.apple.xpc:session] [0x60000210ff70] Session created.
-2026-06-01 23:26:06.023 Df emacs[48012:1bb47] emacs-launch: ios_main: entered
-2026-06-01 23:26:06.026 Df emacs[48012:1bb42] [com.apple.xpc:session] [0x60000210ff70] Session created from connection [0x103411dc0]
-2026-06-01 23:26:06.030 Df emacs[48012:1bb47] emacs-launch: ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Bundle/Application/38F4F600-8D27-4B04-95C0-9A303446B9A2/Emacs.app/etc
-2026-06-01 23:26:06.030 Df emacs[48012:1bb42] [com.apple.xpc:connection] [0x103411dc0] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
-2026-06-01 23:26:06.033 Df emacs[48012:1bb47] [com.apple.FileURL:default] kExcludedFromBackupXattrName set on path: /Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Data/Application/3F4D153C-FE9B-49B0-B893-6EE14A71506A/Library/Application Support/Emacs
-2026-06-01 23:26:06.035 Df emacs[48012:1bb35] [com.apple.xpc:connection] [0x10350fd60] activating connection: mach=true listener=false peer=false name=com.apple.lsd.mapdb
-2026-06-01 23:26:06.036 Df emacs[48012:1bb47] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/6C165256-7708-40E2-876B-9E8DE5A80FB3/data/Containers/Data/Application/3F4D153C-FE9B-49B0-B893-6EE14A71506A/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
-2026-06-01 23:26:06.037 Df emacs[48012:1bb42] [com.apple.xpc:session] [0x60000210ff70] Session activated
-2026-06-01 23:26:06.055 Df emacs[48012:1bb35] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:1 [17CE6DBE-1714-447F-AF86-9900AA3EA62A] (reporting strategy default)>
-2026-06-01 23:26:06.055 Df emacs[48012:1bb35] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:2 [51FDE5EC-49C7-49F9-B724-8EEE97A2CA6D] (reporting strategy default)>
-2026-06-01 23:26:06.055 Df emacs[48012:1bb35] [com.apple.network:activity] Set activity <nw_activity 50:1 [17CE6DBE-1714-447F-AF86-9900AA3EA62A] (reporting strategy default)> as the global parent
-2026-06-01 23:26:06.055 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Ending background task with UIBackgroundTaskIdentifier: 1
-2026-06-01 23:26:06.056 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Ending task with identifier 1 and description: <_UIBackgroundTaskInfo: 0x60000170c180>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 1082 (elapsed = 1), _expireHandler: (null)
-2026-06-01 23:26:06.056 Df emacs[48012:1bb35] [com.apple.UIKit:BackgroundTask] Decrementing reference count for assertion <BKSProcessAssertion: 0x600002100e10> (used by background task with identifier 1: <_UIBackgroundTaskInfo: 0x60000170c180>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 1082 (elapsed = 1))
-2026-06-01 23:26:06.056 Df emacs[48012:1bb35] [com.apple.UIKit:EventBus] Event Timing Profile for Touch: not found, path="/System/Library/EventTimingProfiles/Sim.Touch.plist"
-2026-06-01 23:26:06.056 Df emacs[48012:1bb35] [com.apple.UIKit:EventBus] Event Timing Profile for Pencil: not found, path="/System/Library/EventTimingProfiles/Sim.Pencil.plist"
-2026-06-01 23:26:06.056 Df emacs[48012:1bb35] [com.apple.UIKit:UpdateScheduler] Target list changed: <CADisplay:LCD PurpleMain>
-2026-06-01 23:26:06.057 Df emacs[48012:1bb35] [com.apple.KeyboardArbiter:Client] startConnection
-2026-06-01 23:26:06.057 Df emacs[48012:1bb35] [com.apple.KeyboardArbiter:Client] handleKeyboardChange: set currentKeyboard:N (wasKeyboard:N)
-2026-06-01 23:26:06.060 Df emacs[48012:1bb35] [com.apple.UIKit:KeyboardArbiterClientLog] isWritingToolsHandlingKeyboardTracking:Y (WT ready:Y, Arbiter ready:Y)
-2026-06-01 23:26:06.101 Df emacs[48012:1bb35] [com.apple.network:activity] <nw_activity 50:1 [17CE6DBE-1714-447F-AF86-9900AA3EA62A] (global parent) (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 667ms
-2026-06-01 23:26:06.101 Df emacs[48012:1bb35] [com.apple.network:activity] <nw_activity 50:2 [51FDE5EC-49C7-49F9-B724-8EEE97A2CA6D] (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 667ms
-2026-06-01 23:26:06.101 Df emacs[48012:1bb35] [com.apple.network:activity] Unsetting the global parent activity <nw_activity 50:1 [17CE6DBE-1714-447F-AF86-9900AA3EA62A] (global parent) (reporting strategy default) complete (reason success)>
-2026-06-01 23:26:06.101 Df emacs[48012:1bb35] [com.apple.network:activity] Unset the global parent activity
-2026-06-01 23:26:06.285 Df emacs[48012:1bb35] [com.apple.Accessibility:AXCommon] Read Per-App on Init: Smart invert = (null)
-2026-06-01 23:26:06.292 Df emacs[48012:1bb35] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 7B2FB4A4-50BB-42FD-89C2-17A8530C46B1
-2026-06-01 23:26:06.292 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:06.344 Df emacs[48012:1bb35] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 7B2FB4A4-50BB-42FD-89C2-17A8530C46B1
-2026-06-01 23:26:06.358 Df emacs[48012:1bb35] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 7B2FB4A4-50BB-42FD-89C2-17A8530C46B1
-2026-06-01 23:26:06.377 Df emacs[48012:1bb35] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x10350a4d0> (7B2FB4A4-50BB-42FD-89C2-17A8530C46B1)
-2026-06-01 23:26:06.377 Df emacs[48012:1bb35] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 7B2FB4A4-50BB-42FD-89C2-17A8530C46B1
-2026-06-01 23:26:06.378 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason removed: 12; deactivation reasons: 4128 -> 32; animating application lifecycle event: 1
-2026-06-01 23:26:06.379 Df emacs[48012:1bb35] [com.apple.KeyboardArbiter:Client] Send setDeactivating: N (-DeactivationReason:SuspendedEventsOnly)
-2026-06-01 23:26:06.379 Df emacs[48012:1bb35] [com.apple.UIKit:Application] Deactivation reason removed: 5; deactivation reasons: 32 -> 0; animating application lifecycle event: 0
-2026-06-01 23:26:06.379 Df emacs[48012:1bb35] emacs-launch: AppDelegate applicationDidBecomeActive
-2026-06-01 23:26:06.398 A  emacs[48012:1bb4c] (RunningBoardServices) didChangeInheritances
-2026-06-01 23:26:06.431 Df emacs[48012:1bb44] [com.apple.BackBoard:EventDelivery] policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x600002605ce0; token: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default; status: ancestor> was:none
-2026-06-01 23:26:06.431 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Scene target of keyboard event deferring environment did change: 1; scene: UIWindowScene: 0x10350a4d0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
-2026-06-01 23:26:06.431 Df emacs[48012:1bb35] [com.apple.UIKit:EventDeferring] [0x6000029101c0] Scene target of event deferring environments did update: scene: 0x10350a4d0; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 1; eligibleForRecordRemoval: 1;
-2026-06-01 23:26:06.431 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Scene became target of keyboard event deferring environment: UIWindowScene: 0x10350a4d0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
-2026-06-01 23:26:06.431 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Stack[KeyWindow] 0x600000c14cc0: Migrate scenes from LastOneWins -> SystemShellManaged
-2026-06-01 23:26:06.431 Df emacs[48012:1bb35] [com.apple.UIKit:KeyWindow] Setting default evaluation strategy for UIUserInterfaceIdiomPhone to SystemShellManaged
-2026-06-01 23:26:06.431 Df emacs[48012:1bb4c] [com.apple.UIKit:BackgroundTask] Ending background task with UIBackgroundTaskIdentifier: 2
-2026-06-01 23:26:06.432 Df emacs[48012:1bb4c] [com.apple.UIKit:BackgroundTask] Ending task with identifier 2 and description: <_UIBackgroundTaskInfo: 0x60000170eb80>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 1082 (elapsed = 1), _expireHandler: <__NSGlobalBlock__: 0x1e61729e0>
-2026-06-01 23:26:06.432 Df emacs[48012:1bb4c] [com.apple.UIKit:BackgroundTask] Decrementing reference count for assertion <BKSProcessAssertion: 0x600002100e10> (used by background task with identifier 2: <_UIBackgroundTaskInfo: 0x60000170eb80>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 1082 (elapsed = 1))
-2026-06-01 23:26:06.432 Df emacs[48012:1bb4c] [com.apple.UIKit:BackgroundTask] Will invalidate assertion: <BKSProcessAssertion: 0x600002100e10> for task identifier: 2
-2026-06-01 23:26:06.893 A  emacs[48012:1bb4c] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:38:32.813 Df emacs[37496:145a4] emacs-launch: main: entered, calling UIApplicationMain
+2026-06-01 23:38:32.818 Df emacs[37496:145a4] [com.apple.xpc:connection] [0x102105c80] activating connection: mach=true listener=false peer=false name=com.apple.cfprefsd.daemon
+2026-06-01 23:38:32.821 A  emacs[37496:145ad] (CoreFoundation) Loading Preferences From User Session CFPrefsD
+2026-06-01 23:38:32.838 Df emacs[37496:145a4] (libMobileGestalt.dylib) No persisted cache on this platform.
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.UIKit:BackgroundTask] Creating new assertion because there is no existing background assertion.
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.UIKit:BackgroundTask] Creating new background assertion
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.UIKit:BackgroundTask] Created new background assertion <BKSProcessAssertion: 0x600002102800>
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.runningboard:connection] Initializing connection
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.runningboard:process] Removing all cached process handles
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.runningboard:connection] Creating connection to com.apple.runningboard
+2026-06-01 23:38:32.839 Df emacs[37496:145ab] [com.apple.xpc:connection] [0x102206810] activating connection: mach=true listener=false peer=false name=com.apple.runningboard
+2026-06-01 23:38:32.840 Df emacs[37496:145ae] [com.apple.runningboard:connection] Sending handshake request attempt #1 to server
+2026-06-01 23:38:32.841 Df emacs[37496:145ae] [com.apple.runningboard:connection] Handshake succeeded
+2026-06-01 23:38:32.841 Df emacs[37496:145ae] [com.apple.runningboard:connection] Identity resolved as app<org.gnu.emacs((null))>
+2026-06-01 23:38:32.842 Df emacs[37496:145ab] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x600002102800>
+2026-06-01 23:38:32.843 Df emacs[37496:145a4] [com.apple.BoardServices:XPCErrors] [C:1] Alloc com.apple.frontboard.systemappservices
+2026-06-01 23:38:32.843 Df emacs[37496:145a4] [com.apple.xpc:connection] [0x102110480] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-01 23:38:32.843 Df emacs[37496:145ab] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x600001700480>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 617 (elapsed = 0).
+2026-06-01 23:38:32.844 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UIApplicationSceneKeyboardSettings on FBSSceneSettings
+2026-06-01 23:38:32.847 A  emacs[37496:145b1] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:38:32.849 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason added: 10; deactivation reasons: 0 -> 1024; animating application lifecycle event: 0
+2026-06-01 23:38:32.849 Df emacs[37496:145a4] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.open
+2026-06-01 23:38:32.850 Df emacs[37496:145a4] [com.apple.BoardServices:Injection] activating monitor for service com.apple.frontboard.workspace-service
+2026-06-01 23:38:32.850 Df emacs[37496:145a4] [com.apple.FrontBoard:Common] FBSWorkspace registering source: com.apple.frontboard.systemappservices
+2026-06-01 23:38:32.851 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneOcclusionSettings> on FBSSceneSettings
+2026-06-01 23:38:32.851 Df emacs[37496:145a4] [com.apple.FrontBoard:Common] FBSWorkspace connected to endpoint : <BSServiceConnectionEndpoint: 0x600000210b40; target: com.apple.frontboard.systemappservices; service: com.apple.frontboard.workspace-service>
+2026-06-01 23:38:32.852 Df emacs[37496:145a4] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x600003008240 com.apple.frontboard.systemappservices> attempting immediate handshake from activate
+2026-06-01 23:38:32.852 Df emacs[37496:145a4] [com.apple.FrontBoard:Common] <FBSWorkspaceScenesClient:0x600003008240 com.apple.frontboard.systemappservices> sent handshake
+2026-06-01 23:38:32.852 Df emacs[37496:145a4] [com.apple.runningboard:general] Added observer for process assertions expiration warning: <_RBSExpirationWarningClient: 0x60000020dbe0>
+2026-06-01 23:38:32.853 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneInterfaceProtectionSettings> on FBSSceneSettings
+2026-06-01 23:38:32.854 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferencesHostSettingsExtension on FBSSceneSettings
+2026-06-01 23:38:32.855 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneSafeAreaSettingsExtension on FBSSceneSettings
+2026-06-01 23:38:32.857 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneLayoutPreferenceClientSettingsExtension on FBSSceneClientSettings
+2026-06-01 23:38:32.857 Df emacs[37496:145a4] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x102004b80> for initial
+2026-06-01 23:38:32.857 Df emacs[37496:145a4] [com.apple.UIKit:UIScreen] Evaluated capturing state as 0 on <UIScreen: 0x102004b80> for CADisplay KVO
+2026-06-01 23:38:32.858 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIHomeAffordanceHostSceneSettings> on FBSSceneSettings
+2026-06-01 23:38:32.859 Df emacs[37496:145a4] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 1, category name = (null)
+2026-06-01 23:38:32.859 Df emacs[37496:145a4] [com.apple.Accessibility:AXSupportCommon] Read CategoryName: per-app = 0, category name = (null)
+2026-06-01 23:38:32.859 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISystemShellSceneHostingEnvironmentSettings on FBSSceneSettings
+2026-06-01 23:38:32.860 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneRenderingEnvironmentSettings on FBSSceneSettings
+2026-06-01 23:38:32.861 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneRenderingEnvironmentClientSettings> on FBSSceneClientSettings
+2026-06-01 23:38:32.863 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneTransitioningHostSettings> on FBSSceneSettings
+2026-06-01 23:38:32.864 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneFocusSystemSettings> on FBSSceneSettings
+2026-06-01 23:38:32.865 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationSettingsExtension on FBSSceneSettings
+2026-06-01 23:38:32.865 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneOrientationClientSettingsExtension on FBSSceneClientSettings
+2026-06-01 23:38:32.865 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneWindowingControlClientSettings on FBSSceneClientSettings
+2026-06-01 23:38:32.867 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingContentSizePreferenceClientSettings> on FBSSceneClientSettings
+2026-06-01 23:38:32.867 Df emacs[37496:145a4] [com.apple.dt.xctest:Default] Registering for test daemon availability notify post.
+2026-06-01 23:38:32.867 Df emacs[37496:145a4] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:38:32.867 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension _UISceneHostingTraitCollectionPropagationSettings on FBSSceneSettings
+2026-06-01 23:38:32.868 Df emacs[37496:145a4] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:38:32.868 Df emacs[37496:145a4] [com.apple.dt.xctest:Default] notify_get_state check indicated test daemon not ready.
+2026-06-01 23:38:32.869 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationSettings> on FBSSceneSettings
+2026-06-01 23:38:32.869 Df emacs[37496:145a4] [com.apple.UIKit:UpdateScheduler] Selected display: name=LCD (PurpleMain), id=1
+2026-06-01 23:38:32.870 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingSheetPresentationClientSettings> on FBSSceneClientSettings
+2026-06-01 23:38:32.870 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingEventDeferringSettings> on FBSSceneSettings
+2026-06-01 23:38:32.872 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneSettings
+2026-06-01 23:38:32.872 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <UIKit__UITypedKeyValueSceneSettings> on FBSSceneClientSettings
+2026-06-01 23:38:32.872 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneHostingViewControllerPreferencePropagationClientSettings> on FBSSceneClientSettings
+2026-06-01 23:38:32.873 Df emacs[37496:145ab] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneZoomTransitionSettings> on FBSSceneSettings
+2026-06-01 23:38:32.967 A  emacs[37496:145ae] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:38:32.980 Df emacs[37496:145ad] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneSettingsCore on FBSSceneSettings
+2026-06-01 23:38:32.983 Df emacs[37496:145ad] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneClientSettingsCore on FBSSceneClientSettings
+2026-06-01 23:38:32.993 Df emacs[37496:145ad] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneSettings setting counterpart class: UIApplicationSceneSettings
+2026-06-01 23:38:32.993 Df emacs[37496:145ad] [com.apple.FrontBoard:SceneExtension] UIMutableApplicationSceneClientSettings setting counterpart class: UIApplicationSceneClientSettings
+2026-06-01 23:38:32.993 Df emacs[37496:145ad] [com.apple.FrontBoard:SceneExtension] Realizing settings extension FBSSceneTransitionContextCore on FBSSceneTransitionContext
+2026-06-01 23:38:33.004 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Will add backgroundTask with taskName: Persistent SceneSession Map Update, expirationHandler: <__NSGlobalBlock__: 0x1e61729e0>
+2026-06-01 23:38:33.004 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Reusing background assertion <BKSProcessAssertion: 0x600002102800>
+2026-06-01 23:38:33.004 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Incrementing reference count for background assertion <BKSProcessAssertion: 0x600002102800>
+2026-06-01 23:38:33.004 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Created background task <_UIBackgroundTaskInfo: 0x600001715d00>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 617 (elapsed = 0).
+2026-06-01 23:38:33.006 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason added: 5; deactivation reasons: 1024 -> 1056; animating application lifecycle event: 1
+2026-06-01 23:38:33.008 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.010 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Should send trait collection or coordinate space update, interface style 1 -> 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.014 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.015 Df emacs[37496:145a4] [com.apple.UIKit:HomeAffordanceObservation] Initializing: <_UIHomeAffordanceSceneNotifier: 0x60000290d030>; with scene: <UIWindowScene: 0x102008ba0>
+2026-06-01 23:38:33.016 Df emacs[37496:145a4] [com.apple.BacklightServices:scenes] 0x600000c10c60 setDelegate:<0x600000c10810 _UIBacklightEnvironment> hasDelegate:YES for environment:sceneID:org.gnu.emacs-default
+2026-06-01 23:38:33.017 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.018 Df emacs[37496:145a4] [com.apple.UIKit:EventDeferring] [0x600002910380] Initialized with scene: <UIWindowScene: 0x102008ba0>; behavior: <_UIEventDeferringBehavior_iOS: 0x60000021a000>; availableForProcess: 1, systemShellManagesKeyboardFocus: 1
+2026-06-01 23:38:33.019 Df emacs[37496:145a4] [com.apple.BoardServices:XPCErrors] [C:2] Alloc com.apple.backboard.hid-services.xpc
+2026-06-01 23:38:33.019 Df emacs[37496:145a4] [com.apple.xpc:connection] [0x10210fc90] activating connection: mach=false listener=false peer=false name=(anonymous)
+2026-06-01 23:38:33.020 Df emacs[37496:145ae] [com.apple.BackBoard:EventDelivery] BKSHIDEventObserver - connection activation
+2026-06-01 23:38:33.020 Df emacs[37496:145a4] [com.apple.BackBoard:EventDelivery] policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x60000260a640; process scope; status: none> was:none
+2026-06-01 23:38:33.020 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Setting default evaluation strategy for UIUserInterfaceIdiomPhone to LastOneWins
+2026-06-01 23:38:33.023 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.023 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.029 F  emacs[37496:145a4] [com.apple.runtime-issues:UIKit App Config] `UIScene` lifecycle will soon be required. Failure to adopt will result in an assert in the future.
+2026-06-01 23:38:33.029 A  emacs[37496:145a4] (libsystem_trace.dylib) Activity for state dumps
+2026-06-01 23:38:33.029 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.032 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.033 Df emacs[37496:145a4] [com.apple.UIKit:Application] Ignoring already applied deactivation reason: 5; deactivation reasons: 1056
+2026-06-01 23:38:33.033 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason added: 11; deactivation reasons: 1056 -> 3104; animating application lifecycle event: 1
+2026-06-01 23:38:33.034 Df emacs[37496:145a4] [com.apple.KeyboardArbiter:Client] startConnection
+2026-06-01 23:38:33.038 Df emacs[37496:145a4] [com.apple.xpc:connection] [0x102008710] activating connection: mach=true listener=false peer=false name=com.apple.UIKit.KeyboardManagement.hosted
+2026-06-01 23:38:33.042 Df emacs[37496:145a4] emacs-launch: AppDelegate didFinishLaunchingWithOptions: enter
+2026-06-01 23:38:33.088 Df emacs[37496:145ae] [com.apple.xpc:connection] [0x10200d220] activating connection: mach=true listener=false peer=false name=com.apple.fontservicesd
+2026-06-01 23:38:33.113 Df emacs[37496:145a4] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UIApplicationSceneDisplaySettings> on FBSSceneSettings
+2026-06-01 23:38:33.136 Df emacs[37496:145a4] [com.apple.UIKit:Orientation] <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003) Scene updated orientation preferences: none -> ( Pu Ll Lr )
+2026-06-01 23:38:33.136 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Key window API is scene-level: YES
+2026-06-01 23:38:33.137 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] UIWindowScene: 0x102008ba0: Window became key in scene: UIWindow: 0x10220bfc0; contextId: 0x8E2485F1: reason: UIWindowScene: 0x102008ba0: Window requested to become key in scene: 0x10220bfc0
+2026-06-01 23:38:33.138 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Key window needs update: 1; currentKeyWindowScene: 0x0; evaluatedKeyWindowScene: 0x102008ba0; currentApplicationKeyWindow: 0x0; evaluatedApplicationKeyWindow: 0x10220bfc0; reason: UIWindowScene: 0x102008ba0: Window requested to become key in scene: 0x10220bfc0
+2026-06-01 23:38:33.138 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Window did become application key: UIWindow: 0x10220bfc0; contextId: 0x8E2485F1; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
+2026-06-01 23:38:33.138 Df emacs[37496:145a4] [com.apple.UIKit:EventDeferring] [0x600002910380] Begin local event deferring requested for token: 0x600002605e60; environments: 1; reason: UIWindowScene: 0x102008ba0: Begin event deferring in keyboardFocus for window: 0x10220bfc0
+2026-06-01 23:38:33.140 Df emacs[37496:145b5] [com.apple.BackBoard:EventDelivery] BKSHIDEventDeliveryManager - connection activation
+2026-06-01 23:38:33.142 Df emacs[37496:145a4] emacs-launch: AppDelegate window visible (red placeholder)
+2026-06-01 23:38:33.145 Df emacs[37496:145a4] emacs-launch: AppDelegate didFinishLaunchingWithOptions: returning YES
+2026-06-01 23:38:33.145 Df emacs[37496:145ae] emacs-launch: emacs-bg: dispatched, about to call ios_main
+2026-06-01 23:38:33.145 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason removed: 10; deactivation reasons: 3104 -> 2080; animating application lifecycle event: 1
+2026-06-01 23:38:33.146 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason added: 12; deactivation reasons: 2080 -> 6176; animating application lifecycle event: 1
+2026-06-01 23:38:33.146 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason removed: 11; deactivation reasons: 6176 -> 4128; animating application lifecycle event: 1
+2026-06-01 23:38:33.146 Df emacs[37496:145ae] emacs-launch: emacs-bg: argc=1 argv[0]=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/emacs
+2026-06-01 23:38:33.147 Df emacs[37496:145a4] [com.apple.FrontBoard:SceneExtension] Realizing settings extension <_UISceneIntelligenceSupportSettings> on FBSSceneSettings
+2026-06-01 23:38:33.147 Df emacs[37496:145ae] emacs-launch: ios_main: entered
+2026-06-01 23:38:33.150 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.151 Df emacs[37496:145ae] emacs-launch: ios_setenv_bundle_paths: EMACSLOADPATH=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/lisp EMACSDATA=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Bundle/Application/8A8A559C-C3BF-424D-8D41-EF76E3CBD3B2/Emacs.app/etc
+2026-06-01 23:38:33.153 Df emacs[37496:145b4] [com.apple.UIIntelligenceSupport:xpc] establishing connection to agent
+2026-06-01 23:38:33.153 Df emacs[37496:145ae] [com.apple.FileURL:default] kExcludedFromBackupXattrName set on path: /Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Data/Application/9B5A7F32-B5A0-45E4-8E61-82F1EA8F8E04/Library/Application Support/Emacs
+2026-06-01 23:38:33.153 Df emacs[37496:145b4] [com.apple.xpc:session] [0x60000210cd70] Session created.
+2026-06-01 23:38:33.154 Df emacs[37496:145ae] emacs-launch: ios_main: dump_file=/Users/runner/Library/Developer/CoreSimulator/Devices/4F21E32C-4611-4BBD-86E8-24FB2D5D72F1/data/Containers/Data/Application/9B5A7F32-B5A0-45E4-8E61-82F1EA8F8E04/Library/Application Support/Emacs/emacs.pdmp, calling ios_emacs_init
+2026-06-01 23:38:33.154 Df emacs[37496:145b4] [com.apple.xpc:session] [0x60000210cd70] Session created from connection [0x102104080]
+2026-06-01 23:38:33.155 Df emacs[37496:145b4] [com.apple.xpc:connection] [0x102104080] activating connection: mach=true listener=false peer=false name=com.apple.uiintelligencesupport.agent
+2026-06-01 23:38:33.155 Df emacs[37496:145b4] [com.apple.xpc:session] [0x60000210cd70] Session activated
+2026-06-01 23:38:33.182 Df emacs[37496:145a4] [com.apple.xpc:connection] [0x102222840] activating connection: mach=true listener=false peer=false name=com.apple.lsd.mapdb
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:1 [FC537069-C727-459A-83F0-109E9689C75F] (reporting strategy default)>
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.network:activity] Create activity from XPC object <nw_activity 50:2 [FA8084AD-CA49-4474-8CE4-87225ECF5916] (reporting strategy default)>
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.network:activity] Set activity <nw_activity 50:1 [FC537069-C727-459A-83F0-109E9689C75F] (reporting strategy default)> as the global parent
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Ending background task with UIBackgroundTaskIdentifier: 1
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Ending task with identifier 1 and description: <_UIBackgroundTaskInfo: 0x600001700480>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 617 (elapsed = 0), _expireHandler: (null)
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.UIKit:BackgroundTask] Decrementing reference count for assertion <BKSProcessAssertion: 0x600002102800> (used by background task with identifier 1: <_UIBackgroundTaskInfo: 0x600001700480>: taskID = 1, taskName = Launch Background Task for Coalescing, creationTime = 617 (elapsed = 0))
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.UIKit:EventBus] Event Timing Profile for Touch: not found, path="/System/Library/EventTimingProfiles/Sim.Touch.plist"
+2026-06-01 23:38:33.209 Df emacs[37496:145a4] [com.apple.UIKit:EventBus] Event Timing Profile for Pencil: not found, path="/System/Library/EventTimingProfiles/Sim.Pencil.plist"
+2026-06-01 23:38:33.210 Df emacs[37496:145a4] [com.apple.UIKit:UpdateScheduler] Target list changed: <CADisplay:LCD PurpleMain>
+2026-06-01 23:38:33.210 Df emacs[37496:145a4] [com.apple.KeyboardArbiter:Client] startConnection
+2026-06-01 23:38:33.211 Df emacs[37496:145a4] [com.apple.KeyboardArbiter:Client] handleKeyboardChange: set currentKeyboard:N (wasKeyboard:N)
+2026-06-01 23:38:33.212 Df emacs[37496:145b5] [com.apple.CoreAnalytics:client] No XPC connection in Simulator
+2026-06-01 23:38:33.213 E  emacs[37496:145b5] [com.apple.app_launch_measurement:General] Failed to send CA Event for app launch measurements for ca_event_type: 0 event_name: com.apple.app_launch_measurement.FirstFramePresentationMetric
+2026-06-01 23:38:33.215 Df emacs[37496:145a4] [com.apple.UIKit:KeyboardArbiterClientLog] isWritingToolsHandlingKeyboardTracking:Y (WT ready:Y, Arbiter ready:Y)
+2026-06-01 23:38:33.258 Df emacs[37496:145a4] [com.apple.network:activity] <nw_activity 50:1 [FC537069-C727-459A-83F0-109E9689C75F] (global parent) (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 716ms
+2026-06-01 23:38:33.258 Df emacs[37496:145a4] [com.apple.network:activity] <nw_activity 50:2 [FA8084AD-CA49-4474-8CE4-87225ECF5916] (reporting strategy default) complete (reason success)> complete with reason 2 (success), duration 716ms
+2026-06-01 23:38:33.258 Df emacs[37496:145a4] [com.apple.network:activity] Unsetting the global parent activity <nw_activity 50:1 [FC537069-C727-459A-83F0-109E9689C75F] (global parent) (reporting strategy default) complete (reason success)>
+2026-06-01 23:38:33.258 Df emacs[37496:145a4] [com.apple.network:activity] Unset the global parent activity
+2026-06-01 23:38:33.259 E  emacs[37496:145b4] [com.apple.app_launch_measurement:General] Failed to send CA Event for app launch measurements for ca_event_type: 1 event_name: com.apple.app_launch_measurement.ExtendedLaunchMetrics
+2026-06-01 23:38:33.391 Df emacs[37496:145a4] [com.apple.Accessibility:AXCommon] Read Per-App on Init: Smart invert = (null)
+2026-06-01 23:38:33.441 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.441 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.450 Df emacs[37496:145ab] [com.apple.BackBoard:EventDelivery] policyStatus:<BKSHIDEventDeliveryPolicyObserver: 0x60000260a640; token: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default; status: ancestor> was:none
+2026-06-01 23:38:33.450 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Scene target of keyboard event deferring environment did change: 1; scene: UIWindowScene: 0x102008ba0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
+2026-06-01 23:38:33.450 Df emacs[37496:145a4] [com.apple.UIKit:EventDeferring] [0x600002910380] Scene target of event deferring environments did update: scene: 0x102008ba0; current systemShellManagesKeyboardFocus: 1; systemShellManagesKeyboardFocusForScene: 1; eligibleForRecordRemoval: 1;
+2026-06-01 23:38:33.450 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Scene became target of keyboard event deferring environment: UIWindowScene: 0x102008ba0; scene identity: com.apple.frontboard.systemappservices/FBSceneManager:sceneID%3Aorg.gnu.emacs-default
+2026-06-01 23:38:33.450 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Stack[KeyWindow] 0x600000c0e490: Migrate scenes from LastOneWins -> SystemShellManaged
+2026-06-01 23:38:33.450 Df emacs[37496:145a4] [com.apple.UIKit:KeyWindow] Setting default evaluation strategy for UIUserInterfaceIdiomPhone to SystemShellManaged
+2026-06-01 23:38:33.466 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.470 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.505 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.507 Df emacs[37496:145a4] [com.apple.UIKit:InterfaceStyle] Not push traits update to screen for new style 1, <UIWindowScene: 0x102008ba0> (178A9BBE-99CD-4380-9327-E7724BED3003)
+2026-06-01 23:38:33.507 Df emacs[37496:145a4] [com.apple.UIKit:AppLifecycle] sceneOfRecord: sceneID: sceneID:org.gnu.emacs-default  persistentID: 178A9BBE-99CD-4380-9327-E7724BED3003
+2026-06-01 23:38:33.508 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason removed: 12; deactivation reasons: 4128 -> 32; animating application lifecycle event: 1
+2026-06-01 23:38:33.508 Df emacs[37496:145a4] [com.apple.KeyboardArbiter:Client] Send setDeactivating: N (-DeactivationReason:SuspendedEventsOnly)
+2026-06-01 23:38:33.508 Df emacs[37496:145a4] [com.apple.UIKit:Application] Deactivation reason removed: 5; deactivation reasons: 32 -> 0; animating application lifecycle event: 0
+2026-06-01 23:38:33.508 Df emacs[37496:145a4] emacs-launch: AppDelegate applicationDidBecomeActive
+2026-06-01 23:38:33.515 A  emacs[37496:145b4] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:38:33.541 Df emacs[37496:145ad] [com.apple.UIKit:BackgroundTask] Ending background task with UIBackgroundTaskIdentifier: 2
+2026-06-01 23:38:33.569 Df emacs[37496:145ad] [com.apple.UIKit:BackgroundTask] Ending task with identifier 2 and description: <_UIBackgroundTaskInfo: 0x600001715d00>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 617 (elapsed = 0), _expireHandler: <__NSGlobalBlock__: 0x1e61729e0>
+2026-06-01 23:38:33.569 Df emacs[37496:145ad] [com.apple.UIKit:BackgroundTask] Decrementing reference count for assertion <BKSProcessAssertion: 0x600002102800> (used by background task with identifier 2: <_UIBackgroundTaskInfo: 0x600001715d00>: taskID = 2, taskName = Persistent SceneSession Map Update, creationTime = 617 (elapsed = 0))
+2026-06-01 23:38:33.569 Df emacs[37496:145ad] [com.apple.UIKit:BackgroundTask] Will invalidate assertion: <BKSProcessAssertion: 0x600002102800> for task identifier: 2
+2026-06-01 23:38:33.922 A  emacs[37496:145b4] (RunningBoardServices) didChangeInheritances
+2026-06-01 23:38:41.583 Df emacs[37496:145ae] [com.apple.CoreAnalytics:client] Entering exit handler.
+2026-06-01 23:38:41.583 Df emacs[37496:145ae] [com.apple.CoreAnalytics:client] Exiting exit handler.
 
 ===== END =====
