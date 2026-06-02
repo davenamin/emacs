@@ -110,17 +110,26 @@
 ;;
 ;;; Code:
 
+;; iOS DEBUG: trace breadcrumbs through flymake.el's top-level load to
+;; isolate which form triggers (wrong-type-argument stringp nil).
+(message "ios-debug flymake: before requires")
 (require 'cl-lib)
+(message "ios-debug flymake: after cl-lib")
 (require 'thingatpt) ; end-of-thing
+(message "ios-debug flymake: after thingatpt")
 (require 'warnings) ; warning-numeric-level, display-warning
+(message "ios-debug flymake: after warnings")
 (require 'compile) ; for some faces
+(message "ios-debug flymake: after compile")
 ;; We need the next `require' to avoid compiler warnings and run-time
 ;; errors about mouse-wheel-up/down-event in builds --without-x, where
 ;; mwheel is not preloaded.
 (require 'mwheel)
+(message "ios-debug flymake: after mwheel")
 ;; when-let*, if-let*, hash-table-keys, hash-table-values:
 (eval-when-compile (require 'subr-x))
 (require 'project)
+(message "ios-debug flymake: after project")
 
 (defgroup flymake nil
   "Universal on-the-fly syntax checker."
