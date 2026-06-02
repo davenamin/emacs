@@ -34,6 +34,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "frame.h"
 #include "dispextern.h"
 #include "font.h"
+#include "fontset.h"
 
 extern struct font_driver ios_font_driver;
 
@@ -151,6 +152,10 @@ parameters without crashing.  */)
   FRAME_BASELINE_OFFSET (f) = font->baseline_offset;
   FRAME_COLUMN_WIDTH (f) = font->average_width;
   FRAME_LINE_HEIGHT (f) = font->height;
+  /* Allocate a fontset for this font.  realize_default_face does
+     fontset_name(FRAME_FONTSET(f)), which is AREF(Vfontset_table, id)
+     -- a negative id segfaults.  */
+  FRAME_FONTSET (f) = fontset_from_font (font_obj);
   store_frame_param (f, Qfont, font_obj);
 
   /* Geometry placeholder.  A follow-up will compute these from the
