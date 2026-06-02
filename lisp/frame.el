@@ -411,17 +411,6 @@ This function runs the abnormal hook `move-frame-functions'."
 ;; one to display messages while loading the init file.
 (defun frame-initialize ()
   "Create an initial frame if necessary."
-  ;; iOS bring-up: skip the make-frame dispatch entirely.  Our
-  ;; Fx_create_frame is defined (so cus-start.el's fboundp guards
-  ;; pass), but it returns a frame with no realized face cache --
-  ;; the first redisplay tick through init_iterator ->
-  ;; init_frame_faces -> realize_basic_faces SIGSEGVs.  Until
-  ;; iosfont.m grows a real font driver and faces are realized
-  ;; properly, keep the output_initial terminal-frame as the
-  ;; selected frame.  Removing this short-circuit again is the
-  ;; next milestone.
-  (if (featurep 'ios)
-      nil
   ;; Are we actually running under a window system at all?
   (if (and initial-window-system
 	   (not noninteractive)
@@ -453,7 +442,7 @@ This function runs the abnormal hook `move-frame-functions'."
 	;; At this point, we know that we have a frame open, so we
 	;; can delete the terminal frame.
 	(delete-frame terminal-frame)
-	(setq terminal-frame nil)))))
+	(setq terminal-frame nil))))
 
 (defvar frame-notice-user-settings t
   "Non-nil means function `frame-notice-user-settings' wasn't run yet.")

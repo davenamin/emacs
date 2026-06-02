@@ -31,6 +31,11 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "lisp.h"
 #include "iosterm.h"
+#include "frame.h"
+#include "dispextern.h"
+#include "font.h"
+
+extern struct font_driver ios_font_driver;
 
 /* Resolve OBJECT to a Display_Info -- frame.c's Fx_get_resource and
    other frame-parameter primitives call this to find the display
@@ -117,12 +122,41 @@ parameters without crashing.  */)
   fset_name (f, build_string ("GNU Emacs"));
   f->explicit_name = false;
 
-  /* Geometry: derive from the display.  Pixels-per-character will
-     stay 1x1 until a font is set; cols/rows will be wildly wrong
-     until then, but they need SOME value so adjust_frame_size
-     doesn't divide by zero.  */
+  /* Register the font driver on this frame, then open the default
+     iOS font (Menlo via UIFont) so realize_default_face has a
+     FRAME_FONT to point at.  Without this, init_frame_faces aborts
+     because realize_default_face's XSETFONT(font_object, FRAME_FONT(f))
+     dereferences a NULL pointer.  */
+  register_font_driver (&ios_font_driver, f);
+
+  Lisp_Object font_obj
+    = font_open_by_name (f, build_unibyte_string ("Menlo-14"));
+  if (NILP (font_obj))
+    {
+      delete_frame (frame, Qnoelisp);
+      error ("ios: failed to open default Menlo font");
+    }
+  /* Install the font into the frame directly (no set_new_font_hook
+     wired up yet on iOS).  These assignments mirror the relevant
+     prefix of android_new_font.  */
+  struct font *font = XFONT_OBJECT (font_obj);
+  FRAME_FONT (f) = font;
+  FRAME_BASELINE_OFFSET (f) = font->baseline_offset;
+  FRAME_COLUMN_WIDTH (f) = font->average_width;
+  FRAME_LINE_HEIGHT (f) = font->height;
+  store_frame_param (f, Qfont, font_obj);
+
+  /* Geometry placeholder.  A follow-up will compute these from the
+     UIScreen-derived display_info->pixel_width / pixel_height
+     divided by the character cell size.  */
   FRAME_COLS (f) = 80;
   FRAME_LINES (f) = 25;
+
+  /* Initialize the face cache (allocates it via make_face_cache and
+     calls realize_basic_faces).  This is the call that previously
+     SIGSEGVd; it should succeed now that FRAME_FONT and color
+     pixels are non-sentinel.  */
+  init_frame_faces (f);
 
   f->terminal->reference_count++;
   f->after_make_frame = true;
