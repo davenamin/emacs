@@ -59,7 +59,7 @@ static struct redisplay_interface ios_redisplay_interface =
     /* frame_parm_handlers omitted (NULL pointer); the Lisp-side
        frame parameter machinery just won't call port-specific
        setters yet.  */
-    NULL,                            /* frame_parm_handlers */
+    ios_frame_parm_handlers,
     gui_produce_glyphs,
     gui_write_glyphs,
     gui_insert_glyphs,
@@ -81,6 +81,14 @@ static struct redisplay_interface ios_redisplay_interface =
 static bool ios_defined_color (struct frame *f, const char *color_name,
                                Emacs_Color *color, bool alloc_p,
                                bool make_index);
+
+/* Per-port frame parameter handler table.  gui_set_frame_parameters_1
+   indexes this by `x-frame-parameter' symbol index; without a non-
+   NULL pointer here the indexing dereferences NULL.  Every slot is
+   left NULL for now; the iOS port doesn't yet implement any
+   parameter-specific frame attribute setters.  Size of 64 covers all
+   currently-known indices in src/frame.c's `frame_parms' table.  */
+static frame_parm_handler ios_frame_parm_handlers[64];
 
 /* Translate a port-specific keysym to its Lisp symbol name.
    keyboard.c's modify_event_symbol calls this when it can't find a
