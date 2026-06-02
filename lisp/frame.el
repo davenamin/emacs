@@ -411,6 +411,15 @@ This function runs the abnormal hook `move-frame-functions'."
 ;; one to display messages while loading the init file.
 (defun frame-initialize ()
   "Create an initial frame if necessary."
+  ;; iOS bring-up: the minimal Fx_create_frame in iosfns.m plus the
+  ;; UIFont-backed font driver in iosfont.m get past the immediate
+  ;; FRAME_FONT-NULL crash, but realize_face for the named basic
+  ;; faces (mode-line-active, fringe, ...) still SIGSEGVs deep
+  ;; inside realize_gui_face when font_load_for_lface comes back
+  ;; without a usable font.  Keep the short-circuit pending a real
+  ;; font_list / font_match path through our driver.
+  (if (featurep 'ios)
+      nil
   ;; Are we actually running under a window system at all?
   (if (and initial-window-system
 	   (not noninteractive)
@@ -442,7 +451,7 @@ This function runs the abnormal hook `move-frame-functions'."
 	;; At this point, we know that we have a frame open, so we
 	;; can delete the terminal frame.
 	(delete-frame terminal-frame)
-	(setq terminal-frame nil))))
+	(setq terminal-frame nil)))))
 
 (defvar frame-notice-user-settings t
   "Non-nil means function `frame-notice-user-settings' wasn't run yet.")
