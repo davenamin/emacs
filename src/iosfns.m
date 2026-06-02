@@ -186,10 +186,17 @@ parameters without crashing.  */)
   init_frame_faces (f);
 
   /* Mark the frame as visible so frame-initialize's
-     (delete-frame terminal-frame) doesn't bail with "Attempt to
-     delete the sole visible or iconified frame" -- that check fires
-     when the new frame's visibility is unset.  */
+     (delete-frame terminal-frame) sees it as "the other frame".
+     Without this the visibility flag stays zero and other_frames
+     bails with "sole visible or iconified frame".  */
   SET_FRAME_VISIBLE (f, true);
+
+  /* Add to the global frame list.  make_frame ONLY allocates the
+     struct; it doesn't add to Vframe_list.  Without this our new
+     frame is invisible to FOR_EACH_FRAME, so other_frames returns
+     false even though the frame exists, and delete-frame on the
+     initial terminal frame errors out.  */
+  Vframe_list = Fcons (frame, Vframe_list);
 
   f->terminal->reference_count++;
   f->after_make_frame = true;
