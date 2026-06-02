@@ -181,6 +181,9 @@ jobs:
           run xcrun simctl launch booted org.gnu.emacs
           log "--- sleeping 20s for Emacs init to do something ---"
           sleep 20
+          log "--- capturing simulator screenshot ---"
+          mkdir -p ci-diag
+          run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
           run xcrun simctl terminate booted org.gnu.emacs
 
           # Retrieve the app's data container path AFTER launch, so
@@ -248,6 +251,9 @@ jobs:
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add ci-diag/sim-install.txt
+          if [ -f ci-diag/sim-screenshot.png ]; then
+            git add ci-diag/sim-screenshot.png
+          fi
           git commit -m "ci-diag: simulator-install diagnostic results [skip ci]" || {
             echo "nothing to commit"; exit 0; }
           for i in 1 2 3 4; do
