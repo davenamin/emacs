@@ -47,10 +47,16 @@
 
 (declare-function ios-handle-args "iosfns.m")
 
-(defun ios-initialize-window-system (&optional _display)
-  "Initialize the iOS window system.
-This is a stub for the iOS port; the real initialization is added in
-follow-up commits."
+(add-to-list 'display-format-alist '(".*" . ios))
+
+(cl-defmethod window-system-initialization (&context (window-system ios)
+                                                     &optional _display)
+  "Set up the iOS window system.
+WINDOW-SYSTEM is `ios'.  DISPLAY is ignored.  This is a minimal stub
+that lets startup.el's window-system bring-up reach completion; the
+underlying terminal (the one ios_term_init will produce) is the
+actual graphics back end and is still being filled in."
+  (create-default-fontset)
   (setq ios-initialized t))
 
 (cl-defmethod handle-args-function (args &context (window-system ios))
