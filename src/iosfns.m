@@ -129,8 +129,15 @@ parameters without crashing.  */)
      dereferences a NULL pointer.  */
   register_font_driver (&ios_font_driver, f);
 
-  Lisp_Object font_obj
-    = font_open_by_name (f, build_unibyte_string ("Menlo-14"));
+  /* Call our driver's open_font hook directly, bypassing the
+     font_open_by_name matching machinery (which iterates registered
+     drivers and applies XLFD-style filtering that our minimal
+     entity does not satisfy out of the box).  We pass an entity
+     fabricated by our match hook -- the driver doesn't actually
+     consult its fields beyond passing pixel_size through.  */
+  Lisp_Object dummy_spec = Qnil;
+  Lisp_Object entity = ios_font_driver.match (f, dummy_spec);
+  Lisp_Object font_obj = ios_font_driver.open_font (f, entity, 14);
   if (NILP (font_obj))
     {
       delete_frame (frame, Qnoelisp);
