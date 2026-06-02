@@ -179,6 +179,18 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   return 0;
 }
 
+/* Cross-port required entry point: frame.c calls this from inside
+   #ifdef HAVE_WINDOW_SYSTEM to implement (set-mouse-position FRAME X Y).
+   iOS has no programmatic mouse cursor (touch input is event-driven,
+   not pointer-driven), so this is a documented no-op.  */
+void
+frame_set_mouse_pixel_position (struct frame *f, int pix_x, int pix_y)
+{
+  (void) f;
+  (void) pix_x;
+  (void) pix_y;
+}
+
 void
 syms_of_iosterm (void)
 {
