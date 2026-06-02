@@ -187,6 +187,127 @@ ios_dump_path (void)
 }
 
 
+/* ---- EmacsUIView -- the glyph canvas -------------------------- */
+
+/* Each draw_glyph_string call from the Emacs redisplay engine on
+   the background pthread shovels one of these into the view's
+   queue.  drawRect: replays them in order on the main thread.  The
+   queue is short-lived: it is cleared at the start of every
+   drawRect: so each redisplay tick produces a fresh frame.  */
+@interface EmacsDrawCommand : NSObject
+@property (nonatomic) CGFloat x;
+@property (nonatomic) CGFloat y;
+@property (nonatomic, copy) NSString *text;
+@property (nonatomic) CGFloat fontSize;
+@end
+@implementation EmacsDrawCommand
+@end
+
+@interface EmacsUIView : UIView
+- (void) appendCommand:(EmacsDrawCommand *)cmd;
+@end
+
+@implementation EmacsUIView
+{
+  NSMutableArray<EmacsDrawCommand *> *_pending;   /* protected by _lock */
+  NSLock *_lock;
+}
+
+- (instancetype) initWithFrame:(CGRect)frame
+{
+  if ((self = [super initWithFrame:frame]))
+    {
+      self.backgroundColor = UIColor.whiteColor;
+      self.opaque = YES;
+      _pending = [NSMutableArray array];
+      _lock = [[NSLock alloc] init];
+    }
+  return self;
+}
+
+/* Called from any thread.  We hold the lock only long enough to
+   append the command, then trigger setNeedsDisplay on the main
+   queue so drawRect: runs there.  */
+- (void) appendCommand:(EmacsDrawCommand *)cmd
+{
+  [_lock lock];
+  [_pending addObject:cmd];
+  [_lock unlock];
+  dispatch_async (dispatch_get_main_queue (), ^{
+    [self setNeedsDisplay];
+  });
+}
+
+- (void) drawRect:(CGRect)rect
+{
+  (void) rect;
+  CGContextRef cg = UIGraphicsGetCurrentContext ();
+  if (cg == NULL)
+    return;
+
+  /* Snapshot the queue under the lock, then render outside it so
+     drawing time doesn't block the bg pthread's next append.  */
+  [_lock lock];
+  NSArray<EmacsDrawCommand *> *snapshot = [_pending copy];
+  [_pending removeAllObjects];
+  [_lock unlock];
+
+  /* Flip the y-axis: Core Graphics has origin at bottom-left, UIKit
+     and Emacs both use top-left.  */
+  CGContextSaveGState (cg);
+  CGContextTranslateCTM (cg, 0, self.bounds.size.height);
+  CGContextScaleCTM (cg, 1, -1);
+
+  for (EmacsDrawCommand *cmd in snapshot)
+    {
+      if (cmd.text.length == 0)
+        continue;
+      UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
+                                                 weight:UIFontWeightRegular];
+      if (!font)
+        font = [UIFont systemFontOfSize:cmd.fontSize];
+      NSDictionary *attrs = @{
+        NSFontAttributeName: font,
+        NSForegroundColorAttributeName: UIColor.blackColor,
+      };
+      NSAttributedString *as = [[NSAttributedString alloc]
+                                 initWithString:cmd.text attributes:attrs];
+      CTLineRef line = CTLineCreateWithAttributedString
+        ((__bridge CFAttributedStringRef) as);
+      if (line == NULL)
+        continue;
+      /* CTLine draws with the baseline at the current text position;
+         translate y from top-left into baseline-from-bottom-left.  */
+      CGFloat baseline = self.bounds.size.height - cmd.y - font.ascender;
+      CGContextSetTextPosition (cg, cmd.x, baseline);
+      CTLineDraw (line, cg);
+      CFRelease (line);
+    }
+
+  CGContextRestoreGState (cg);
+}
+@end
+
+/* Weakly-held reference to the installed canvas so the C-side
+   draw_glyph_string can push commands without going through the
+   Lisp side.  Weak so it auto-clears at app shutdown.  */
+__weak static EmacsUIView *ios_canvas = nil;
+
+void
+ios_canvas_draw_text (double x, double y, const char *utf8, double font_size)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v == nil || utf8 == NULL)
+    return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.x = x;
+  cmd.y = y;
+  cmd.text = [NSString stringWithUTF8String:utf8];
+  cmd.fontSize = font_size > 0 ? font_size : 14;
+  [v appendCommand:cmd];
+}
+
+
 /* ---- Background-thread entry --------------------------------- */
 
 /* pthread entry that drives Emacs init.  Defined as a real function
@@ -258,23 +379,23 @@ ios_emacs_bg_thread (void *unused)
   title.translatesAutoresizingMaskIntoConstraints = NO;
   [vc.view addSubview:title];
 
-  /* Scrollable live log view filling the rest of the screen.  Each
-     ios_launch_log call appends a line here from the bg pthread via
-     main-queue dispatch.  Until a real EmacsUIView lands, this view
-     IS the user interface -- it makes "Emacs is initializing on a
-     background pthread" visible rather than presenting a black
-     screen that looks like a hang.  */
+  /* Split layout: log at the top third, EmacsUIView at the bottom
+     two thirds.  The log keeps the bring-up visibly progressing
+     while the canvas surfaces whatever the iOS redisplay engine
+     pushes through draw_glyph_string.  */
   UITextView *logView = [[UITextView alloc] init];
   logView.backgroundColor = UIColor.blackColor;
   logView.textColor = UIColor.greenColor;
-  logView.font = [UIFont fontWithName:@"Menlo" size:11];
+  logView.font = [UIFont fontWithName:@"Menlo" size:10];
   logView.editable = NO;
   logView.text = @"";
   logView.translatesAutoresizingMaskIntoConstraints = NO;
   [vc.view addSubview:logView];
 
-  /* Constraints: title at top, log fills the rest, both honor the
-     safe-area inset so the home-indicator and notch don't clip.  */
+  EmacsUIView *canvas = [[EmacsUIView alloc] initWithFrame:CGRectZero];
+  canvas.translatesAutoresizingMaskIntoConstraints = NO;
+  [vc.view addSubview:canvas];
+
   UILayoutGuide *safe = vc.view.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
       [title.topAnchor      constraintEqualToAnchor:safe.topAnchor
@@ -287,13 +408,17 @@ ios_emacs_bg_thread (void *unused)
                                               constant:8],
       [logView.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor],
       [logView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
-      [logView.bottomAnchor   constraintEqualToAnchor:safe.bottomAnchor],
+      [logView.heightAnchor   constraintEqualToAnchor:safe.heightAnchor
+                                           multiplier:0.30],
+      [canvas.topAnchor       constraintEqualToAnchor:logView.bottomAnchor
+                                              constant:8],
+      [canvas.leadingAnchor   constraintEqualToAnchor:safe.leadingAnchor],
+      [canvas.trailingAnchor  constraintEqualToAnchor:safe.trailingAnchor],
+      [canvas.bottomAnchor    constraintEqualToAnchor:safe.bottomAnchor],
   ]];
 
-  /* Install the log view BEFORE makeKeyAndVisible so the
-     ios_launch_log calls after this point find it on first
-     dispatch.  */
   ios_log_view = logView;
+  ios_canvas   = canvas;
 
   self.window.rootViewController = vc;
   [self.window makeKeyAndVisible];

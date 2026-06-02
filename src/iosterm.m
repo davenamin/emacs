@@ -70,10 +70,73 @@ static bool ios_defined_color (struct frame *f, const char *color_name,
    complete without actually drawing anything visible.  The bring-up
    trades visible glyphs for a non-crashing main loop; a CALayer
    renderer will replace these one-by-one.  */
+/* The canvas-side text sink is implemented in ios.m so this file
+   stays free of UIKit imports.  See ios_canvas_draw_text there.  */
+extern void ios_canvas_draw_text (double x, double y, const char *utf8,
+                                  double font_size);
+
+/* Decode a glyph string's char2b array (per-glyph code points; our
+   minimal font driver passes through plain Unicode codepoints) into
+   a UTF-8 char buffer.  Returns a newly-malloc'd string; caller frees.
+   Returns NULL on memory failure.  */
+static char *
+ios_glyph_string_to_utf8 (struct glyph_string *s)
+{
+  if (s == NULL || s->char2b == NULL || s->nchars <= 0)
+    return NULL;
+  /* Upper bound: each Unicode codepoint encodes to at most 4 UTF-8
+     bytes; plus one NUL.  */
+  size_t cap = (size_t) s->nchars * 4 + 1;
+  char *buf = xmalloc (cap);
+  size_t pos = 0;
+  for (int i = 0; i < s->nchars; i++)
+    {
+      unsigned cp = s->char2b[i];
+      if (cp == 0)
+        continue;
+      if (cp < 0x80)
+        buf[pos++] = (char) cp;
+      else if (cp < 0x800)
+        {
+          buf[pos++] = (char) (0xc0 | (cp >> 6));
+          buf[pos++] = (char) (0x80 | (cp & 0x3f));
+        }
+      else if (cp < 0x10000)
+        {
+          buf[pos++] = (char) (0xe0 | (cp >> 12));
+          buf[pos++] = (char) (0x80 | ((cp >> 6) & 0x3f));
+          buf[pos++] = (char) (0x80 | (cp & 0x3f));
+        }
+      else
+        {
+          buf[pos++] = (char) (0xf0 | (cp >> 18));
+          buf[pos++] = (char) (0x80 | ((cp >> 12) & 0x3f));
+          buf[pos++] = (char) (0x80 | ((cp >> 6) & 0x3f));
+          buf[pos++] = (char) (0x80 | (cp & 0x3f));
+        }
+    }
+  buf[pos] = '\0';
+  return buf;
+}
+
+/* Send a glyph string to the iOS canvas.  At this stage the font
+   driver passes Unicode codepoints through as "glyph ids", so we
+   reassemble them as UTF-8 and let the canvas render via Core Text.
+   The geometry comes straight from struct glyph_string.  */
 static void
 ios_noop_draw_glyph_string (struct glyph_string *s)
 {
-  (void) s;
+  char *utf8 = ios_glyph_string_to_utf8 (s);
+  if (utf8 == NULL || *utf8 == '\0')
+    {
+      if (utf8) xfree (utf8);
+      return;
+    }
+  double font_size = (s->font && s->font->pixel_size > 0)
+                     ? (double) s->font->pixel_size
+                     : 14.0;
+  ios_canvas_draw_text ((double) s->x, (double) s->y, utf8, font_size);
+  xfree (utf8);
 }
 
 static void
