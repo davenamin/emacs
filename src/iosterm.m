@@ -55,6 +55,12 @@ struct ios_display_info *x_display_list = NULL;
    EmacsUIView).  */
 static struct redisplay_interface ios_redisplay_interface = {0};
 
+/* Forward declarations for terminal hooks defined further down in
+   this file but installed inside ios_term_init.  */
+static bool ios_defined_color (struct frame *f, const char *color_name,
+                               Emacs_Color *color, bool alloc_p,
+                               bool make_index);
+
 /* Translate a port-specific keysym to its Lisp symbol name.
    keyboard.c's modify_event_symbol calls this when it can't find a
    keysym in the prebuilt tables.  iOS doesn't surface raw keysyms
@@ -198,7 +204,7 @@ frame_set_mouse_pixel_position (struct frame *f, int pix_x, int pix_y)
    minimal version recognises black, white, and #rrggbb literals;
    anything else returns false and the caller falls back to the
    frame's foreground/background pixel.  */
-bool
+static bool
 ios_defined_color (struct frame *f, const char *color_name,
                    Emacs_Color *color, bool alloc_p, bool make_index)
 {
