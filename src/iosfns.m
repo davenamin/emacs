@@ -116,6 +116,15 @@ parameters without crashing.  */)
   f->output_data.ios->cursor_pixel = 0x000000;
   f->output_data.ios->cursor_foreground_pixel = 0xffffff;
 
+  /* Stash foreground / background COLOR NAMES in param_alist so
+     realize_default_face finds them: when FRAME_WINDOW_P (f) is
+     true, the only fallback for an unspecified default face
+     foreground / background is the corresponding entry in
+     param_alist; otherwise realize_default_face returns false and
+     init_frame_faces aborts.  */
+  store_frame_param (f, Qforeground_color, build_string ("black"));
+  store_frame_param (f, Qbackground_color, build_string ("white"));
+
   /* Fontset starts unset; -1 is the "no fontset" sentinel that
      fontset.c recognizes.  */
   FRAME_FONTSET (f) = -1;
