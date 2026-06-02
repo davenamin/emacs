@@ -369,6 +369,12 @@
 ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
 ;; which happens while processing 'elisp-flymake-byte-compile', when
 ;; elisp-mode.elc is outdated.
+;; DEBUG (iOS bring-up): force-load flymake here so that any error
+;; during flymake.el's own load surfaces with a proper "Loading
+;; .../flymake.el" stdout trail, rather than being silently caught
+;; by the autoload-triggered macroexpand of (flymake-log ...) inside
+;; elisp-mode.el's elisp-flymake-byte-compile.
+(load "progmodes/flymake")
 (load "progmodes/elisp-mode")
 
 ;; Preload some constants and floating point functions.
