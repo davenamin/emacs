@@ -253,6 +253,15 @@ jobs:
           set +e
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The Emacs pre-commit hook rejects trailing whitespace in
+          # the staged file (the diagnostic output captures lines from
+          # configure/make stdout that legitimately have spaces at EOL).
+          # Strip them defensively before adding.  The screenshot is
+          # binary so no whitespace concerns.
+          if [ -f ci-diag/sim-install.txt ]; then
+            sed -i '' -E 's/[[:space:]]+$//' ci-diag/sim-install.txt 2>/dev/null \
+              || sed -i -E 's/[[:space:]]+$//' ci-diag/sim-install.txt
+          fi
           git add ci-diag/sim-install.txt
           if [ -f ci-diag/sim-screenshot.png ]; then
             git add ci-diag/sim-screenshot.png
