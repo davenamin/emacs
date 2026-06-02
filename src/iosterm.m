@@ -191,13 +191,10 @@ frame_set_mouse_pixel_position (struct frame *f, int pix_x, int pix_y)
   (void) pix_y;
 }
 
-/* Backing storage for the DEFVAR_BOOLs below.  The values themselves
-   are only consulted by ports that draw text -- iOS does not draw
-   anything yet -- but cus-start.el bails ("not bound") during loadup
-   if these symbols are unbound while Fx_create_frame is fboundp.  */
-static bool x_use_underline_position_properties;
-static bool x_underline_at_descent_line;
-static bool x_stretch_cursor_p;
+/* Cross-port "x-*" variables: cus-start.el bails ("not bound")
+   during loadup if these symbols are unbound while Fx_create_frame
+   is fboundp.  DEFVAR_BOOL's expansion synthesizes the backing
+   storage in globals.h -- declaring it by hand collides with that.  */
 
 void
 syms_of_iosterm (void)
@@ -218,10 +215,6 @@ syms_of_iosterm (void)
      doc: /* SKIP: real doc in xterm.c.  */);
   x_underline_at_descent_line = false;
 
-  DEFVAR_BOOL ("x-stretch-cursor",
-               x_stretch_cursor_p,
-     doc: /* SKIP: real doc in xterm.c.  */);
-  x_stretch_cursor_p = false;
 }
 
 #endif /* HAVE_IOS */
