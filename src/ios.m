@@ -45,6 +45,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -159,6 +160,40 @@ ios_dump_path (void)
 }
 
 
+/* ---- Background-thread entry --------------------------------- */
+
+/* pthread entry that drives Emacs init.  Defined as a real function
+   rather than a dispatch_async block so we can guarantee a 16 MB
+   stack -- see the pthread_create call in didFinishLaunchingWithOptions
+   for the SIGILL-on-stack-overflow rationale.  Returns NULL; the
+   detached pthread implicitly cleans itself up when ios_main eventually
+   exits (which it never does in normal operation).  */
+static void *
+ios_emacs_bg_thread (void *unused)
+{
+  (void) unused;
+  ios_launch_log (@"emacs-bg: dispatched, about to call ios_main");
+
+  /* Synthesize argc/argv from NSProcessInfo.  argv[0] is the
+     process path Apple's launcher gave us, which Emacs uses to
+     locate its install directory.  */
+  NSArray<NSString *> *args = NSProcessInfo.processInfo.arguments;
+  int argc_ = (int) args.count;
+  char **argv_ = malloc (sizeof (char *) * (argc_ + 1));
+  for (int i = 0; i < argc_; i++)
+    argv_[i] = strdup (args[i].UTF8String);
+  argv_[argc_] = NULL;
+  ios_launch_log ([NSString stringWithFormat:
+                   @"emacs-bg: argc=%d argv[0]=%s",
+                   argc_, argv_[0] ?: "(null)"]);
+
+  int rc = ios_main (argc_, argv_);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"emacs-bg: ios_main returned %d", rc]);
+  return NULL;
+}
+
+
 /* ---- EmacsAppDelegate ----------------------------------------- */
 
 /* UIApplicationDelegate that boots Emacs.  Defined in this binary so
@@ -209,32 +244,24 @@ ios_dump_path (void)
   [self.window makeKeyAndVisible];
   ios_launch_log (@"AppDelegate window visible (red placeholder)");
 
-  /* Kick off Emacs initialization on a background queue.  ios_main
+  /* Kick off Emacs initialization on a dedicated pthread.  ios_main
      never returns (Emacs's main loop runs forever), so blocking the
      UI thread on it would deadlock UIKit and trip the iOS launch
-     watchdog.  The launch log will show how far into Emacs init we
-     get before any hang.  */
-  dispatch_async (dispatch_get_global_queue (DISPATCH_QUEUE_PRIORITY_DEFAULT, 0),
-                  ^{
-    ios_launch_log (@"emacs-bg: dispatched, about to call ios_main");
-
-    /* Synthesize argc/argv from NSProcessInfo.  argv[0] is the
-       process path Apple's launcher gave us, which Emacs uses to
-       locate its install directory.  */
-    NSArray<NSString *> *args = NSProcessInfo.processInfo.arguments;
-    int argc_ = (int) args.count;
-    char **argv_ = malloc (sizeof (char *) * (argc_ + 1));
-    for (int i = 0; i < argc_; i++)
-      argv_[i] = strdup (args[i].UTF8String);
-    argv_[argc_] = NULL;
-    ios_launch_log ([NSString stringWithFormat:
-                     @"emacs-bg: argc=%d argv[0]=%s",
-                     argc_, argv_[0] ?: "(null)"]);
-
-    int rc = ios_main (argc_, argv_);
-    ios_launch_log ([NSString stringWithFormat:
-                     @"emacs-bg: ios_main returned %d", rc]);
-  });
+     watchdog.
+     A dispatch_async background queue has only ~512 KB of stack on
+     iOS, which the Emacs Lisp interpreter blows through in ~500
+     levels of recursion -- loadup.el's preload pass hit a SIGILL
+     stack overflow inside Fassq during eval_sub recursion.  Use a
+     pthread with an explicit 16 MB stack instead.  */
+  pthread_attr_t attr;
+  pthread_attr_init (&attr);
+  pthread_attr_setstacksize (&attr, 16 * 1024 * 1024);
+  pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+  pthread_t tid;
+  int pterr = pthread_create (&tid, &attr, ios_emacs_bg_thread, NULL);
+  pthread_attr_destroy (&attr);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"AppDelegate: pthread_create rc=%d", pterr]);
 
   ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: returning YES");
   return YES;
