@@ -138,6 +138,12 @@ parameters without crashing.  */)
      because realize_default_face's XSETFONT(font_object, FRAME_FONT(f))
      dereferences a NULL pointer.  */
   register_font_driver (&ios_font_driver, f);
+  /* Activate the driver.  register_font_driver sets list->on = 0
+     by default; font_list_entities skips drivers whose ->on is 0,
+     so without this call font_load_for_lface returns nil and
+     realize_face later faceplants on a NULL font.  Passing Qt
+     activates every registered driver.  */
+  font_update_drivers (f, Qt);
 
   /* Call our driver's open_font hook directly, bypassing the
      font_open_by_name matching machinery (which iterates registered
