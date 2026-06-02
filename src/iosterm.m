@@ -48,6 +48,20 @@ extern void ios_launch_log (NSString *msg);
    ios_term_init prepends to it.  */
 struct ios_display_info *x_display_list = NULL;
 
+/* Per-port frame parameter handler table.  gui_set_frame_parameters_1
+   indexes this by `x-frame-parameter' symbol index; without a non-
+   NULL pointer here the indexing dereferences NULL.  Every slot is
+   left NULL for now; the iOS port doesn't yet implement any
+   parameter-specific frame attribute setters.  Size of 64 covers all
+   currently-known indices in src/frame.c's `frame_parms' table.  */
+static frame_parm_handler ios_frame_parm_handlers[64];
+
+/* Forward declarations for terminal hooks defined further down in
+   this file but installed inside ios_term_init.  */
+static bool ios_defined_color (struct frame *f, const char *color_name,
+                               Emacs_Color *color, bool alloc_p,
+                               bool make_index);
+
 /* Redisplay interface for iOS frames.  Wire up the shared gui_*
    helpers (defined in xdisp.c) for the produce/write/insert/
    clear/glyph paths so init_iterator's first call to PRODUCE_GLYPHS
@@ -56,9 +70,6 @@ struct ios_display_info *x_display_list = NULL;
    the EmacsUIView has a real Core Graphics back-end.  */
 static struct redisplay_interface ios_redisplay_interface =
   {
-    /* frame_parm_handlers omitted (NULL pointer); the Lisp-side
-       frame parameter machinery just won't call port-specific
-       setters yet.  */
     ios_frame_parm_handlers,
     gui_produce_glyphs,
     gui_write_glyphs,
@@ -75,20 +86,6 @@ static struct redisplay_interface ios_redisplay_interface =
     /* Window-system-only hooks below stay NULL until the EmacsUIView
        gains a real renderer.  */
   };
-
-/* Forward declarations for terminal hooks defined further down in
-   this file but installed inside ios_term_init.  */
-static bool ios_defined_color (struct frame *f, const char *color_name,
-                               Emacs_Color *color, bool alloc_p,
-                               bool make_index);
-
-/* Per-port frame parameter handler table.  gui_set_frame_parameters_1
-   indexes this by `x-frame-parameter' symbol index; without a non-
-   NULL pointer here the indexing dereferences NULL.  Every slot is
-   left NULL for now; the iOS port doesn't yet implement any
-   parameter-specific frame attribute setters.  Size of 64 covers all
-   currently-known indices in src/frame.c's `frame_parms' table.  */
-static frame_parm_handler ios_frame_parm_handlers[64];
 
 /* Translate a port-specific keysym to its Lisp symbol name.
    keyboard.c's modify_event_symbol calls this when it can't find a
