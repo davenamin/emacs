@@ -100,9 +100,13 @@ ios_font_one_entity (void)
   ASET (entity, FONT_SIZE_INDEX, make_fixnum (0));
   ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
   ASET (entity, FONT_SPACING_INDEX, make_fixnum (FONT_SPACING_MONO));
-  ASET (entity, FONT_WEIGHT_INDEX, make_fixnum (FONT_WEIGHT_NORMAL));
-  ASET (entity, FONT_SLANT_INDEX, make_fixnum (FONT_SLANT_NORMAL));
-  ASET (entity, FONT_WIDTH_INDEX, make_fixnum (FONT_WIDTH_NORMAL));
+  /* Use the symbolic Qnormal -> numeric style packing helper.
+     There are no FONT_*_NORMAL plain integer constants; weight/slant/
+     width style values are encoded in the upper byte of the property
+     by font_style_to_value applied to Qnormal.  */
+  FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX, Qnormal);
+  FONT_SET_STYLE (entity, FONT_SLANT_INDEX, Qnormal);
+  FONT_SET_STYLE (entity, FONT_WIDTH_INDEX, Qnormal);
   return entity;
 }
 
