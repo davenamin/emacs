@@ -158,6 +158,29 @@ ios_noop_default_font_parameter (struct frame *f, Lisp_Object parms)
   (void) f; (void) parms;
 }
 
+static void
+ios_noop_after_update_window_line (struct window *w,
+                                   struct glyph_row *desired_row)
+{
+  (void) w; (void) desired_row;
+}
+
+static void
+ios_noop_update_window_begin (struct window *w) { (void) w; }
+static void
+ios_noop_update_window_end (struct window *w, bool cursor_on_p,
+                            bool mouse_face_overwritten_p)
+{
+  (void) w; (void) cursor_on_p; (void) mouse_face_overwritten_p;
+}
+static void
+ios_noop_flush_display (struct frame *f) { (void) f; }
+static void
+ios_noop_scroll_run (struct window *w, struct run *run)
+{
+  (void) w; (void) run;
+}
+
 /* Redisplay interface for iOS frames.  Wire up the shared gui_*
    helpers (defined in xdisp.c) for the produce/write/insert/
    clear/glyph paths so init_iterator's first call to PRODUCE_GLYPHS
@@ -171,11 +194,11 @@ static struct redisplay_interface ios_redisplay_interface =
     gui_write_glyphs,
     gui_insert_glyphs,
     gui_clear_end_of_line,
-    NULL,                            /* scroll_run_hook */
-    NULL,                            /* after_update_window_line_hook */
-    NULL,                            /* update_window_begin_hook */
-    NULL,                            /* update_window_end_hook */
-    NULL,                            /* flush_display */
+    ios_noop_scroll_run,
+    ios_noop_after_update_window_line,
+    ios_noop_update_window_begin,
+    ios_noop_update_window_end,
+    ios_noop_flush_display,
     gui_clear_window_mouse_face,
     gui_get_glyph_overhangs,
     gui_fix_overlapping_area,
