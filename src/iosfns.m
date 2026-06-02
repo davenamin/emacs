@@ -121,14 +121,14 @@ parameters without crashing.  */)
      stay 1x1 until a font is set; cols/rows will be wildly wrong
      until then, but they need SOME value so adjust_frame_size
      doesn't divide by zero.  */
-  SET_FRAME_COLS (f, 80);
-  SET_FRAME_LINES (f, 25);
+  FRAME_COLS (f) = 80;
+  FRAME_LINES (f) = 25;
 
   f->terminal->reference_count++;
-  store_in_alist (&parms, Qwindow_system, Qios);
   f->after_make_frame = true;
 
-  (void) kb; /* silence unused warning until kb is consumed below */
+  (void) kb;    /* silence unused warning until kb is consumed below */
+  (void) parms; /* same; parms is parsed for real in a follow-up */
   return frame;
 }
 
