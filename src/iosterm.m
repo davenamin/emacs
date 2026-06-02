@@ -48,12 +48,33 @@ extern void ios_launch_log (NSString *msg);
    ios_term_init prepends to it.  */
 struct ios_display_info *x_display_list = NULL;
 
-/* Redisplay interface for iOS frames.  All hooks are NULL stubs for
-   now -- generic redisplay code checks for NULL before invoking
-   each, so the bring-up survives without a real backend.  Future
-   commits will fill these in (CALayer-backed drawing in iosterm.m's
-   EmacsUIView).  */
-static struct redisplay_interface ios_redisplay_interface = {0};
+/* Redisplay interface for iOS frames.  Wire up the shared gui_*
+   helpers (defined in xdisp.c) for the produce/write/insert/
+   clear/glyph paths so init_iterator's first call to PRODUCE_GLYPHS
+   doesn't NULL-deref.  CALayer-backed drawing (draw_glyph_string,
+   draw_window_cursor, ...) is still NULL; we'll fill those in once
+   the EmacsUIView has a real Core Graphics back-end.  */
+static struct redisplay_interface ios_redisplay_interface =
+  {
+    /* frame_parm_handlers omitted (NULL pointer); the Lisp-side
+       frame parameter machinery just won't call port-specific
+       setters yet.  */
+    NULL,                            /* frame_parm_handlers */
+    gui_produce_glyphs,
+    gui_write_glyphs,
+    gui_insert_glyphs,
+    gui_clear_end_of_line,
+    NULL,                            /* scroll_run_hook */
+    NULL,                            /* after_update_window_line_hook */
+    NULL,                            /* update_window_begin_hook */
+    NULL,                            /* update_window_end_hook */
+    NULL,                            /* flush_display */
+    gui_clear_window_mouse_face,
+    gui_get_glyph_overhangs,
+    gui_fix_overlapping_area,
+    /* Window-system-only hooks below stay NULL until the EmacsUIView
+       gains a real renderer.  */
+  };
 
 /* Forward declarations for terminal hooks defined further down in
    this file but installed inside ios_term_init.  */
