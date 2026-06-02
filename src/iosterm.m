@@ -62,6 +62,102 @@ static bool ios_defined_color (struct frame *f, const char *color_name,
                                Emacs_Color *color, bool alloc_p,
                                bool make_index);
 
+/* No-op redisplay hooks.  Generic redisplay reaches into the
+   per-port draw functions via FRAME_RIF (f)->draw_glyph_string etc.;
+   any NULL slot causes a NULL function-pointer SIGSEGV on the first
+   redisplay tick that wants to render.  These stubs accept the
+   arguments and return, so update_window_line / draw_glyphs etc.
+   complete without actually drawing anything visible.  The bring-up
+   trades visible glyphs for a non-crashing main loop; a CALayer
+   renderer will replace these one-by-one.  */
+static void
+ios_noop_draw_glyph_string (struct glyph_string *s)
+{
+  (void) s;
+}
+
+static void
+ios_noop_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
+                             struct draw_fringe_bitmap_params *p)
+{
+  (void) w; (void) row; (void) p;
+}
+
+static void
+ios_noop_define_fringe_bitmap (int which, unsigned short *bits, int h, int wd)
+{
+  (void) which; (void) bits; (void) h; (void) wd;
+}
+
+static void
+ios_noop_destroy_fringe_bitmap (int which)
+{
+  (void) which;
+}
+
+static void
+ios_noop_compute_glyph_string_overhangs (struct glyph_string *s)
+{
+  (void) s;
+}
+
+static void
+ios_noop_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
+{
+  (void) f; (void) cursor;
+}
+
+static void
+ios_noop_clear_frame_area (struct frame *f, int x, int y, int width, int height)
+{
+  (void) f; (void) x; (void) y; (void) width; (void) height;
+}
+
+static void
+ios_noop_clear_under_internal_border (struct frame *f)
+{
+  (void) f;
+}
+
+static void
+ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
+                             int x, int y, enum text_cursor_kinds cursor_type,
+                             int cursor_width, bool on_p, bool active_p)
+{
+  (void) w; (void) glyph_row; (void) x; (void) y;
+  (void) cursor_type; (void) cursor_width; (void) on_p; (void) active_p;
+}
+
+static void
+ios_noop_draw_vertical_window_border (struct window *w, int x, int y_0, int y_1)
+{
+  (void) w; (void) x; (void) y_0; (void) y_1;
+}
+
+static void
+ios_noop_draw_window_divider (struct window *w, int x_0, int x_1,
+                              int y_0, int y_1)
+{
+  (void) w; (void) x_0; (void) x_1; (void) y_0; (void) y_1;
+}
+
+static void
+ios_noop_shift_glyphs_for_insert (struct frame *f, int x, int y, int width,
+                                  int height, int shift_by)
+{
+  (void) f; (void) x; (void) y; (void) width; (void) height; (void) shift_by;
+}
+
+static void
+ios_noop_show_hourglass (struct frame *f) { (void) f; }
+static void
+ios_noop_hide_hourglass (struct frame *f) { (void) f; }
+static void
+ios_noop_default_font_parameter (struct frame *f, Lisp_Object parms)
+{
+  (void) f; (void) parms;
+}
+
 /* Redisplay interface for iOS frames.  Wire up the shared gui_*
    helpers (defined in xdisp.c) for the produce/write/insert/
    clear/glyph paths so init_iterator's first call to PRODUCE_GLYPHS
@@ -83,8 +179,21 @@ static struct redisplay_interface ios_redisplay_interface =
     gui_clear_window_mouse_face,
     gui_get_glyph_overhangs,
     gui_fix_overlapping_area,
-    /* Window-system-only hooks below stay NULL until the EmacsUIView
-       gains a real renderer.  */
+    ios_noop_draw_fringe_bitmap,
+    ios_noop_define_fringe_bitmap,
+    ios_noop_destroy_fringe_bitmap,
+    ios_noop_compute_glyph_string_overhangs,
+    ios_noop_draw_glyph_string,
+    ios_noop_define_frame_cursor,
+    ios_noop_clear_frame_area,
+    ios_noop_clear_under_internal_border,
+    ios_noop_draw_window_cursor,
+    ios_noop_draw_vertical_window_border,
+    ios_noop_draw_window_divider,
+    ios_noop_shift_glyphs_for_insert,
+    ios_noop_show_hourglass,
+    ios_noop_hide_hourglass,
+    ios_noop_default_font_parameter,
   };
 
 /* Translate a port-specific keysym to its Lisp symbol name.
