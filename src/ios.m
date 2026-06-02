@@ -77,26 +77,53 @@ ios_documents_path (NSString *name)
   return [dirs[0] stringByAppendingPathComponent:name];
 }
 
+/* Weakly-held reference to the on-screen log view installed by the
+   AppDelegate.  ios_launch_log appends each message here too so the
+   user can see live bring-up progress in the simulator / on a device,
+   not just in the file logs.  Weak so the view can deallocate
+   normally when the AppDelegate tears down at app termination.  */
+__weak static UITextView *ios_log_view = nil;
+
 /* Append a timestamped MSG line to Documents/emacs-launch.log, and
    echo via NSLog.  Two-channel logging on purpose: NSLog reaches
    `simctl launch --console` and the unified log; the file remains
    reachable via the Files app or by spelunking through
    ~/Library/Developer/CoreSimulator/Devices/<udid>/data/Containers/
-   Data/Application/<app-uuid>/Documents/.  */
+   Data/Application/<app-uuid>/Documents/.
+
+   Third channel: the on-screen UITextView (if installed) gets the
+   line appended on the main thread.  This is what makes "the app
+   launches but hangs" visibly NOT a hang -- the user sees the
+   running progress trail through Emacs init.  */
 void
 ios_launch_log (NSString *msg)
 {
   NSLog (@"emacs-launch: %@", msg);
   NSString *path = ios_documents_path (@"emacs-launch.log");
-  if (!path)
-    return;
-  NSString *line = [NSString stringWithFormat:@"%@ %@\n",
-                    [NSDate date], msg];
-  FILE *f = fopen (path.UTF8String, "a");
-  if (f != NULL)
+  if (path)
     {
-      fputs (line.UTF8String, f);
-      fclose (f);
+      NSString *line = [NSString stringWithFormat:@"%@ %@\n",
+                        [NSDate date], msg];
+      FILE *f = fopen (path.UTF8String, "a");
+      if (f != NULL)
+        {
+          fputs (line.UTF8String, f);
+          fclose (f);
+        }
+    }
+
+  /* Ship to the on-screen log view (if any).  Main-queue dispatch so
+     UIKit work happens on the UI thread regardless of caller.  */
+  UITextView *view = ios_log_view;
+  if (view != nil)
+    {
+      NSString *line = [NSString stringWithFormat:@"%@\n", msg];
+      dispatch_async (dispatch_get_main_queue (), ^{
+        view.text = [view.text stringByAppendingString:line];
+        /* Auto-scroll to the bottom so the latest entry is visible.  */
+        NSRange end = NSMakeRange (view.text.length, 0);
+        [view scrollRangeToVisible:end];
+      });
     }
 }
 
@@ -216,33 +243,61 @@ ios_emacs_bg_thread (void *unused)
   ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: enter");
 
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
-  self.window.backgroundColor = UIColor.systemRedColor;
+  self.window.backgroundColor = UIColor.blackColor;
 
   UIViewController *vc = [[UIViewController alloc] init];
-  vc.view.backgroundColor = UIColor.systemRedColor;
+  vc.view.backgroundColor = UIColor.blackColor;
 
-  UILabel *label = [[UILabel alloc] init];
-  label.text = @"Emacs is loading...";
-  label.textColor = UIColor.whiteColor;
-  label.font = [UIFont systemFontOfSize:28];
-  label.textAlignment = NSTextAlignmentCenter;
-  label.numberOfLines = 0;
-  label.translatesAutoresizingMaskIntoConstraints = NO;
-  [vc.view addSubview:label];
+  /* Title strip across the top, so the launch image is unambiguously
+     "Emacs is starting" rather than "the simulator is broken".  */
+  UILabel *title = [[UILabel alloc] init];
+  title.text = @"GNU Emacs (iOS bring-up)";
+  title.textColor = UIColor.whiteColor;
+  title.font = [UIFont boldSystemFontOfSize:20];
+  title.textAlignment = NSTextAlignmentCenter;
+  title.translatesAutoresizingMaskIntoConstraints = NO;
+  [vc.view addSubview:title];
+
+  /* Scrollable live log view filling the rest of the screen.  Each
+     ios_launch_log call appends a line here from the bg pthread via
+     main-queue dispatch.  Until a real EmacsUIView lands, this view
+     IS the user interface -- it makes "Emacs is initializing on a
+     background pthread" visible rather than presenting a black
+     screen that looks like a hang.  */
+  UITextView *logView = [[UITextView alloc] init];
+  logView.backgroundColor = UIColor.blackColor;
+  logView.textColor = UIColor.greenColor;
+  logView.font = [UIFont fontWithName:@"Menlo" size:11];
+  logView.editable = NO;
+  logView.text = @"";
+  logView.translatesAutoresizingMaskIntoConstraints = NO;
+  [vc.view addSubview:logView];
+
+  /* Constraints: title at top, log fills the rest, both honor the
+     safe-area inset so the home-indicator and notch don't clip.  */
+  UILayoutGuide *safe = vc.view.safeAreaLayoutGuide;
   [NSLayoutConstraint activateConstraints:@[
-      [label.centerXAnchor constraintEqualToAnchor:vc.view.centerXAnchor],
-      [label.centerYAnchor constraintEqualToAnchor:vc.view.centerYAnchor],
-      [label.leadingAnchor
-        constraintGreaterThanOrEqualToAnchor:vc.view.leadingAnchor
-                                    constant:20],
-      [label.trailingAnchor
-        constraintLessThanOrEqualToAnchor:vc.view.trailingAnchor
-                                 constant:-20],
+      [title.topAnchor      constraintEqualToAnchor:safe.topAnchor
+                                           constant:8],
+      [title.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor
+                                           constant:8],
+      [title.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor
+                                           constant:-8],
+      [logView.topAnchor      constraintEqualToAnchor:title.bottomAnchor
+                                              constant:8],
+      [logView.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor],
+      [logView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+      [logView.bottomAnchor   constraintEqualToAnchor:safe.bottomAnchor],
   ]];
+
+  /* Install the log view BEFORE makeKeyAndVisible so the
+     ios_launch_log calls after this point find it on first
+     dispatch.  */
+  ios_log_view = logView;
 
   self.window.rootViewController = vc;
   [self.window makeKeyAndVisible];
-  ios_launch_log (@"AppDelegate window visible (red placeholder)");
+  ios_launch_log (@"AppDelegate window visible (log view installed)");
 
   /* Kick off Emacs initialization on a dedicated pthread.  ios_main
      never returns (Emacs's main loop runs forever), so blocking the
