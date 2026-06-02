@@ -185,6 +185,12 @@ parameters without crashing.  */)
      pixels are non-sentinel.  */
   init_frame_faces (f);
 
+  /* Mark the frame as visible so frame-initialize's
+     (delete-frame terminal-frame) doesn't bail with "Attempt to
+     delete the sole visible or iconified frame" -- that check fires
+     when the new frame's visibility is unset.  */
+  SET_FRAME_VISIBLE (f, true);
+
   f->terminal->reference_count++;
   f->after_make_frame = true;
 
