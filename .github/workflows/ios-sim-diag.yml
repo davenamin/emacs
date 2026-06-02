@@ -226,16 +226,19 @@ jobs:
           log ""
           log "--- crash reports ---"
           for d in \
+            "$HOME/Library/Logs/CoreSimulator/$DEV/CrashReporter" \
             "$HOME/Library/Logs/CoreSimulator/$DEV" \
             "$HOME/Library/Logs/CoreSimulator/CrashReporter/Standalone" \
             "$HOME/Library/Logs/DiagnosticReports"; do
-            log "  scanning $d"
+            log "  scanning $d (recursive)"
             if [ -d "$d" ]; then
-              ls -lt "$d" 2>/dev/null | head -10 >> "$OUT"
-              last=$(ls -t "$d"/emacs* 2>/dev/null | head -1)
+              find "$d" -maxdepth 3 -name 'emacs*' -type f 2>/dev/null \
+                | head -5 >> "$OUT"
+              last=$(find "$d" -maxdepth 3 -name 'emacs*.ips' -type f \
+                       2>/dev/null | head -1)
               if [ -n "$last" ]; then
                 log "  >>> most recent emacs report: $last"
-                head -120 "$last" >> "$OUT" 2>&1
+                head -240 "$last" >> "$OUT" 2>&1
               fi
             fi
           done
