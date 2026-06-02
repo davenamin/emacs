@@ -411,6 +411,14 @@ This function runs the abnormal hook `move-frame-functions'."
 ;; one to display messages while loading the init file.
 (defun frame-initialize ()
   "Create an initial frame if necessary."
+  ;; iOS bring-up: skip the make-frame dispatch entirely.  Without
+  ;; iosfns.m's Fx_create_frame the (make-frame ...) call dies with
+  ;; "Symbol's function definition is void: x-create-frame".  The
+  ;; existing output_initial frame stays as the selected frame; later
+  ;; commits will replace this short-circuit with a real iOS
+  ;; frame-creation path.
+  (if (featurep 'ios)
+      nil
   ;; Are we actually running under a window system at all?
   (if (and initial-window-system
 	   (not noninteractive)
@@ -442,7 +450,7 @@ This function runs the abnormal hook `move-frame-functions'."
 	;; At this point, we know that we have a frame open, so we
 	;; can delete the terminal frame.
 	(delete-frame terminal-frame)
-	(setq terminal-frame nil))))
+	(setq terminal-frame nil)))))
 
 (defvar frame-notice-user-settings t
   "Non-nil means function `frame-notice-user-settings' wasn't run yet.")
