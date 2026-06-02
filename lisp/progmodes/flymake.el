@@ -353,15 +353,21 @@ LEVEL is passed to `display-warning', which is used to display
 the warning.  If this form is included in a file,
 the generated warning contains an indication of the file that
 generated it."
-  (let* ((file (if (fboundp 'macroexp-file-name)
-                   (macroexp-file-name)
-                 (and (not load-file-name)
-                      (bound-and-true-p byte-compile-current-file))))
-         (sublog (if (stringp file)
-                     (intern
-                      (file-name-nondirectory
-                       (file-name-sans-extension file))))))
-    `(flymake--log-1 ,level ',sublog ,msg ,@args)))
+  ;; DEBUG (iOS bring-up): bypass the macroexp-file-name +
+  ;; file-name-sans-extension chain entirely.  Original code was:
+  ;;   (let* ((file (if (fboundp 'macroexp-file-name)
+  ;;                    (macroexp-file-name)
+  ;;                  (and (not load-file-name)
+  ;;                       (bound-and-true-p byte-compile-current-file))))
+  ;;          (sublog (if (stringp file)
+  ;;                      (intern
+  ;;                       (file-name-nondirectory
+  ;;                        (file-name-sans-extension file))))))
+  ;;     `(flymake--log-1 ,level ',sublog ,msg ,@args))
+  ;; If loadup proceeds past elisp-mode.el now, the (wrong-type-argument
+  ;; stringp nil) signal lives somewhere in the file-name-sans-extension
+  ;; / find-file-name-handler chain on iOS.
+  `(flymake--log-1 ,level nil ,msg ,@args))
 
 (defun flymake-error (text &rest args)
   "Format TEXT with ARGS and signal an error for Flymake."
