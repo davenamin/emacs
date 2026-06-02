@@ -585,8 +585,16 @@ directory got moved.  This is set to be a pair in the form of:
 ;; Avoid error if user loads some more libraries now.
 (setq purify-flag nil)
 
-;; Make sure we will attempt bidi reordering henceforth.
-(setq redisplay--inhibit-bidi nil)
+;; Make sure we will attempt bidi reordering henceforth -- but only
+;; if the Unicode property tables loaded.  charprop.el is GENERATED
+;; after temacs is built (during dump) and is missing for cross-
+;; builds that don't dump (notably the iOS bring-up), so flipping
+;; this unconditionally aborts bidi_initialize inside the first
+;; redisplay tick.  Keep redisplay--inhibit-bidi t until the tables
+;; exist; bidi can be turned on at runtime later if/when iOS grows
+;; a charprop equivalent.
+(when (featurep 'charprop)
+  (setq redisplay--inhibit-bidi nil))
 
 
 
