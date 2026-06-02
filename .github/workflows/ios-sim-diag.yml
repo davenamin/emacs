@@ -208,7 +208,34 @@ jobs:
           log ""
           log "--- unified log (process=emacs, last 2m) ---"
           xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR senderImagePath CONTAINS "emacs"' --last 2m --style compact 2>>"$OUT" \
-            | head -200 >> "$OUT" 2>&1
+            | head -500 >> "$OUT" 2>&1
+
+          # Crash signatures in the unified log (signals, aborts, asserts).
+          log ""
+          log "--- unified log crash signatures ---"
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR eventMessage CONTAINS[c] "emacs"' --last 2m --style compact 2>/dev/null \
+            | grep -iE 'crash|signal|abort|assert|fatal|terminating|exception|killed|SIG' >> "$OUT" 2>&1
+
+          # CrashReporter directories on the host -- iOS sim writes
+          # .ips crash reports here when an app crashes.  Catch both
+          # the per-device CoreSimulator path and the user-level
+          # DiagnosticReports path.  Print the most recent emacs* one.
+          log ""
+          log "--- crash reports ---"
+          for d in \
+            "$HOME/Library/Logs/CoreSimulator/$DEV" \
+            "$HOME/Library/Logs/CoreSimulator/CrashReporter/Standalone" \
+            "$HOME/Library/Logs/DiagnosticReports"; do
+            log "  scanning $d"
+            if [ -d "$d" ]; then
+              ls -lt "$d" 2>/dev/null | head -10 >> "$OUT"
+              last=$(ls -t "$d"/emacs* 2>/dev/null | head -1)
+              if [ -n "$last" ]; then
+                log "  >>> most recent emacs report: $last"
+                head -120 "$last" >> "$OUT" 2>&1
+              fi
+            fi
+          done
 
           echo "" >> "$OUT"
           echo "===== END =====" >> "$OUT"
