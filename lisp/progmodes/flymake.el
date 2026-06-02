@@ -110,26 +110,17 @@
 ;;
 ;;; Code:
 
-;; iOS DEBUG: trace breadcrumbs through flymake.el's top-level load to
-;; isolate which form triggers (wrong-type-argument stringp nil).
-(message "ios-debug flymake: before requires")
 (require 'cl-lib)
-(message "ios-debug flymake: after cl-lib")
 (require 'thingatpt) ; end-of-thing
-(message "ios-debug flymake: after thingatpt")
 (require 'warnings) ; warning-numeric-level, display-warning
-(message "ios-debug flymake: after warnings")
 (require 'compile) ; for some faces
-(message "ios-debug flymake: after compile")
 ;; We need the next `require' to avoid compiler warnings and run-time
 ;; errors about mouse-wheel-up/down-event in builds --without-x, where
 ;; mwheel is not preloaded.
 (require 'mwheel)
-(message "ios-debug flymake: after mwheel")
 ;; when-let*, if-let*, hash-table-keys, hash-table-values:
 (eval-when-compile (require 'subr-x))
 (require 'project)
-(message "ios-debug flymake: after project")
 
 (defgroup flymake nil
   "Universal on-the-fly syntax checker."
@@ -362,21 +353,15 @@ LEVEL is passed to `display-warning', which is used to display
 the warning.  If this form is included in a file,
 the generated warning contains an indication of the file that
 generated it."
-  ;; DEBUG (iOS bring-up): bypass the macroexp-file-name +
-  ;; file-name-sans-extension chain entirely.  Original code was:
-  ;;   (let* ((file (if (fboundp 'macroexp-file-name)
-  ;;                    (macroexp-file-name)
-  ;;                  (and (not load-file-name)
-  ;;                       (bound-and-true-p byte-compile-current-file))))
-  ;;          (sublog (if (stringp file)
-  ;;                      (intern
-  ;;                       (file-name-nondirectory
-  ;;                        (file-name-sans-extension file))))))
-  ;;     `(flymake--log-1 ,level ',sublog ,msg ,@args))
-  ;; If loadup proceeds past elisp-mode.el now, the (wrong-type-argument
-  ;; stringp nil) signal lives somewhere in the file-name-sans-extension
-  ;; / find-file-name-handler chain on iOS.
-  `(flymake--log-1 ,level nil ,msg ,@args))
+  (let* ((file (if (fboundp 'macroexp-file-name)
+                   (macroexp-file-name)
+                 (and (not load-file-name)
+                      (bound-and-true-p byte-compile-current-file))))
+         (sublog (if (stringp file)
+                     (intern
+                      (file-name-nondirectory
+                       (file-name-sans-extension file))))))
+    `(flymake--log-1 ,level ',sublog ,msg ,@args)))
 
 (defun flymake-error (text &rest args)
   "Format TEXT with ARGS and signal an error for Flymake."

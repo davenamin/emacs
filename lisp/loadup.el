@@ -369,12 +369,23 @@
 ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
 ;; which happens while processing 'elisp-flymake-byte-compile', when
 ;; elisp-mode.elc is outdated.
-;; DEBUG (iOS bring-up): force-load flymake here so that any error
-;; during flymake.el's own load surfaces with a proper "Loading
-;; .../flymake.el" stdout trail, rather than being silently caught
-;; by the autoload-triggered macroexpand of (flymake-log ...) inside
-;; elisp-mode.el's elisp-flymake-byte-compile.
-(load "progmodes/flymake")
+;; iOS port: preempt the autoload of `flymake-log' before elisp-mode.el
+;; is loaded.  The autoload entry in ldefs-boot.el is marked `t' (macro),
+;; so when elisp-mode.el's eager macroexp encounters the
+;; `(flymake-log :warning ...)' calls inside elisp-flymake-byte-compile,
+;; it triggers a load of flymake.el -- which on iOS fails part-way
+;; through `(require 'project)' / its dependents with a
+;; `(wrong-type-argument stringp nil)' signal (a downstream effect of
+;; the still-stubby HOME / files / cwd state during loadup).  Defining
+;; a no-op `flymake-log' macro here overrides the autoload, so the
+;; expansion proceeds without dragging flymake.el in.  flymake remains
+;; usable at runtime via its own autoload trigger after Emacs has
+;; finished bringing up its sandboxed environment; this only patches
+;; the loadup-time path.
+(when (featurep 'ios)
+  (defmacro flymake-log (_level _msg &rest _args)
+    "Stub for use only during loadup on iOS; see loadup.el for rationale."
+    nil))
 (load "progmodes/elisp-mode")
 
 ;; Preload some constants and floating point functions.
