@@ -67,6 +67,71 @@ have a color display.  */)
   return Qt;
 }
 
+DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
+       doc: /* SKIP: minimal iOS bring-up stub of x-create-frame.
+
+Allocates a struct frame attached to the one iOS display, sets
+output_method to output_ios, hooks up output_data.ios with sensible
+defaults, and returns the new frame.  Does NOT load fonts, register
+font drivers, draw anything, or wire input events: those are
+follow-up commits.  The frame is just real enough that startup.el's
+(make-frame ...) call completes and Lisp code can inspect frame
+parameters without crashing.  */)
+  (Lisp_Object parms)
+{
+  struct frame *f;
+  Lisp_Object frame;
+  struct ios_display_info *dpyinfo;
+  struct kboard *kb;
+
+  if (!x_display_list)
+    error ("iOS display is not initialized");
+  dpyinfo = x_display_list;
+  kb = dpyinfo->terminal->kboard;
+
+  parms = Fcopy_alist (parms);
+
+  /* Allocate the bare frame with a minibuffer (the simple, single-
+     frame case -- iOS apps don't host child or minibuffer-less
+     frames yet).  */
+  f = make_frame (true);
+  XSETFRAME (frame, f);
+
+  f->terminal = dpyinfo->terminal;
+  f->output_method = output_ios;
+  f->output_data.ios = xzalloc (sizeof *f->output_data.ios);
+  f->output_data.ios->display_info = dpyinfo;
+  f->output_data.ios->frame = f;
+
+  /* Sentinel pixel values so face initialization doesn't try to
+     free uninitialized colors.  */
+  FRAME_FOREGROUND_PIXEL (f) = 0x000000;
+  FRAME_BACKGROUND_PIXEL (f) = 0xffffff;
+  f->output_data.ios->cursor_pixel = 0x000000;
+  f->output_data.ios->cursor_foreground_pixel = 0xffffff;
+
+  /* Fontset starts unset; -1 is the "no fontset" sentinel that
+     fontset.c recognizes.  */
+  FRAME_FONTSET (f) = -1;
+
+  fset_name (f, build_string ("GNU Emacs"));
+  f->explicit_name = false;
+
+  /* Geometry: derive from the display.  Pixels-per-character will
+     stay 1x1 until a font is set; cols/rows will be wildly wrong
+     until then, but they need SOME value so adjust_frame_size
+     doesn't divide by zero.  */
+  SET_FRAME_COLS (f, 80);
+  SET_FRAME_LINES (f, 25);
+
+  f->terminal->reference_count++;
+  store_in_alist (&parms, Qwindow_system, Qios);
+  f->after_make_frame = true;
+
+  (void) kb; /* silence unused warning until kb is consumed below */
+  return frame;
+}
+
 DEFUN ("x-display-grayscale-p", Fx_display_grayscale_p,
        Sx_display_grayscale_p, 0, 1, 0,
        doc: /* Return t if the display supports grayscale.
@@ -83,8 +148,7 @@ syms_of_iosfns (void)
   defsubr (&Sx_hide_tip);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
-  /* Frame parameter and x-* primitive definitions will be added in
-     follow-up commits, in parallel to syms_of_androidfns.  */
+  defsubr (&Sx_create_frame);
 }
 
 #endif /* HAVE_IOS */
