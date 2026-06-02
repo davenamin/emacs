@@ -103,9 +103,10 @@ ios_term_init (void)
   terminal->kboard = allocate_kboard (Qios);
   terminal->kboard->reference_count++;
 
-  /* Install the only real hook we have for now.  Everything else is
+  /* Install the only real hooks we have for now.  Everything else is
      NULL and the generic code checks before calling.  */
   terminal->read_socket_hook = ios_read_socket;
+  terminal->defined_color_hook = ios_defined_color;
 
   /* Populate display geometry from UIKit.  This runs on the iOS bg
      pthread, not the main thread; UIScreen.mainScreen is documented
@@ -189,6 +190,58 @@ frame_set_mouse_pixel_position (struct frame *f, int pix_x, int pix_y)
   (void) f;
   (void) pix_x;
   (void) pix_y;
+}
+
+/* terminal->defined_color_hook implementation.  Resolve a color name
+   to an RGB triple.  load_color2 in xfaces.c calls this via the
+   terminal struct -- if the hook is NULL the call segfaults.  This
+   minimal version recognises black, white, and #rrggbb literals;
+   anything else returns false and the caller falls back to the
+   frame's foreground/background pixel.  */
+bool
+ios_defined_color (struct frame *f, const char *color_name,
+                   Emacs_Color *color, bool alloc_p, bool make_index)
+{
+  (void) f; (void) alloc_p; (void) make_index;
+  if (!color_name)
+    return false;
+
+  unsigned r = 0, g = 0, b = 0;
+  bool ok = false;
+
+  if (strcasecmp (color_name, "black") == 0)
+    { r = g = b = 0; ok = true; }
+  else if (strcasecmp (color_name, "white") == 0)
+    { r = g = b = 0xff; ok = true; }
+  else if (strcasecmp (color_name, "red") == 0)
+    { r = 0xff; ok = true; }
+  else if (strcasecmp (color_name, "green") == 0)
+    { g = 0xff; ok = true; }
+  else if (strcasecmp (color_name, "blue") == 0)
+    { b = 0xff; ok = true; }
+  else if (color_name[0] == '#' && strlen (color_name) == 7)
+    {
+      unsigned v;
+      if (sscanf (color_name + 1, "%6x", &v) == 1)
+        {
+          r = (v >> 16) & 0xff;
+          g = (v >>  8) & 0xff;
+          b = (v      ) & 0xff;
+          ok = true;
+        }
+    }
+
+  if (!ok)
+    return false;
+  /* Pack into pixel: 0x00RRGGBB -- iOS draws via Core Graphics which
+     takes normalized floats, but the same packed form is used
+     throughout the redisplay engine and is what FRAME_FOREGROUND_PIXEL
+     stores.  */
+  color->pixel = (r << 16) | (g << 8) | b;
+  color->red   = r * 257;   /* X11 16-bit per channel */
+  color->green = g * 257;
+  color->blue  = b * 257;
+  return true;
 }
 
 /* Cross-port "x-*" variables: cus-start.el bails ("not bound")
