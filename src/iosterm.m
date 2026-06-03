@@ -135,6 +135,13 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
   char *utf8 = ios_glyph_string_to_utf8 (s);
+  /* Log every glyph string for debugging.  Format: x,y nchars=N text  */
+  if (ios_dbg_draw <= 50)
+    ios_launch_log ([NSString stringWithFormat:
+                     @"draw[%d]: x=%d y=%d n=%d w=%d h=%d text=%s",
+                     ios_dbg_draw, s->x, s->y, s->nchars,
+                     s->width, s->height,
+                     utf8 ? utf8 : "(null)"]);
   if (utf8 == NULL || *utf8 == '\0')
     {
       if (utf8) xfree (utf8);

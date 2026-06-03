@@ -173,11 +173,27 @@ parameters without crashing.  */)
   FRAME_FONTSET (f) = fontset_from_font (font_obj);
   store_frame_param (f, Qfont, font_obj);
 
-  /* Geometry placeholder.  A follow-up will compute these from the
-     UIScreen-derived display_info->pixel_width / pixel_height
-     divided by the character cell size.  */
-  FRAME_COLS (f) = 80;
-  FRAME_LINES (f) = 25;
+  /* Geometry: derive from the display.  Use logical width/height
+     (NOT pixel) since CoreGraphics + CTLine work in points.
+     UIScreen.bounds is in points already; pixel_* are points *
+     scale.  Falling back to 40x20 if the display reports zero.  */
+  int logical_w = dpyinfo->logical_width;
+  int logical_h = dpyinfo->logical_height;
+  if (logical_w <= 0 || logical_h <= 0)
+    { logical_w = 320; logical_h = 480; }
+  int cols  = logical_w / font->average_width;
+  int lines = logical_h / font->height;
+  if (cols < 10)  cols = 10;
+  if (lines < 5) lines = 5;
+  FRAME_COLS (f) = cols;
+  FRAME_LINES (f) = lines;
+  /* Frame text-area pixel dimensions: cols/lines * cell size.  The
+     redisplay engine uses these for clipping; if they stay at 0 it
+     decides nothing fits and produces a single short glyph string.  */
+  f->text_width  = cols * font->average_width;
+  f->text_height = lines * font->height;
+  f->pixel_width  = f->text_width;
+  f->pixel_height = f->text_height;
 
   /* Initialize the face cache (allocates it via make_face_cache and
      calls realize_basic_faces).  This is the call that previously
