@@ -77,6 +77,11 @@ extern void ios_canvas_draw_text (double x, double y, const char *utf8,
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
 
+/* Diagnostic counters: how many begin/end/draw calls we've seen.
+   Logged from update_end so a screenshot reveals whether the
+   redisplay engine is asking us to render anything.  */
+static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
+
 /* Decode a glyph string's char2b array (per-glyph code points; our
    minimal font driver passes through plain Unicode codepoints) into
    a UTF-8 char buffer.  Returns a newly-malloc'd string; caller frees.
@@ -246,10 +251,6 @@ ios_noop_update_window_end (struct window *w, bool cursor_on_p,
    give a clean clear / request-draw bracket the per-window hooks
    above can't.  */
 
-/* Diagnostic counters: how many begin/end/draw calls we've seen.
-   Logged to the launch log so we can tell from a screenshot whether
-   the renderer is being asked to draw anything at all.  */
-static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
 extern void ios_launch_log (NSString *);
 
 static void
