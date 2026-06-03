@@ -242,22 +242,34 @@ ios_dump_path (void)
   [_lock unlock];
 }
 
-/* Frame open: drop any half-accumulated draft so the next tick
-   starts clean.  Does NOT touch _displayed, so a re-draw between
-   ticks (orientation change etc.) keeps the last completed frame
-   on screen.  */
+/* Frame open: seed _pending with whatever's currently displayed,
+   so a tick that only emits a few delta glyphs (Emacs's redisplay
+   is incremental: many ticks update just the modeline or one row)
+   keeps the older content underneath.  Each glyph string that
+   draws over an existing position naturally overpaints the older
+   one because Core Text draws in list order.
+
+   This means _pending can grow without bound across many partial
+   ticks.  Cap it at 2000 entries -- a full screenful of glyphs is
+   well under that for typical font sizes.  Once over, drop the
+   oldest in favor of the newest.  */
 - (void) beginFrame
 {
   [_lock lock];
-  [_pending removeAllObjects];
+  [_pending setArray:_displayed];
   [_lock unlock];
 }
 
-/* Frame close: promote the accumulated draft to the displayed
-   array, then ask UIKit for a paint pass.  */
+/* Frame close: promote the accumulated draft and request a paint.
+   Always copies, even when no draws happened this tick -- because
+   _pending was seeded from _displayed at beginFrame, copying it
+   back produces a stable identity transition.  */
 - (void) endFrame
 {
   [_lock lock];
+  NSUInteger n = _pending.count;
+  if (n > 2000)
+    [_pending removeObjectsInRange:NSMakeRange (0, n - 2000)];
   _displayed = [_pending copy];
   [_pending removeAllObjects];
   [_lock unlock];
