@@ -128,6 +128,7 @@ ios_glyph_string_to_utf8 (struct glyph_string *s)
 static void
 ios_noop_draw_glyph_string (struct glyph_string *s)
 {
+  ios_dbg_draw++;
   char *utf8 = ios_glyph_string_to_utf8 (s);
   if (utf8 == NULL || *utf8 == '\0')
     {
@@ -244,17 +245,32 @@ ios_noop_update_window_end (struct window *w, bool cursor_on_p,
    per frame redisplay (across all that frame's windows), so they
    give a clean clear / request-draw bracket the per-window hooks
    above can't.  */
+
+/* Diagnostic counters: how many begin/end/draw calls we've seen.
+   Logged to the launch log so we can tell from a screenshot whether
+   the renderer is being asked to draw anything at all.  */
+static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
+extern void ios_launch_log (NSString *);
+
 static void
 ios_term_update_begin (struct frame *f)
 {
   (void) f;
+  ios_dbg_begin++;
   ios_canvas_begin_frame ();
 }
 static void
 ios_term_update_end (struct frame *f)
 {
   (void) f;
+  ios_dbg_end++;
   ios_canvas_end_frame ();
+  /* Log once every 10 frames so the launch view shows redisplay
+     activity without flooding.  */
+  if ((ios_dbg_end % 10) == 1)
+    ios_launch_log ([NSString stringWithFormat:
+                     @"redisplay: begin=%d end=%d draw=%d",
+                     ios_dbg_begin, ios_dbg_end, ios_dbg_draw]);
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }
