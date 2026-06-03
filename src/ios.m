@@ -206,6 +206,8 @@ ios_dump_path (void)
 
 @interface EmacsUIView : UIView
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
+- (void) clearCommands;
+- (void) requestDisplay;
 @end
 
 @implementation EmacsUIView
@@ -226,14 +228,30 @@ ios_dump_path (void)
   return self;
 }
 
-/* Called from any thread.  We hold the lock only long enough to
-   append the command, then trigger setNeedsDisplay on the main
-   queue so drawRect: runs there.  */
+/* Append a command.  Called from the bg pthread inside
+   draw_glyph_string -- safe with our lock.  Does NOT trigger a
+   redraw; pair with requestDisplay at the end of the frame.  */
 - (void) appendCommand:(EmacsDrawCommand *)cmd
 {
   [_lock lock];
   [_pending addObject:cmd];
   [_lock unlock];
+}
+
+/* Drop the accumulated commands.  Called from update_window_begin
+   so each redisplay tick starts with a fresh frame.  */
+- (void) clearCommands
+{
+  [_lock lock];
+  [_pending removeAllObjects];
+  [_lock unlock];
+}
+
+/* Schedule a drawRect: pass on the main thread.  Called from
+   update_window_end after all draw_glyph_string calls for the
+   current frame have completed.  */
+- (void) requestDisplay
+{
   dispatch_async (dispatch_get_main_queue (), ^{
     [self setNeedsDisplay];
   });
@@ -246,11 +264,12 @@ ios_dump_path (void)
   if (cg == NULL)
     return;
 
-  /* Snapshot the queue under the lock, then render outside it so
-     drawing time doesn't block the bg pthread's next append.  */
+  /* Take a snapshot under the lock; render outside it.  We do NOT
+     clear _pending here: clearing is the update_window_begin hook's
+     job, so a re-draw caused by view-resize / orientation change
+     replays the same content.  */
   [_lock lock];
   NSArray<EmacsDrawCommand *> *snapshot = [_pending copy];
-  [_pending removeAllObjects];
   [_lock unlock];
 
   /* Flip the y-axis: Core Graphics has origin at bottom-left, UIKit
@@ -277,8 +296,6 @@ ios_dump_path (void)
         ((__bridge CFAttributedStringRef) as);
       if (line == NULL)
         continue;
-      /* CTLine draws with the baseline at the current text position;
-         translate y from top-left into baseline-from-bottom-left.  */
       CGFloat baseline = self.bounds.size.height - cmd.y - font.ascender;
       CGContextSetTextPosition (cg, cmd.x, baseline);
       CTLineDraw (line, cg);
@@ -306,6 +323,21 @@ ios_canvas_draw_text (double x, double y, const char *utf8, double font_size)
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
   [v appendCommand:cmd];
+}
+
+/* C-callable hooks for update_window_begin / update_window_end.  */
+void
+ios_canvas_begin_frame (void)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v) [v clearCommands];
+}
+
+void
+ios_canvas_end_frame (void)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v) [v requestDisplay];
 }
 
 

@@ -74,6 +74,8 @@ static bool ios_defined_color (struct frame *f, const char *color_name,
    stays free of UIKit imports.  See ios_canvas_draw_text there.  */
 extern void ios_canvas_draw_text (double x, double y, const char *utf8,
                                   double font_size);
+extern void ios_canvas_begin_frame (void);
+extern void ios_canvas_end_frame (void);
 
 /* Decode a glyph string's char2b array (per-glyph code points; our
    minimal font driver passes through plain Unicode codepoints) into
@@ -228,13 +230,22 @@ ios_noop_after_update_window_line (struct window *w,
   (void) w; (void) desired_row;
 }
 
+/* Per-window-update bracket: clear the canvas command queue at the
+   start of each redisplay tick, and request a drawRect: at the end.
+   The result is one atomic frame per Lisp redisplay -- no partial
+   overdraw from rapidly-firing setNeedsDisplay's.  */
 static void
-ios_noop_update_window_begin (struct window *w) { (void) w; }
+ios_noop_update_window_begin (struct window *w)
+{
+  (void) w;
+  ios_canvas_begin_frame ();
+}
 static void
 ios_noop_update_window_end (struct window *w, bool cursor_on_p,
                             bool mouse_face_overwritten_p)
 {
   (void) w; (void) cursor_on_p; (void) mouse_face_overwritten_p;
+  ios_canvas_end_frame ();
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }
