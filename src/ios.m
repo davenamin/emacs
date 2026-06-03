@@ -198,6 +198,8 @@ ios_dump_path (void)
 @interface EmacsDrawCommand : NSObject
 @property (nonatomic) CGFloat x;
 @property (nonatomic) CGFloat y;
+@property (nonatomic) CGFloat width;   /* draw a white background rect this wide */
+@property (nonatomic) CGFloat height;
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) CGFloat fontSize;
 @end
@@ -289,12 +291,6 @@ ios_dump_path (void)
   NSArray<EmacsDrawCommand *> *snapshot = _displayed;
   [_lock unlock];
 
-  /* Diagnostic: log every paint so we can correlate Emacs's
-     redisplay activity with UIKit invalidation.  */
-  ios_launch_log ([NSString stringWithFormat:
-                   @"drawRect: bounds=%.0fx%.0f cmds=%lu",
-                   self.bounds.size.width, self.bounds.size.height,
-                   (unsigned long) snapshot.count]);
 
   /* Flip the y-axis: Core Graphics has origin at bottom-left, UIKit
      and Emacs both use top-left.  */
@@ -304,12 +300,26 @@ ios_dump_path (void)
 
   for (EmacsDrawCommand *cmd in snapshot)
     {
-      if (cmd.text.length == 0)
-        continue;
       UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
                                                  weight:UIFontWeightRegular];
       if (!font)
         font = [UIFont systemFontOfSize:cmd.fontSize];
+
+      /* Fill the cell's background so an overpaint from a later
+         tick fully erases the previous text.  The y coordinate
+         coming from Emacs is the top of the glyph row in its own
+         top-left coordinate space; after the y-flip above we're
+         in CG bottom-left.  */
+      if (cmd.width > 0 && cmd.height > 0)
+        {
+          CGFloat by = self.bounds.size.height - cmd.y - cmd.height;
+          CGContextSetRGBFillColor (cg, 1.0, 1.0, 1.0, 1.0); /* white */
+          CGContextFillRect (cg, CGRectMake (cmd.x, by,
+                                             cmd.width, cmd.height));
+        }
+
+      if (cmd.text.length == 0)
+        continue;
       NSDictionary *attrs = @{
         NSFontAttributeName: font,
         NSForegroundColorAttributeName: UIColor.blackColor,
@@ -336,7 +346,8 @@ ios_dump_path (void)
 __weak static EmacsUIView *ios_canvas = nil;
 
 void
-ios_canvas_draw_text (double x, double y, const char *utf8, double font_size)
+ios_canvas_draw_text (double x, double y, double width, double height,
+                      const char *utf8, double font_size)
 {
   EmacsUIView *v = ios_canvas;
   if (v == nil || utf8 == NULL)
@@ -344,6 +355,8 @@ ios_canvas_draw_text (double x, double y, const char *utf8, double font_size)
   EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
   cmd.x = x;
   cmd.y = y;
+  cmd.width = width;
+  cmd.height = height;
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
   [v appendCommand:cmd];

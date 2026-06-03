@@ -72,8 +72,9 @@ static bool ios_defined_color (struct frame *f, const char *color_name,
    renderer will replace these one-by-one.  */
 /* The canvas-side text sink is implemented in ios.m so this file
    stays free of UIKit imports.  See ios_canvas_draw_text there.  */
-extern void ios_canvas_draw_text (double x, double y, const char *utf8,
-                                  double font_size);
+extern void ios_canvas_draw_text (double x, double y,
+                                  double width, double height,
+                                  const char *utf8, double font_size);
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
 
@@ -135,13 +136,6 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
   char *utf8 = ios_glyph_string_to_utf8 (s);
-  /* Log every glyph string for debugging.  Format: x,y nchars=N text  */
-  if (ios_dbg_draw <= 50)
-    ios_launch_log ([NSString stringWithFormat:
-                     @"draw[%d]: x=%d y=%d n=%d w=%d h=%d text=%s",
-                     ios_dbg_draw, s->x, s->y, s->nchars,
-                     s->width, s->height,
-                     utf8 ? utf8 : "(null)"]);
   if (utf8 == NULL || *utf8 == '\0')
     {
       if (utf8) xfree (utf8);
@@ -150,7 +144,13 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
   double font_size = (s->font && s->font->pixel_size > 0)
                      ? (double) s->font->pixel_size
                      : 14.0;
-  ios_canvas_draw_text ((double) s->x, (double) s->y, utf8, font_size);
+  /* background_width covers the area redisplay considers "owned"
+     by this glyph string -- using width here would leave thin
+     un-erased margins at line wraps.  */
+  double w = (s->background_width > 0) ? s->background_width : s->width;
+  double h = (s->height > 0) ? s->height : (double) font_size;
+  ios_canvas_draw_text ((double) s->x, (double) s->y,
+                        w, h, utf8, font_size);
   xfree (utf8);
 }
 
