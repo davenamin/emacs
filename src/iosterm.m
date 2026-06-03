@@ -230,21 +230,30 @@ ios_noop_after_update_window_line (struct window *w,
   (void) w; (void) desired_row;
 }
 
-/* Per-window-update bracket: clear the canvas command queue at the
-   start of each redisplay tick, and request a drawRect: at the end.
-   The result is one atomic frame per Lisp redisplay -- no partial
-   overdraw from rapidly-firing setNeedsDisplay's.  */
 static void
-ios_noop_update_window_begin (struct window *w)
-{
-  (void) w;
-  ios_canvas_begin_frame ();
-}
+ios_noop_update_window_begin (struct window *w) { (void) w; }
 static void
 ios_noop_update_window_end (struct window *w, bool cursor_on_p,
                             bool mouse_face_overwritten_p)
 {
   (void) w; (void) cursor_on_p; (void) mouse_face_overwritten_p;
+}
+
+/* Terminal-level frame bracket.  Installed as
+   terminal->update_begin_hook / update_end_hook -- those fire ONCE
+   per frame redisplay (across all that frame's windows), so they
+   give a clean clear / request-draw bracket the per-window hooks
+   above can't.  */
+static void
+ios_term_update_begin (struct frame *f)
+{
+  (void) f;
+  ios_canvas_begin_frame ();
+}
+static void
+ios_term_update_end (struct frame *f)
+{
+  (void) f;
   ios_canvas_end_frame ();
 }
 static void
@@ -345,6 +354,8 @@ ios_term_init (void)
      NULL and the generic code checks before calling.  */
   terminal->read_socket_hook = ios_read_socket;
   terminal->defined_color_hook = ios_defined_color;
+  terminal->update_begin_hook = ios_term_update_begin;
+  terminal->update_end_hook = ios_term_update_end;
 
   /* Populate display geometry from UIKit.  This runs on the iOS bg
      pthread, not the main thread; UIScreen.mainScreen is documented
