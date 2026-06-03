@@ -206,13 +206,19 @@ ios_dump_path (void)
 
 @interface EmacsUIView : UIView
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
-- (void) clearCommands;
-- (void) requestDisplay;
+- (void) beginFrame;
+- (void) endFrame;
 @end
 
 @implementation EmacsUIView
 {
-  NSMutableArray<EmacsDrawCommand *> *_pending;   /* protected by _lock */
+  /* _pending accumulates commands within the current redisplay
+     tick.  At endFrame it's atomically promoted to _displayed,
+     which drawRect: renders.  This avoids a race where the main
+     thread's drawRect: could see a half-built frame because a
+     subsequent tick had already cleared _pending.  */
+  NSMutableArray<EmacsDrawCommand *> *_pending;
+  NSArray<EmacsDrawCommand *> *_displayed;
   NSLock *_lock;
 }
 
@@ -223,14 +229,12 @@ ios_dump_path (void)
       self.backgroundColor = UIColor.whiteColor;
       self.opaque = YES;
       _pending = [NSMutableArray array];
+      _displayed = @[];
       _lock = [[NSLock alloc] init];
     }
   return self;
 }
 
-/* Append a command.  Called from the bg pthread inside
-   draw_glyph_string -- safe with our lock.  Does NOT trigger a
-   redraw; pair with requestDisplay at the end of the frame.  */
 - (void) appendCommand:(EmacsDrawCommand *)cmd
 {
   [_lock lock];
@@ -238,20 +242,25 @@ ios_dump_path (void)
   [_lock unlock];
 }
 
-/* Drop the accumulated commands.  Called from update_window_begin
-   so each redisplay tick starts with a fresh frame.  */
-- (void) clearCommands
+/* Frame open: drop any half-accumulated draft so the next tick
+   starts clean.  Does NOT touch _displayed, so a re-draw between
+   ticks (orientation change etc.) keeps the last completed frame
+   on screen.  */
+- (void) beginFrame
 {
   [_lock lock];
   [_pending removeAllObjects];
   [_lock unlock];
 }
 
-/* Schedule a drawRect: pass on the main thread.  Called from
-   update_window_end after all draw_glyph_string calls for the
-   current frame have completed.  */
-- (void) requestDisplay
+/* Frame close: promote the accumulated draft to the displayed
+   array, then ask UIKit for a paint pass.  */
+- (void) endFrame
 {
+  [_lock lock];
+  _displayed = [_pending copy];
+  [_pending removeAllObjects];
+  [_lock unlock];
   dispatch_async (dispatch_get_main_queue (), ^{
     [self setNeedsDisplay];
   });
@@ -264,12 +273,8 @@ ios_dump_path (void)
   if (cg == NULL)
     return;
 
-  /* Take a snapshot under the lock; render outside it.  We do NOT
-     clear _pending here: clearing is the update_window_begin hook's
-     job, so a re-draw caused by view-resize / orientation change
-     replays the same content.  */
   [_lock lock];
-  NSArray<EmacsDrawCommand *> *snapshot = [_pending copy];
+  NSArray<EmacsDrawCommand *> *snapshot = _displayed;
   [_lock unlock];
 
   /* Flip the y-axis: Core Graphics has origin at bottom-left, UIKit
@@ -325,19 +330,21 @@ ios_canvas_draw_text (double x, double y, const char *utf8, double font_size)
   [v appendCommand:cmd];
 }
 
-/* C-callable hooks for update_window_begin / update_window_end.  */
+/* C-callable hooks for the terminal-level update_begin / update_end
+   bracket.  begin clears the in-progress draft; end atomically
+   promotes it to the displayed snapshot and requests a paint.  */
 void
 ios_canvas_begin_frame (void)
 {
   EmacsUIView *v = ios_canvas;
-  if (v) [v clearCommands];
+  if (v) [v beginFrame];
 }
 
 void
 ios_canvas_end_frame (void)
 {
   EmacsUIView *v = ios_canvas;
-  if (v) [v requestDisplay];
+  if (v) [v endFrame];
 }
 
 
