@@ -277,6 +277,13 @@ ios_dump_path (void)
   NSArray<EmacsDrawCommand *> *snapshot = _displayed;
   [_lock unlock];
 
+  /* Diagnostic: log every paint so we can correlate Emacs's
+     redisplay activity with UIKit invalidation.  */
+  ios_launch_log ([NSString stringWithFormat:
+                   @"drawRect: bounds=%.0fx%.0f cmds=%lu",
+                   self.bounds.size.width, self.bounds.size.height,
+                   (unsigned long) snapshot.count]);
+
   /* Flip the y-axis: Core Graphics has origin at bottom-left, UIKit
      and Emacs both use top-left.  */
   CGContextSaveGState (cg);
