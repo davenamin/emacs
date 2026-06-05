@@ -646,9 +646,11 @@ ios_emacs_bg_thread (void *unused)
   dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
                                  (int64_t) (8.0 * NSEC_PER_SEC)),
                   dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-input C-h r (help redisplay)");
-    ios_enqueue_key (0x08);   /* C-h */
-    ios_enqueue_key (0x1b);   /* ESC */
+    ios_launch_log (@"AppDelegate: auto-type 'hello, ios'");
+    /* Self-insert characters into whatever buffer is current.  */
+    const char *msg = "hello, ios";
+    for (const char *p = msg; *p; p++)
+      ios_enqueue_key ((int) (unsigned char) *p);
   });
   return YES;
 }
