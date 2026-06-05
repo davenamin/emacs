@@ -37,6 +37,8 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "termhooks.h"
 #include "keyboard.h"
 #include "frame.h"
+#include "window.h"
+#include "dispextern.h"
 
 /* Forward declaration so ios_launch_log can be called from this file.
    Implementation lives in ios.m.  */
@@ -77,6 +79,9 @@ extern void ios_canvas_draw_text (double x, double y,
                                   unsigned long fg_pixel,
                                   unsigned long bg_pixel,
                                   const char *utf8, double font_size);
+extern void ios_canvas_draw_cursor (double x, double y,
+                                    double width, double height,
+                                    unsigned long pixel, int style);
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
 
@@ -211,8 +216,28 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                              int x, int y, enum text_cursor_kinds cursor_type,
                              int cursor_width, bool on_p, bool active_p)
 {
-  (void) w; (void) glyph_row; (void) x; (void) y;
-  (void) cursor_type; (void) cursor_width; (void) on_p; (void) active_p;
+  (void) active_p;
+  if (!on_p || cursor_type == NO_CURSOR || w == NULL || glyph_row == NULL)
+    return;
+  struct frame *f = XFRAME (WINDOW_FRAME (w));
+  if (!FRAME_IOS_P (f))
+    return;
+  /* Translate window-relative (x,y) into frame-relative pixel
+     coordinates so the canvas receives the same coordinate space
+     as draw_glyph_string.  */
+  int abs_x = WINDOW_LEFT_EDGE_X (w) + x;
+  int abs_y = WINDOW_TOP_EDGE_Y (w) + glyph_row->y;
+  int w_px  = cursor_width > 0
+              ? cursor_width
+              : FRAME_COLUMN_WIDTH (f);
+  int h_px  = glyph_row->height > 0
+              ? glyph_row->height
+              : FRAME_LINE_HEIGHT (f);
+  unsigned long pixel = f->output_data.ios->cursor_pixel;
+  /* enum text_cursor_kinds: FILLED_BOX=0, HOLLOW_BOX=1, BAR=2, HBAR=3.  */
+  ios_canvas_draw_cursor ((double) abs_x, (double) abs_y,
+                          (double) w_px, (double) h_px,
+                          pixel, (int) cursor_type);
 }
 
 static void

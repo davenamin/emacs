@@ -195,7 +195,19 @@ ios_dump_path (void)
    queue.  drawRect: replays them in order on the main thread.  The
    queue is short-lived: it is cleared at the start of every
    drawRect: so each redisplay tick produces a fresh frame.  */
+/* Command kinds: a draw command is either a glyph string or a
+   cursor.  Cursor commands carry no text; just the rectangle and
+   pixel.  */
+typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
+  EmacsDrawKindText = 0,
+  EmacsDrawKindCursorFilled,
+  EmacsDrawKindCursorHollow,
+  EmacsDrawKindCursorBar,
+  EmacsDrawKindCursorHBar,
+};
+
 @interface EmacsDrawCommand : NSObject
+@property (nonatomic) EmacsDrawKind kind;
 @property (nonatomic) CGFloat x;
 @property (nonatomic) CGFloat y;
 @property (nonatomic) CGFloat width;   /* background rect width */
@@ -302,13 +314,7 @@ ios_dump_path (void)
 
   for (EmacsDrawCommand *cmd in snapshot)
     {
-      UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
-                                                 weight:UIFontWeightRegular];
-      if (!font)
-        font = [UIFont systemFontOfSize:cmd.fontSize];
-
-      /* Decode packed RGB pixels (0x00RRGGBB) into normalized CG
-         components.  */
+      /* Decode packed RGB pixels into normalized components.  */
       CGFloat fr = ((cmd.fg >> 16) & 0xff) / 255.0;
       CGFloat fg = ((cmd.fg >>  8) & 0xff) / 255.0;
       CGFloat fb = ((cmd.fg      ) & 0xff) / 255.0;
@@ -316,15 +322,48 @@ ios_dump_path (void)
       CGFloat bg = ((cmd.bg >>  8) & 0xff) / 255.0;
       CGFloat bb = ((cmd.bg      ) & 0xff) / 255.0;
 
-      /* Background fill so overpaints erase the prior glyph.  */
+      CGFloat by = self.bounds.size.height - cmd.y - cmd.height;
+
+      if (cmd.kind != EmacsDrawKindText)
+        {
+          /* Cursor commands: just paint the rectangle.  */
+          CGContextSetRGBFillColor (cg, fr, fg, fb, 1.0);
+          switch (cmd.kind)
+            {
+            case EmacsDrawKindCursorFilled:
+              CGContextFillRect (cg, CGRectMake (cmd.x, by,
+                                                 cmd.width, cmd.height));
+              break;
+            case EmacsDrawKindCursorHollow:
+              CGContextSetRGBStrokeColor (cg, fr, fg, fb, 1.0);
+              CGContextSetLineWidth (cg, 1);
+              CGContextStrokeRect (cg, CGRectMake (cmd.x + 0.5, by + 0.5,
+                                                   cmd.width - 1,
+                                                   cmd.height - 1));
+              break;
+            case EmacsDrawKindCursorBar:
+              CGContextFillRect (cg, CGRectMake (cmd.x, by, 2, cmd.height));
+              break;
+            case EmacsDrawKindCursorHBar:
+              CGContextFillRect (cg, CGRectMake (cmd.x, by, cmd.width, 2));
+              break;
+            default:
+              break;
+            }
+          continue;
+        }
+
+      UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
+                                                 weight:UIFontWeightRegular];
+      if (!font)
+        font = [UIFont systemFontOfSize:cmd.fontSize];
+
       if (cmd.width > 0 && cmd.height > 0)
         {
-          CGFloat by = self.bounds.size.height - cmd.y - cmd.height;
           CGContextSetRGBFillColor (cg, br, bg, bb, 1.0);
           CGContextFillRect (cg, CGRectMake (cmd.x, by,
                                              cmd.width, cmd.height));
         }
-
       if (cmd.text.length == 0)
         continue;
       UIColor *uifg = [UIColor colorWithRed:fr green:fg blue:fb alpha:1.0];
@@ -362,6 +401,7 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   if (v == nil || utf8 == NULL)
     return;
   EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindText;
   cmd.x = x;
   cmd.y = y;
   cmd.width = width;
@@ -370,6 +410,29 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
+  [v appendCommand:cmd];
+}
+
+/* Cursor "command": just a rectangle of the given style.  kind
+   encodes the style; the caller picks based on the redisplay
+   engine's cursor type.  */
+void
+ios_canvas_draw_cursor (double x, double y, double width, double height,
+                        unsigned long pixel, int style /* enum text_cursor_kinds */)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v == nil) return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  switch (style)
+    {
+    case 1: cmd.kind = EmacsDrawKindCursorHollow; break;  /* HOLLOW_BOX */
+    case 2: cmd.kind = EmacsDrawKindCursorBar; break;     /* BAR */
+    case 3: cmd.kind = EmacsDrawKindCursorHBar; break;    /* HBAR */
+    default: cmd.kind = EmacsDrawKindCursorFilled; break; /* FILLED_BOX */
+    }
+  cmd.x = x; cmd.y = y;
+  cmd.width = width; cmd.height = height;
+  cmd.fg = (uint32_t) (pixel & 0xffffff);
   [v appendCommand:cmd];
 }
 
