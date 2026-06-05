@@ -628,6 +628,28 @@ ios_emacs_bg_thread (void *unused)
                    @"AppDelegate: pthread_create rc=%d", pterr]);
 
   ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: returning YES");
+
+  /* CI diagnostic: synthesize an input event a few seconds after
+     launch so the simulator screenshot captures something other
+     than the loadup splash.  On a real device the user provides
+     these via tap/keyboard; without this the headless CI run
+     never moves past `Welcome / Loading'.
+
+     5s = startup-init complete (loadup is ~3s on macOS arm64
+     simulators), 8s = pre-screenshot.  */
+  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
+                                 (int64_t) (5.0 * NSEC_PER_SEC)),
+                  dispatch_get_main_queue (), ^{
+    ios_launch_log (@"AppDelegate: auto-input RET (splash dismiss)");
+    ios_enqueue_key (0x0d);
+  });
+  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
+                                 (int64_t) (8.0 * NSEC_PER_SEC)),
+                  dispatch_get_main_queue (), ^{
+    ios_launch_log (@"AppDelegate: auto-input C-h r (help redisplay)");
+    ios_enqueue_key (0x08);   /* C-h */
+    ios_enqueue_key (0x1b);   /* ESC */
+  });
   return YES;
 }
 
