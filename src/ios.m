@@ -492,6 +492,24 @@ ios_canvas_end_frame (void)
 }
 
 
+/* ---- Auto-input thread (CI screenshot driver) ----------------- */
+
+static void *
+ios_auto_input_thread (void *unused)
+{
+  (void) unused;
+  sleep (5);
+  ios_launch_log (@"auto-input(thread): RET");
+  ios_enqueue_key (0x0d);
+  sleep (5);
+  ios_launch_log (@"auto-input(thread): 'hello, iOS'");
+  const char *msg = "hello, iOS";
+  for (const char *p = msg; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
+  return NULL;
+}
+
+
 /* ---- Background-thread entry --------------------------------- */
 
 /* pthread entry that drives Emacs init.  Defined as a real function
@@ -637,24 +655,18 @@ ios_emacs_bg_thread (void *unused)
 
      5s = startup-init complete (loadup is ~3s on macOS arm64
      simulators), 8s = pre-screenshot.  */
-  /* CI screenshot driver: RET to dismiss splash, then type a
-     short string so the captured frame shows Emacs handling input.
-     The earlier blankp crash is unblocked now that unidata-generated
-     charprop / uni-*.el are vendored into the bundle.  */
-  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (5.0 * NSEC_PER_SEC)),
-                  dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-input +5s RET");
-    ios_enqueue_key (0x0d);
-  });
-  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (10.0 * NSEC_PER_SEC)),
-                  dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-type 'hello, iOS'");
-    const char *msg = "hello, iOS";
-    for (const char *p = msg; *p; p++)
-      ios_enqueue_key ((int) (unsigned char) *p);
-  });
+  /* CI screenshot driver: send keys on a dedicated pthread instead
+     of dispatch_after on the main queue.  The +10s main-queue
+     dispatch never fired in past runs -- the simulator screenshot
+     operation appears to nudge the app's lifecycle in a way that
+     drops queued blocks.  A standalone pthread with sleep() is
+     immune to that.  */
+  pthread_t auto_thread;
+  pthread_attr_t auto_attr;
+  pthread_attr_init (&auto_attr);
+  pthread_attr_setdetachstate (&auto_attr, PTHREAD_CREATE_DETACHED);
+  pthread_create (&auto_thread, &auto_attr, ios_auto_input_thread, NULL);
+  pthread_attr_destroy (&auto_attr);
   return YES;
 }
 
