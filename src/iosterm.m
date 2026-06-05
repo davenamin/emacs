@@ -97,6 +97,15 @@ extern void ios_canvas_end_frame (void);
    redisplay engine is asking us to render anything.  */
 static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
 
+/* Input event queue + wake pipe.  Hoisted above ios_term_init so
+   the pipe-setup code there sees the storage; the queue plumbing
+   itself is defined further down.  */
+#define IOS_INPUT_QUEUE_CAP 256
+static int ios_input_queue[IOS_INPUT_QUEUE_CAP];
+static int ios_input_head = 0, ios_input_tail = 0;
+static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
+static int ios_wake_pipe[2] = { -1, -1 };
+
 /* Decode a glyph string's char2b array (per-glyph code points; our
    minimal font driver passes through plain Unicode codepoints) into
    a UTF-8 char buffer.  Returns a newly-malloc'd string; caller frees.
@@ -502,21 +511,8 @@ ios_term_init (void)
 
 /* ---- Input event queue ---------------------------------------- */
 
-/* A simple ring buffer of pending key code points.  Producer: UI
-   thread (touch / keyboard handlers in EmacsUIView).  Consumer:
-   bg pthread inside ios_read_socket.  Protected by a pthread mutex
-   so we don't need a UIKit lock primitive here.  */
-#define IOS_INPUT_QUEUE_CAP 256
-static int ios_input_queue[IOS_INPUT_QUEUE_CAP];
-static int ios_input_head = 0, ios_input_tail = 0;
-static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
-
-/* Self-pipe for waking Emacs's wait-for-input select(2).  Writing
-   any byte to ios_wake_pipe[1] makes select() in
-   wait_reading_process_input return, which causes Emacs to call
-   read_socket_hook.  Without this the queue fills but Emacs never
-   notices (it only polls when input was already signaled).  */
-static int ios_wake_pipe[2] = { -1, -1 };
+/* The queue + wake pipe storage is hoisted above ios_term_init;
+   only the producer / drainer code lives here.  */
 
 /* C-callable producer.  Called from UI thread.  Drops the event
    on a full queue (better to lose a key than block UIKit), then
