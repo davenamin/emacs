@@ -413,6 +413,25 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   [v appendCommand:cmd];
 }
 
+/* Clear a rectangular region.  Used by clear_frame_area /
+   clear_under_internal_border to erase stale content.  Implemented
+   as an EmacsDrawKindText command with empty text -- the background
+   fill in drawRect: handles the actual paint.  */
+void
+ios_canvas_clear_rect (double x, double y, double width, double height,
+                       unsigned long bg_pixel)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v == nil) return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindText;
+  cmd.x = x; cmd.y = y;
+  cmd.width = width; cmd.height = height;
+  cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
+  cmd.text = @"";
+  [v appendCommand:cmd];
+}
+
 /* Cursor "command": just a rectangle of the given style.  kind
    encodes the style; the caller picks based on the redisplay
    engine's cursor type.  */

@@ -82,6 +82,9 @@ extern void ios_canvas_draw_text (double x, double y,
 extern void ios_canvas_draw_cursor (double x, double y,
                                     double width, double height,
                                     unsigned long pixel, int style);
+extern void ios_canvas_clear_rect (double x, double y,
+                                   double width, double height,
+                                   unsigned long bg_pixel);
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
 
@@ -202,7 +205,10 @@ ios_noop_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
 static void
 ios_noop_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 {
-  (void) f; (void) x; (void) y; (void) width; (void) height;
+  unsigned long bg = (f && f->output_data.ios)
+                     ? FRAME_BACKGROUND_PIXEL (f) : 0xffffff;
+  ios_canvas_clear_rect ((double) x, (double) y,
+                         (double) width, (double) height, bg);
 }
 
 static void
