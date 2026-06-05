@@ -666,9 +666,11 @@ ios_emacs_bg_thread (void *unused)
   dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
                                  (int64_t) (10.0 * NSEC_PER_SEC)),
                   dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-type 'hello, iOS'");
-    const char *msg = "hello, iOS";
-    for (const char *p = msg; *p; p++)
+    ios_launch_log (@"AppDelegate: C-x b *scratch* RET hello, iOS");
+    /* Switch to *scratch* explicitly so we know what buffer we're
+       in regardless of where the splash dismiss took us.  */
+    const char *seq = "\x18" "b*scratch*\r" "hello, iOS";
+    for (const char *p = seq; *p; p++)
       ios_enqueue_key ((int) (unsigned char) *p);
   });
   return YES;
