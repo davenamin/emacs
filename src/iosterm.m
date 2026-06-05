@@ -326,12 +326,12 @@ ios_term_update_end (struct frame *f)
   (void) f;
   ios_dbg_end++;
   ios_canvas_end_frame ();
-  /* Log once every 10 frames so the launch view shows redisplay
-     activity without flooding.  */
-  if ((ios_dbg_end % 10) == 1)
+  /* Log every redisplay until we hit 30 so we can see exactly how
+     many ticks happen during a CI run, then every 50th afterwards.  */
+  if (ios_dbg_end <= 30 || (ios_dbg_end % 50) == 0)
     ios_launch_log ([NSString stringWithFormat:
-                     @"redisplay: begin=%d end=%d draw=%d",
-                     ios_dbg_begin, ios_dbg_end, ios_dbg_draw]);
+                     @"redisplay #%d draws=%d", ios_dbg_end,
+                     ios_dbg_draw]);
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }
