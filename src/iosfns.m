@@ -176,11 +176,17 @@ parameters without crashing.  */)
   /* Geometry: derive from the display.  Use logical width/height
      (NOT pixel) since CoreGraphics + CTLine work in points.
      UIScreen.bounds is in points already; pixel_* are points *
-     scale.  Falling back to 40x20 if the display reports zero.  */
+     scale.  Falling back to 40x20 if the display reports zero.
+     The on-screen canvas is roughly 70% of the screen height
+     (the live log occupies the top 30%), so bias height by 0.65
+     to leave a margin for the safe-area insets.  Until the canvas
+     reports its actual laid-out size back to the C side via
+     change_frame_size, this static ratio is the best we can do.  */
   int logical_w = dpyinfo->logical_width;
   int logical_h = dpyinfo->logical_height;
   if (logical_w <= 0 || logical_h <= 0)
     { logical_w = 320; logical_h = 480; }
+  logical_h = (int) (logical_h * 0.65);
   int cols  = logical_w / font->average_width;
   int lines = logical_h / font->height;
   if (cols < 10)  cols = 10;
