@@ -549,6 +549,15 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
         continue;
     }
+  static int ios_dbg_rs = 0;
+  ios_dbg_rs++;
+  pthread_mutex_lock (&ios_input_lock);
+  int pending = (ios_input_tail - ios_input_head + IOS_INPUT_QUEUE_CAP)
+                % IOS_INPUT_QUEUE_CAP;
+  pthread_mutex_unlock (&ios_input_lock);
+  if (ios_dbg_rs <= 20 || (ios_dbg_rs % 50) == 0 || pending > 0)
+    ios_launch_log ([NSString stringWithFormat:
+                     @"read_socket #%d pending=%d", ios_dbg_rs, pending]);
   int n = 0;
   pthread_mutex_lock (&ios_input_lock);
   while (ios_input_head != ios_input_tail)
