@@ -215,6 +215,14 @@ parameters without crashing.  */)
      pixels are non-sentinel.  */
   init_frame_faces (f);
 
+  /* Call change_frame_size so Emacs's window layout machinery
+     recomputes the root window dimensions from the freshly-set
+     pixel_width / pixel_height.  Without this, the window defaults
+     to a tiny placeholder size and buffer text truncates at column
+     ~8 even though FRAME_COLS reports the much larger value we
+     wrote above.  */
+  change_frame_size (f, f->text_width, f->text_height, false, false, false);
+
   /* Mark the frame as visible so frame-initialize's
      (delete-frame terminal-frame) sees it as "the other frame".
      Without this the visibility flag stays zero and other_frames
