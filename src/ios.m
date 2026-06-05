@@ -637,16 +637,23 @@ ios_emacs_bg_thread (void *unused)
 
      5s = startup-init complete (loadup is ~3s on macOS arm64
      simulators), 8s = pre-screenshot.  */
-  /* CI screenshot driver: send a single RET 5s after launch so the
-     captured frame shows post-splash state.  Typing characters
-     SIGSEGVs the unidata-less blankp call; the proper fix is to
-     generate / ship charprop.el alongside the bundled lisp tree.
-     Until then, keep auto-input minimal.  */
+  /* CI screenshot driver: RET to dismiss splash, then type a
+     short string so the captured frame shows Emacs handling input.
+     The earlier blankp crash is unblocked now that unidata-generated
+     charprop / uni-*.el are vendored into the bundle.  */
   dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
                                  (int64_t) (5.0 * NSEC_PER_SEC)),
                   dispatch_get_main_queue (), ^{
     ios_launch_log (@"AppDelegate: auto-input +5s RET");
     ios_enqueue_key (0x0d);
+  });
+  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
+                                 (int64_t) (10.0 * NSEC_PER_SEC)),
+                  dispatch_get_main_queue (), ^{
+    ios_launch_log (@"AppDelegate: auto-type 'hello, iOS'");
+    const char *msg = "hello, iOS";
+    for (const char *p = msg; *p; p++)
+      ios_enqueue_key ((int) (unsigned char) *p);
   });
   return YES;
 }
