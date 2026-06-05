@@ -220,6 +220,10 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
 @implementation EmacsDrawCommand
 @end
 
+/* Implemented in iosterm.m; enqueues a code point into the
+   input queue that ios_read_socket drains on the bg pthread.  */
+extern void ios_enqueue_key (int codepoint);
+
 @interface EmacsUIView : UIView
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
 - (void) beginFrame;
@@ -247,8 +251,23 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
       _pending = [NSMutableArray array];
       _displayed = @[];
       _lock = [[NSLock alloc] init];
+      self.userInteractionEnabled = YES;
+      /* A single-tap on the canvas pushes a RET into the input
+         queue.  This is enough to dismiss the splash screen and
+         get *scratch* to redisplay; multi-touch and real text
+         entry follow in later commits.  */
+      UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
+                                     initWithTarget:self
+                                     action:@selector (handleTap:)];
+      [self addGestureRecognizer:tap];
     }
   return self;
+}
+
+- (void) handleTap:(UITapGestureRecognizer *)gr
+{
+  (void) gr;
+  ios_enqueue_key (0x0d);     /* C-m / RET */
 }
 
 - (void) appendCommand:(EmacsDrawCommand *)cmd

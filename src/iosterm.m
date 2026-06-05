@@ -32,6 +32,8 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #import <UIKit/UIKit.h>
 
+#include <pthread.h>
+
 #include "lisp.h"
 #include "iosterm.h"
 #include "termhooks.h"
@@ -482,15 +484,65 @@ ios_term_init (void)
   return terminal;
 }
 
+/* ---- Input event queue ---------------------------------------- */
+
+/* A simple ring buffer of pending key code points.  Producer: UI
+   thread (touch / keyboard handlers in EmacsUIView).  Consumer:
+   bg pthread inside ios_read_socket.  Protected by a pthread mutex
+   so we don't need a UIKit lock primitive here.  */
+#define IOS_INPUT_QUEUE_CAP 256
+static int ios_input_queue[IOS_INPUT_QUEUE_CAP];
+static int ios_input_head = 0, ios_input_tail = 0;
+static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
+
+/* C-callable producer.  Called from UI thread.  Drops the event
+   on a full queue (better to lose a key than block UIKit).  */
+void
+ios_enqueue_key (int codepoint)
+{
+  pthread_mutex_lock (&ios_input_lock);
+  int next = (ios_input_tail + 1) % IOS_INPUT_QUEUE_CAP;
+  if (next != ios_input_head)
+    {
+      ios_input_queue[ios_input_tail] = codepoint;
+      ios_input_tail = next;
+    }
+  pthread_mutex_unlock (&ios_input_lock);
+}
+
 int
 ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
-  /* TODO: drain the UIKit event queue and translate touches,
-     UIKeyCommand presses, and UITextInput delegate callbacks into
-     input_event records via kbd_buffer_store_event_hold.  */
-  (void) terminal;
   (void) hold_quit;
-  return 0;
+  int n = 0;
+  pthread_mutex_lock (&ios_input_lock);
+  while (ios_input_head != ios_input_tail)
+    {
+      int c = ios_input_queue[ios_input_head];
+      ios_input_head = (ios_input_head + 1) % IOS_INPUT_QUEUE_CAP;
+      pthread_mutex_unlock (&ios_input_lock);
+
+      /* Build an ASCII keystroke event.  For now we encode all
+         input as plain ASCII codepoints; modifiers are TBD when
+         we wire UIKeyCommand.  */
+      struct input_event ie;
+      EVENT_INIT (ie);
+      ie.kind = ASCII_KEYSTROKE_EVENT;
+      ie.code = c;
+      ie.modifiers = 0;
+      XSETFRAME (ie.frame_or_window,
+                 (terminal->display_info.ios
+                  && terminal->display_info.ios->highlight_frame)
+                 ? terminal->display_info.ios->highlight_frame
+                 : XFRAME (selected_frame));
+      ie.timestamp = 0;
+      kbd_buffer_store_event_hold (&ie, hold_quit);
+      n++;
+
+      pthread_mutex_lock (&ios_input_lock);
+    }
+  pthread_mutex_unlock (&ios_input_lock);
+  return n;
 }
 
 /* Cross-port required entry point: frame.c calls this from inside
