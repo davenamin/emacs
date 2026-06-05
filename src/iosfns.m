@@ -182,15 +182,23 @@ parameters without crashing.  */)
      to leave a margin for the safe-area insets.  Until the canvas
      reports its actual laid-out size back to the C side via
      change_frame_size, this static ratio is the best we can do.  */
+  /* The on-screen canvas in landscape mode is roughly 600x300 pts
+     on iPhone Pro Max; in portrait, 400x500.  Take the larger of
+     UIScreen's width vs height so we cover both orientations.  */
   int logical_w = dpyinfo->logical_width;
   int logical_h = dpyinfo->logical_height;
   if (logical_w <= 0 || logical_h <= 0)
     { logical_w = 320; logical_h = 480; }
-  logical_h = (int) (logical_h * 0.65);
+  if (logical_h > logical_w)
+    {
+      int swap = logical_w;
+      logical_w = logical_h;
+      logical_h = swap;
+    }
   int cols  = logical_w / font->average_width;
   int lines = logical_h / font->height;
   if (cols < 10)  cols = 10;
-  if (lines < 5) lines = 5;
+  if (lines < 5)  lines = 5;
   FRAME_COLS (f) = cols;
   FRAME_LINES (f) = lines;
   /* Frame text-area pixel dimensions: cols/lines * cell size.  The
