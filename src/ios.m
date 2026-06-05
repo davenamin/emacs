@@ -198,8 +198,10 @@ ios_dump_path (void)
 @interface EmacsDrawCommand : NSObject
 @property (nonatomic) CGFloat x;
 @property (nonatomic) CGFloat y;
-@property (nonatomic) CGFloat width;   /* draw a white background rect this wide */
-@property (nonatomic) CGFloat height;
+@property (nonatomic) CGFloat width;   /* background rect width */
+@property (nonatomic) CGFloat height;  /* background rect height */
+@property (nonatomic) uint32_t fg;     /* 0x00RRGGBB */
+@property (nonatomic) uint32_t bg;     /* 0x00RRGGBB */
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) CGFloat fontSize;
 @end
@@ -305,24 +307,30 @@ ios_dump_path (void)
       if (!font)
         font = [UIFont systemFontOfSize:cmd.fontSize];
 
-      /* Fill the cell's background so an overpaint from a later
-         tick fully erases the previous text.  The y coordinate
-         coming from Emacs is the top of the glyph row in its own
-         top-left coordinate space; after the y-flip above we're
-         in CG bottom-left.  */
+      /* Decode packed RGB pixels (0x00RRGGBB) into normalized CG
+         components.  */
+      CGFloat fr = ((cmd.fg >> 16) & 0xff) / 255.0;
+      CGFloat fg = ((cmd.fg >>  8) & 0xff) / 255.0;
+      CGFloat fb = ((cmd.fg      ) & 0xff) / 255.0;
+      CGFloat br = ((cmd.bg >> 16) & 0xff) / 255.0;
+      CGFloat bg = ((cmd.bg >>  8) & 0xff) / 255.0;
+      CGFloat bb = ((cmd.bg      ) & 0xff) / 255.0;
+
+      /* Background fill so overpaints erase the prior glyph.  */
       if (cmd.width > 0 && cmd.height > 0)
         {
           CGFloat by = self.bounds.size.height - cmd.y - cmd.height;
-          CGContextSetRGBFillColor (cg, 1.0, 1.0, 1.0, 1.0); /* white */
+          CGContextSetRGBFillColor (cg, br, bg, bb, 1.0);
           CGContextFillRect (cg, CGRectMake (cmd.x, by,
                                              cmd.width, cmd.height));
         }
 
       if (cmd.text.length == 0)
         continue;
+      UIColor *uifg = [UIColor colorWithRed:fr green:fg blue:fb alpha:1.0];
       NSDictionary *attrs = @{
         NSFontAttributeName: font,
-        NSForegroundColorAttributeName: UIColor.blackColor,
+        NSForegroundColorAttributeName: uifg,
       };
       NSAttributedString *as = [[NSAttributedString alloc]
                                  initWithString:cmd.text attributes:attrs];
@@ -347,6 +355,7 @@ __weak static EmacsUIView *ios_canvas = nil;
 
 void
 ios_canvas_draw_text (double x, double y, double width, double height,
+                      unsigned long fg_pixel, unsigned long bg_pixel,
                       const char *utf8, double font_size)
 {
   EmacsUIView *v = ios_canvas;
@@ -357,6 +366,8 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.y = y;
   cmd.width = width;
   cmd.height = height;
+  cmd.fg = (uint32_t) (fg_pixel & 0xffffff);
+  cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
   [v appendCommand:cmd];

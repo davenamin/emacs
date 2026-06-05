@@ -74,6 +74,8 @@ static bool ios_defined_color (struct frame *f, const char *color_name,
    stays free of UIKit imports.  See ios_canvas_draw_text there.  */
 extern void ios_canvas_draw_text (double x, double y,
                                   double width, double height,
+                                  unsigned long fg_pixel,
+                                  unsigned long bg_pixel,
                                   const char *utf8, double font_size);
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
@@ -149,8 +151,15 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
      un-erased margins at line wraps.  */
   double w = (s->background_width > 0) ? s->background_width : s->width;
   double h = (s->height > 0) ? s->height : (double) font_size;
+  /* Foreground/background pixels live on the face; defined_color_hook
+     stores them as 0x00RRGGBB which is what the canvas expects.
+     Fall back to black-on-white when no face is attached.  */
+  unsigned long fg = (s->face && s->face->foreground != ~0UL)
+                     ? s->face->foreground : 0x000000;
+  unsigned long bg = (s->face && s->face->background != ~0UL)
+                     ? s->face->background : 0xffffff;
   ios_canvas_draw_text ((double) s->x, (double) s->y,
-                        w, h, utf8, font_size);
+                        w, h, fg, bg, utf8, font_size);
   xfree (utf8);
 }
 
