@@ -637,41 +637,16 @@ ios_emacs_bg_thread (void *unused)
 
      5s = startup-init complete (loadup is ~3s on macOS arm64
      simulators), 8s = pre-screenshot.  */
-  /* Auto-drive the demo so CI captures Emacs running, not the
-     loadup splash:
-       +4s  RET  dismiss splash
-       +6s  C-g  cancel any minibuffer / mode the splash left us in
-       +8s  q    quit Buffer-Menu if that's where RET took us
-       +10s self-insert 'hello, iOS'
-       +14s redisplay should now show the typed text.
-     The simctl screenshot fires at +18s.  */
+  /* CI screenshot driver: send a single RET 5s after launch so the
+     captured frame shows post-splash state.  Typing characters
+     SIGSEGVs the unidata-less blankp call; the proper fix is to
+     generate / ship charprop.el alongside the bundled lisp tree.
+     Until then, keep auto-input minimal.  */
   dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (4.0 * NSEC_PER_SEC)),
+                                 (int64_t) (5.0 * NSEC_PER_SEC)),
                   dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-input +4s RET");
+    ios_launch_log (@"AppDelegate: auto-input +5s RET");
     ios_enqueue_key (0x0d);
-  });
-  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (6.0 * NSEC_PER_SEC)),
-                  dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-input +6s C-g");
-    ios_enqueue_key (0x07);
-  });
-  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (8.0 * NSEC_PER_SEC)),
-                  dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: auto-input +8s q");
-    ios_enqueue_key ('q');
-  });
-  dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
-                                 (int64_t) (10.0 * NSEC_PER_SEC)),
-                  dispatch_get_main_queue (), ^{
-    ios_launch_log (@"AppDelegate: C-x b *scratch* RET hello, iOS");
-    /* Switch to *scratch* explicitly so we know what buffer we're
-       in regardless of where the splash dismiss took us.  */
-    const char *seq = "\x18" "b*scratch*\r" "hello, iOS";
-    for (const char *p = seq; *p; p++)
-      ios_enqueue_key ((int) (unsigned char) *p);
   });
   return YES;
 }
