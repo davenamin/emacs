@@ -33,6 +33,8 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <UIKit/UIKit.h>
 
 #include <pthread.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "lisp.h"
 #include "iosterm.h"
@@ -423,6 +425,20 @@ ios_term_init (void)
   terminal->update_begin_hook = ios_term_update_begin;
   terminal->update_end_hook = ios_term_update_end;
 
+  /* Create the input wake pipe and register the read end with
+     Emacs so wait_reading_process_input wakes on writes.  */
+  if (pipe (ios_wake_pipe) == 0)
+    {
+      /* Make both ends non-blocking: writes from the UI thread
+         must not stall, and the read in read_socket_hook should
+         return immediately when the pipe is empty.  */
+      fcntl (ios_wake_pipe[0], F_SETFL,
+             fcntl (ios_wake_pipe[0], F_GETFL) | O_NONBLOCK);
+      fcntl (ios_wake_pipe[1], F_SETFL,
+             fcntl (ios_wake_pipe[1], F_GETFL) | O_NONBLOCK);
+      add_keyboard_wait_descriptor (ios_wake_pipe[0]);
+    }
+
   /* Populate display geometry from UIKit.  This runs on the iOS bg
      pthread, not the main thread; UIScreen.mainScreen is documented
      thread-safe for property reads.  Fall back to sensible defaults
@@ -495,8 +511,17 @@ static int ios_input_queue[IOS_INPUT_QUEUE_CAP];
 static int ios_input_head = 0, ios_input_tail = 0;
 static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
 
+/* Self-pipe for waking Emacs's wait-for-input select(2).  Writing
+   any byte to ios_wake_pipe[1] makes select() in
+   wait_reading_process_input return, which causes Emacs to call
+   read_socket_hook.  Without this the queue fills but Emacs never
+   notices (it only polls when input was already signaled).  */
+static int ios_wake_pipe[2] = { -1, -1 };
+
 /* C-callable producer.  Called from UI thread.  Drops the event
-   on a full queue (better to lose a key than block UIKit).  */
+   on a full queue (better to lose a key than block UIKit), then
+   writes a byte to the wake pipe so wait_reading_process_input
+   returns and read_socket_hook fires.  */
 void
 ios_enqueue_key (int codepoint)
 {
@@ -508,12 +533,26 @@ ios_enqueue_key (int codepoint)
       ios_input_tail = next;
     }
   pthread_mutex_unlock (&ios_input_lock);
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;  /* best-effort; ignore EAGAIN if pipe is full */
+    }
 }
 
 int
 ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
 {
   (void) hold_quit;
+  /* Drain the wake pipe -- we only used it to be selectable; the
+     actual data are in ios_input_queue.  */
+  if (ios_wake_pipe[0] >= 0)
+    {
+      char buf[64];
+      while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
+        continue;
+    }
   int n = 0;
   pthread_mutex_lock (&ios_input_lock);
   while (ios_input_head != ios_input_tail)
