@@ -159,6 +159,13 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
   char *utf8 = ios_glyph_string_to_utf8 (s);
+  /* Log first 40 draws so we can see what Emacs is actually
+     rendering after input events flow.  */
+  if (ios_dbg_draw <= 40)
+    ios_launch_log ([NSString stringWithFormat:
+                     @"draw[%d] x=%d y=%d w=%d txt=%s",
+                     ios_dbg_draw, s->x, s->y, s->width,
+                     utf8 ? utf8 : "(nil)"]);
   if (utf8 == NULL || *utf8 == '\0')
     {
       if (utf8) xfree (utf8);
