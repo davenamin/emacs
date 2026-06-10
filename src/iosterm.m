@@ -325,12 +325,10 @@ ios_term_update_end (struct frame *f)
 {
   ios_dbg_end++;
   ios_canvas_end_frame ();
-  /* Log every redisplay until we hit 30 so we can see exactly how
-     many ticks happen during a CI run, then every 50th afterwards.
-     Include the root window's live pixel/cell dims so the launch
-     log shows whether the resize from Fx_create_frame stuck (or
-     got reverted by something later in startup).  */
-  if (ios_dbg_end <= 30 || (ios_dbg_end % 50) == 0)
+  /* Light heartbeat: first few ticks then every 100th, with the
+     root window's live dims.  Cheap and has repeatedly proven its
+     diagnostic worth during bring-up.  */
+  if (ios_dbg_end <= 3 || (ios_dbg_end % 100) == 0)
     {
       struct window *rootw = XWINDOW (FRAME_ROOT_WINDOW (f));
       ios_launch_log ([NSString stringWithFormat:
@@ -556,15 +554,6 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
         continue;
     }
-  static int ios_dbg_rs = 0;
-  ios_dbg_rs++;
-  pthread_mutex_lock (&ios_input_lock);
-  int pending = (ios_input_tail - ios_input_head + IOS_INPUT_QUEUE_CAP)
-                % IOS_INPUT_QUEUE_CAP;
-  pthread_mutex_unlock (&ios_input_lock);
-  if (ios_dbg_rs <= 20 || (ios_dbg_rs % 50) == 0 || pending > 0)
-    ios_launch_log ([NSString stringWithFormat:
-                     @"read_socket #%d pending=%d", ios_dbg_rs, pending]);
   int n = 0;
   pthread_mutex_lock (&ios_input_lock);
   while (ios_input_head != ios_input_tail)
