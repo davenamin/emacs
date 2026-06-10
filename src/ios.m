@@ -208,6 +208,18 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
   EmacsDrawKindCursorHBar,
 };
 
+/* Bit flags for EmacsDrawCommand.deco.  Kept in sync with the
+   face decorators tested in iosterm.m's draw_glyph_string hook.  */
+typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
+  EmacsDrawDecoNone           = 0,
+  EmacsDrawDecoUnderlineSingle = 1 << 0,
+  EmacsDrawDecoUnderlineWave   = 1 << 1,
+  EmacsDrawDecoOverline        = 1 << 2,
+  EmacsDrawDecoStrikeThrough   = 1 << 3,
+  EmacsDrawDecoItalic          = 1 << 4,
+  EmacsDrawDecoBold            = 1 << 5,
+};
+
 @interface EmacsDrawCommand : NSObject
 @property (nonatomic) EmacsDrawKind kind;
 @property (nonatomic) CGFloat x;
@@ -218,6 +230,7 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
 @property (nonatomic) uint32_t bg;     /* 0x00RRGGBB */
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) CGFloat fontSize;
+@property (nonatomic) EmacsDrawDeco deco;
 @end
 @implementation EmacsDrawCommand
 @end
@@ -521,10 +534,22 @@ ios_pack_uikey (UIKey *key)
           continue;
         }
 
+      /* Weight + italic from the face decoration flags.  */
+      UIFontWeight wt = (cmd.deco & EmacsDrawDecoBold)
+                        ? UIFontWeightBold
+                        : UIFontWeightRegular;
       UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
-                                                 weight:UIFontWeightRegular];
+                                                 weight:wt];
       if (!font)
         font = [UIFont systemFontOfSize:cmd.fontSize];
+      if (cmd.deco & EmacsDrawDecoItalic)
+        {
+          UIFontDescriptor *d = [font.fontDescriptor
+                                  fontDescriptorWithSymbolicTraits:
+                                  UIFontDescriptorTraitItalic];
+          if (d)
+            font = [UIFont fontWithDescriptor:d size:cmd.fontSize];
+        }
 
       if (cmd.width > 0 && cmd.height > 0)
         {
@@ -549,6 +574,56 @@ ios_pack_uikey (UIKey *key)
       CGContextSetTextPosition (cg, cmd.x, baseline);
       CTLineDraw (line, cg);
       CFRelease (line);
+
+      /* Decorations: stroke the same fg color underneath / above /
+         through the text.  Coordinates are in the flipped CG
+         space, so "below text" means smaller y, "above" larger.  */
+      if (cmd.deco & (EmacsDrawDecoUnderlineSingle
+                      | EmacsDrawDecoUnderlineWave
+                      | EmacsDrawDecoOverline
+                      | EmacsDrawDecoStrikeThrough))
+        {
+          CGContextSetRGBStrokeColor (cg, fr, fg, fb, 1.0);
+          CGContextSetLineWidth (cg, 1.0);
+          CGFloat textWidth = (cmd.width > 0) ? cmd.width : 1;
+          if (cmd.deco & (EmacsDrawDecoUnderlineSingle
+                          | EmacsDrawDecoUnderlineWave))
+            {
+              CGFloat uy = baseline - 1.5;
+              if (cmd.deco & EmacsDrawDecoUnderlineWave)
+                {
+                  /* Sketch a sine-ish wave below the baseline.  */
+                  CGFloat amp = 1.5;
+                  CGFloat step = 3.0;
+                  CGContextBeginPath (cg);
+                  CGContextMoveToPoint (cg, cmd.x, uy);
+                  for (CGFloat xx = cmd.x; xx < cmd.x + textWidth; xx += step)
+                    {
+                      CGFloat ny = uy + ((((int)(xx - cmd.x) / (int) step) & 1)
+                                          ? amp : -amp);
+                      CGContextAddLineToPoint (cg, xx + step, ny);
+                    }
+                  CGContextStrokePath (cg);
+                }
+              else
+                {
+                  CGContextStrokeRect (cg, CGRectMake (cmd.x, uy,
+                                                       textWidth, 0));
+                }
+            }
+          if (cmd.deco & EmacsDrawDecoOverline)
+            {
+              CGFloat oy = baseline + font.ascender;
+              CGContextStrokeRect (cg, CGRectMake (cmd.x, oy,
+                                                   textWidth, 0));
+            }
+          if (cmd.deco & EmacsDrawDecoStrikeThrough)
+            {
+              CGFloat sy = baseline + font.ascender * 0.4;
+              CGContextStrokeRect (cg, CGRectMake (cmd.x, sy,
+                                                   textWidth, 0));
+            }
+        }
     }
 
   CGContextRestoreGState (cg);
@@ -563,7 +638,8 @@ __weak static EmacsUIView *ios_canvas = nil;
 void
 ios_canvas_draw_text (double x, double y, double width, double height,
                       unsigned long fg_pixel, unsigned long bg_pixel,
-                      const char *utf8, double font_size)
+                      const char *utf8, double font_size,
+                      unsigned deco)
 {
   EmacsUIView *v = ios_canvas;
   if (v == nil || utf8 == NULL)
@@ -578,6 +654,7 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
+  cmd.deco = (EmacsDrawDeco) deco;
   [v appendCommand:cmd];
 }
 

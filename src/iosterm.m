@@ -43,6 +43,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "frame.h"
 #include "window.h"
 #include "dispextern.h"
+#include "font.h"
 
 /* Forward declaration so ios_launch_log can be called from this file.
    Implementation lives in ios.m.  */
@@ -82,7 +83,20 @@ extern void ios_canvas_draw_text (double x, double y,
                                   double width, double height,
                                   unsigned long fg_pixel,
                                   unsigned long bg_pixel,
-                                  const char *utf8, double font_size);
+                                  const char *utf8, double font_size,
+                                  unsigned deco);
+
+/* Decoration bits the canvas understands; must match the
+   EmacsDrawDeco enum in ios.m.  */
+enum
+{
+  IOS_DECO_UNDERLINE_SINGLE = 1 << 0,
+  IOS_DECO_UNDERLINE_WAVE   = 1 << 1,
+  IOS_DECO_OVERLINE         = 1 << 2,
+  IOS_DECO_STRIKE_THROUGH   = 1 << 3,
+  IOS_DECO_ITALIC           = 1 << 4,
+  IOS_DECO_BOLD             = 1 << 5,
+};
 extern void ios_canvas_draw_cursor (double x, double y,
                                     double width, double height,
                                     unsigned long pixel, int style);
@@ -179,8 +193,42 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
                      ? s->face->foreground : 0x000000;
   unsigned long bg = (s->face && s->face->background != ~0UL)
                      ? s->face->background : 0xffffff;
+
+  /* Translate face decorations into canvas flags.  Bold / italic
+     come from the font weight & slant; underline/overline/strike-
+     through come from the dedicated face bits.  */
+  unsigned deco = 0;
+  if (s->face)
+    {
+      switch (s->face->underline)
+        {
+        case FACE_UNDERLINE_SINGLE:
+        case FACE_UNDERLINE_DOUBLE_LINE:
+        case FACE_UNDERLINE_DOTS:
+        case FACE_UNDERLINE_DASHES:
+          deco |= IOS_DECO_UNDERLINE_SINGLE;
+          break;
+        case FACE_UNDERLINE_WAVE:
+          deco |= IOS_DECO_UNDERLINE_WAVE;
+          break;
+        default:
+          break;
+        }
+      if (s->face->overline_p)
+        deco |= IOS_DECO_OVERLINE;
+      if (s->face->strike_through_p)
+        deco |= IOS_DECO_STRIKE_THROUGH;
+    }
+  if (s->font)
+    {
+      int slant = FONT_SLANT_NUMERIC (s->font);
+      int weight = FONT_WEIGHT_NUMERIC (s->font);
+      if (slant > 100)  deco |= IOS_DECO_ITALIC;
+      if (weight > 100) deco |= IOS_DECO_BOLD;
+    }
+
   ios_canvas_draw_text ((double) s->x, (double) s->y,
-                        w, h, fg, bg, utf8, font_size);
+                        w, h, fg, bg, utf8, font_size, deco);
   xfree (utf8);
 }
 
