@@ -499,13 +499,12 @@ ios_auto_input_thread (void *unused)
 {
   (void) unused;
   sleep (5);
-  /* Dismiss the splash.  */
-  ios_launch_log (@"auto-input(thread): RET");
-  ios_enqueue_key (0x0d);
-  sleep (3);
-  /* Switch to *scratch* -- the splash buffer is read-only, so
-     typed text only becomes visible in a writable buffer.
-     C-x b *scratch* RET.  */
+  /* Escape the splash buffer: it has its own keymap and won't
+     route C-x b until we quit it.  Send `q' which runs
+     `quit-window' from view-mode / fundamental-mode splash.  */
+  ios_launch_log (@"auto-input(thread): q (quit splash)");
+  ios_enqueue_key ('q');
+  sleep (2);
   ios_launch_log (@"auto-input(thread): C-x b *scratch* RET");
   const char *switchb = "\x18" "b*scratch*\r";
   for (const char *p = switchb; *p; p++)

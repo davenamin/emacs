@@ -180,7 +180,7 @@ jobs:
           # the unified-log fallback may still have NSLog output.
           run xcrun simctl launch booted org.gnu.emacs
           log "--- sleeping 20s for Emacs init to do something ---"
-          sleep 20
+          sleep 25
           log "--- capturing simulator screenshot ---"
           mkdir -p ci-diag
           run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
