@@ -267,7 +267,91 @@ extern void ios_enqueue_key (int codepoint);
 - (void) handleTap:(UITapGestureRecognizer *)gr
 {
   (void) gr;
-  ios_enqueue_key (0x0d);     /* C-m / RET */
+  /* Move the canvas to first-responder so subsequent
+     hardware-keyboard presses route through pressesBegan:.  */
+  [self becomeFirstResponder];
+}
+
+- (BOOL) canBecomeFirstResponder { return YES; }
+
+/* Translate a UIKey into the packed codepoint+modifiers our queue
+   expects.  Returns -1 if the key has no codepoint we know how to
+   handle (raw modifier presses, dead keys, etc).  */
+static int
+ios_pack_uikey (UIKey *key)
+{
+  if (key == nil)
+    return -1;
+
+  UIKeyModifierFlags m = key.modifierFlags;
+  /* iOS UIKeyModifierAlternate is the Option key, which Emacs
+     conventionally treats as Meta.  Command maps to Super; Shift
+     is encoded in the character itself for printables but we
+     still record it for non-printable bindings.  */
+  int mods = 0;
+  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
+  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
+  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
+  /* Shift only matters when the character itself doesn't already
+     reflect the shift (i.e. non-printable keys).  */
+
+  /* Prefer the unmodified character so Control / Meta combinations
+     produce the lowercase base letter, mirroring how X / macOS
+     route them to Emacs.  */
+  NSString *chars = key.charactersIgnoringModifiers;
+  if (chars.length == 0)
+    chars = key.characters;
+  if (chars.length == 0)
+    {
+      /* Map common non-character keys by keyCode.  Only the most
+         common ones for an editor.  More to follow.  */
+      switch (key.keyCode)
+        {
+        case UIKeyboardHIDUsageKeyboardReturnOrEnter:
+        case UIKeyboardHIDUsageKeypadEnter:
+          return 0x0d | mods;
+        case UIKeyboardHIDUsageKeyboardDeleteOrBackspace:
+          return 0x7f | mods;
+        case UIKeyboardHIDUsageKeyboardTab:
+          return 0x09 | mods;
+        case UIKeyboardHIDUsageKeyboardEscape:
+          return 0x1b | mods;
+        default:
+          return -1;
+        }
+    }
+
+  unichar c = [chars characterAtIndex:0];
+  /* Most ASCII control-letter combos: Control flips the high
+     bits.  For C-a we want code 1 ('a' & 0x1f), not 'a' with
+     CHAR_CTL set -- Emacs accepts either but treating it like
+     the X/Cocoa ports keeps existing keymaps unchanged.  */
+  if ((mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
+    c |= 0x20;   /* lowercase first */
+  if ((mods & CHAR_CTL) && c >= 'a' && c <= 'z')
+    {
+      int packed = (c - 'a' + 1) | (mods & ~CHAR_CTL);
+      return packed;
+    }
+  return (int) c | mods;
+}
+
+- (void) pressesBegan:(NSSet<UIPress *> *)presses
+            withEvent:(UIPressesEvent *)event
+{
+  (void) event;
+  BOOL handled = NO;
+  for (UIPress *p in presses)
+    {
+      int packed = ios_pack_uikey (p.key);
+      if (packed >= 0)
+        {
+          ios_enqueue_key (packed);
+          handled = YES;
+        }
+    }
+  if (!handled)
+    [super pressesBegan:presses withEvent:event];
 }
 
 - (void) appendCommand:(EmacsDrawCommand *)cmd

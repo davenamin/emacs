@@ -519,6 +519,11 @@ ios_term_init (void)
 /* The queue + wake pipe storage is hoisted above ios_term_init;
    only the producer / drainer code lives here.  */
 
+/* The key-event queue stores 32-bit values: lower 22 bits are the
+   character code (CHARACTERBITS in lisp.h), upper bits CHAR_CTL /
+   CHAR_META / CHAR_SHIFT etc.  ASCII_KEYSTROKE_EVENT's `code' and
+   `modifiers' fields decode straight from this packing.  */
+
 /* C-callable producer.  Called from UI thread.  Drops the event
    on a full queue (better to lose a key than block UIKit), then
    writes a byte to the wake pipe so wait_reading_process_input
@@ -562,14 +567,15 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       ios_input_head = (ios_input_head + 1) % IOS_INPUT_QUEUE_CAP;
       pthread_mutex_unlock (&ios_input_lock);
 
-      /* Build an ASCII keystroke event.  For now we encode all
-         input as plain ASCII codepoints; modifiers are TBD when
-         we wire UIKeyCommand.  */
+      /* Decode the packed code: lower CHARACTERBITS hold the
+         codepoint, upper bits hold Emacs modifier flags.  */
+      int codepoint = c & ((1 << CHARACTERBITS) - 1);
+      int modifiers = c & CHAR_MODIFIER_MASK;
       struct input_event ie;
       EVENT_INIT (ie);
       ie.kind = ASCII_KEYSTROKE_EVENT;
-      ie.code = c;
-      ie.modifiers = 0;
+      ie.code = codepoint;
+      ie.modifiers = modifiers;
       XSETFRAME (ie.frame_or_window,
                  (terminal->display_info.ios
                   && terminal->display_info.ios->highlight_frame)
