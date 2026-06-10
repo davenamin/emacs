@@ -224,7 +224,7 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
    input queue that ios_read_socket drains on the bg pthread.  */
 extern void ios_enqueue_key (int codepoint);
 
-@interface EmacsUIView : UIView
+@interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
 - (void) beginFrame;
 - (void) endFrame;
@@ -273,6 +273,41 @@ extern void ios_enqueue_key (int codepoint);
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
+
+/* ---- UIKeyInput ---- */
+
+- (BOOL) hasText { return YES; }   /* Allow Backspace to dispatch.  */
+
+- (void) insertText:(NSString *)text
+{
+  for (NSUInteger i = 0; i < text.length; i++)
+    {
+      unichar c = [text characterAtIndex:i];
+      ios_enqueue_key ((int) c);
+    }
+}
+
+- (void) deleteBackward
+{
+  ios_enqueue_key (0x7f);   /* DEL / Backspace */
+}
+
+/* Default text-input traits that make sense for an editor.  */
+- (UIKeyboardType) keyboardType { return UIKeyboardTypeASCIICapable; }
+- (UITextAutocorrectionType) autocorrectionType
+{
+  return UITextAutocorrectionTypeNo;
+}
+- (UITextAutocapitalizationType) autocapitalizationType
+{
+  return UITextAutocapitalizationTypeNone;
+}
+- (UITextSpellCheckingType) spellCheckingType
+{
+  return UITextSpellCheckingTypeNo;
+}
+- (BOOL) enablesReturnKeyAutomatically { return NO; }
+- (UIReturnKeyType) returnKeyType { return UIReturnKeyDefault; }
 
 /* Translate a UIKey into the packed codepoint+modifiers our queue
    expects.  Returns -1 if the key has no codepoint we know how to
