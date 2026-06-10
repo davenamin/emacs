@@ -519,6 +519,36 @@ ios_term_init (void)
 /* The queue + wake pipe storage is hoisted above ios_term_init;
    only the producer / drainer code lives here.  */
 
+/* Queue for "rich" events (mouse clicks) alongside the keystroke
+   queue.  Producer (UI thread) appends; consumer (ios_read_socket)
+   drains and hands each to kbd_buffer_store_event_hold.  Capacity
+   is small -- gestures rarely buffer up.  */
+#define IOS_EVENT_QUEUE_CAP 64
+static struct input_event ios_event_queue[IOS_EVENT_QUEUE_CAP];
+static int ios_event_head = 0, ios_event_tail = 0;
+
+/* C-callable producer for a single fully-formed input_event.
+   Called from the UI thread.  Drops on overflow.  Wakes the
+   wait-for-input select() through the same pipe as keys.  */
+void
+ios_enqueue_event (struct input_event *ie)
+{
+  pthread_mutex_lock (&ios_input_lock);
+  int next = (ios_event_tail + 1) % IOS_EVENT_QUEUE_CAP;
+  if (next != ios_event_head)
+    {
+      ios_event_queue[ios_event_tail] = *ie;
+      ios_event_tail = next;
+    }
+  pthread_mutex_unlock (&ios_input_lock);
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
 /* The key-event queue stores 32-bit values: lower 22 bits are the
    character code (CHARACTERBITS in lisp.h), upper bits CHAR_CTL /
    CHAR_META / CHAR_SHIFT etc.  ASCII_KEYSTROKE_EVENT's `code' and
@@ -560,7 +590,18 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
         continue;
     }
   int n = 0;
+  /* Drain the rich event queue first -- mouse clicks should
+     get to Emacs before whatever keystrokes piled up next.  */
   pthread_mutex_lock (&ios_input_lock);
+  while (ios_event_head != ios_event_tail)
+    {
+      struct input_event ie = ios_event_queue[ios_event_head];
+      ios_event_head = (ios_event_head + 1) % IOS_EVENT_QUEUE_CAP;
+      pthread_mutex_unlock (&ios_input_lock);
+      kbd_buffer_store_event_hold (&ie, hold_quit);
+      n++;
+      pthread_mutex_lock (&ios_input_lock);
+    }
   while (ios_input_head != ios_input_tail)
     {
       int c = ios_input_queue[ios_input_head];

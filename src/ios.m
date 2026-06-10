@@ -54,6 +54,8 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "lisp.h"
 #include "iosterm.h"
+#include "termhooks.h"
+#include "frame.h"
 
 /* Forward declaration of the renamed Emacs entry point.  On iOS,
    src/emacs.c's main() is renamed to ios_emacs_init() so the UIKit
@@ -223,6 +225,7 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
 /* Implemented in iosterm.m; enqueues a code point into the
    input queue that ios_read_socket drains on the bg pthread.  */
 extern void ios_enqueue_key (int codepoint);
+extern void ios_enqueue_event (struct input_event *ie);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -266,10 +269,37 @@ extern void ios_enqueue_key (int codepoint);
 
 - (void) handleTap:(UITapGestureRecognizer *)gr
 {
-  (void) gr;
-  /* Move the canvas to first-responder so subsequent
-     hardware-keyboard presses route through pressesBegan:.  */
+  /* Become first-responder so hardware presses route through
+     pressesBegan: and (via UIKeyInput) the soft keyboard slides
+     up.  Also emit a synthesized mouse-1 click at the tap
+     location so Emacs can move point / select / follow links.  */
   [self becomeFirstResponder];
+
+  CGPoint pt = [gr locationInView:self];
+  if (!x_display_list)
+    return;
+  struct frame *f = x_display_list->highlight_frame;
+  if (!f)
+    {
+      Lisp_Object frames = Vframe_list;
+      if (CONSP (frames))
+        f = XFRAME (XCAR (frames));
+    }
+  if (!f)
+    return;
+  /* Mouse-1 down then up (Emacs synthesizes the click).  */
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = MOUSE_CLICK_EVENT;
+  ie.code = 0;                /* button 0 == left */
+  ie.modifiers = down_modifier;
+  ie.x = make_fixnum ((int) pt.x);
+  ie.y = make_fixnum ((int) pt.y);
+  XSETFRAME (ie.frame_or_window, f);
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+  ie.modifiers = up_modifier;
+  ios_enqueue_event (&ie);
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
