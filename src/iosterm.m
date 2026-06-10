@@ -323,15 +323,22 @@ ios_term_update_begin (struct frame *f)
 static void
 ios_term_update_end (struct frame *f)
 {
-  (void) f;
   ios_dbg_end++;
   ios_canvas_end_frame ();
   /* Log every redisplay until we hit 30 so we can see exactly how
-     many ticks happen during a CI run, then every 50th afterwards.  */
+     many ticks happen during a CI run, then every 50th afterwards.
+     Include the root window's live pixel/cell dims so the launch
+     log shows whether the resize from Fx_create_frame stuck (or
+     got reverted by something later in startup).  */
   if (ios_dbg_end <= 30 || (ios_dbg_end % 50) == 0)
-    ios_launch_log ([NSString stringWithFormat:
-                     @"redisplay #%d draws=%d", ios_dbg_end,
-                     ios_dbg_draw]);
+    {
+      struct window *rootw = XWINDOW (FRAME_ROOT_WINDOW (f));
+      ios_launch_log ([NSString stringWithFormat:
+                       @"redisplay #%d draws=%d root=%dx%dpx %dx%dcell",
+                       ios_dbg_end, ios_dbg_draw,
+                       rootw->pixel_width, rootw->pixel_height,
+                       rootw->total_cols, rootw->total_lines]);
+    }
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }

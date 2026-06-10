@@ -32,11 +32,13 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "lisp.h"
 #include "iosterm.h"
 #include "frame.h"
+#include "window.h"
 #include "dispextern.h"
 #include "font.h"
 #include "fontset.h"
 
 extern struct font_driver ios_font_driver;
+extern void ios_launch_log (NSString *msg);
 
 /* Resolve OBJECT to a Display_Info -- frame.c's Fx_get_resource and
    other frame-parameter primitives call this to find the display
@@ -222,6 +224,22 @@ parameters without crashing.  */)
      ~8 even though FRAME_COLS reports the much larger value we
      wrote above.  */
   change_frame_size (f, f->text_width, f->text_height, false, false, false);
+
+  /* DEBUG: verify the resize actually propagated into the root
+     window.  make_frame builds the root window with pixel sizes
+     computed while FRAME_COLUMN_WIDTH was still 1 (80px x 24px);
+     if these log lines still show ~80x24 the resize path bailed
+     somewhere.  */
+  {
+    struct window *rootw = XWINDOW (FRAME_ROOT_WINDOW (f));
+    ios_launch_log ([NSString stringWithFormat:
+                     @"x-create-frame: root window %dx%d px,"
+                     @" %dx%d cells; frame %dx%d px %dx%d cells",
+                     rootw->pixel_width, rootw->pixel_height,
+                     rootw->total_cols, rootw->total_lines,
+                     f->pixel_width, f->pixel_height,
+                     FRAME_COLS (f), FRAME_LINES (f)]);
+  }
 
   /* Mark the frame as visible so frame-initialize's
      (delete-frame terminal-frame) sees it as "the other frame".
