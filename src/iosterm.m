@@ -597,6 +597,69 @@ ios_enqueue_event (struct input_event *ie)
     }
 }
 
+/* Pending canvas resize, published from EmacsUIView's
+   layoutSubviews on the UIKit thread and consumed by
+   ios_read_socket on the Emacs thread.  Only the most recent
+   request matters; coalesced via overwrite under the lock.  */
+static pthread_mutex_t ios_resize_lock = PTHREAD_MUTEX_INITIALIZER;
+static int ios_pending_canvas_w = 0;
+static int ios_pending_canvas_h = 0;
+static bool ios_pending_canvas_valid = false;
+
+void
+ios_publish_canvas_size (double width, double height)
+{
+  pthread_mutex_lock (&ios_resize_lock);
+  int w = (int) width;
+  int h = (int) height;
+  if (ios_pending_canvas_w != w || ios_pending_canvas_h != h)
+    {
+      ios_pending_canvas_w = w;
+      ios_pending_canvas_h = h;
+      ios_pending_canvas_valid = true;
+    }
+  pthread_mutex_unlock (&ios_resize_lock);
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
+/* Called from the Emacs thread at the top of read_socket.  If a
+   new canvas size is pending and it actually differs from the
+   frame's current pixel dims, call change_frame_size.  */
+static void
+ios_apply_pending_resize (void)
+{
+  int w = 0, h = 0;
+  bool valid = false;
+  pthread_mutex_lock (&ios_resize_lock);
+  if (ios_pending_canvas_valid)
+    {
+      w = ios_pending_canvas_w;
+      h = ios_pending_canvas_h;
+      valid = true;
+      ios_pending_canvas_valid = false;
+    }
+  pthread_mutex_unlock (&ios_resize_lock);
+  if (!valid || !x_display_list)
+    return;
+  Lisp_Object frames = Vframe_list;
+  if (!CONSP (frames))
+    return;
+  struct frame *f = XFRAME (XCAR (frames));
+  if (!f || !FRAME_LIVE_P (f))
+    return;
+  if (f->pixel_width == w && f->pixel_height == h)
+    return;
+  change_frame_size (f, w, h, false, false, false);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"resize: canvas -> %dx%d px, frame now %dx%d cells",
+                   w, h, FRAME_COLS (f), FRAME_LINES (f)]);
+}
+
 /* The key-event queue stores 32-bit values: lower 22 bits are the
    character code (CHARACTERBITS in lisp.h), upper bits CHAR_CTL /
    CHAR_META / CHAR_SHIFT etc.  ASCII_KEYSTROKE_EVENT's `code' and
@@ -637,6 +700,9 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
         continue;
     }
+  /* Pick up any pending UIView-bounds change (orientation, split
+     view, keyboard) before processing events.  */
+  ios_apply_pending_resize ();
   int n = 0;
   /* Drain the rich event queue first -- mouse clicks should
      get to Emacs before whatever keystrokes piled up next.  */

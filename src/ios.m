@@ -239,6 +239,7 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
    input queue that ios_read_socket drains on the bg pthread.  */
 extern void ios_enqueue_key (int codepoint);
 extern void ios_enqueue_event (struct input_event *ie);
+extern void ios_publish_canvas_size (double width, double height);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -391,6 +392,19 @@ extern void ios_enqueue_event (struct input_event *ie);
       ios_enqueue_key (CHAR_CTL | '-');
       accum_scale *= step;
     }
+}
+
+/* When UIKit rotates the device, the multitasking split view
+   resizes us, or the keyboard slides up/down, our bounds change.
+   Publish the new size to a static the Emacs main thread polls
+   from inside ios_read_socket; it'll call change_frame_size on its
+   own thread before draining the next batch of events.  */
+- (void) layoutSubviews
+{
+  [super layoutSubviews];
+  CGSize sz = self.bounds.size;
+  if (sz.width > 0 && sz.height > 0)
+    ios_publish_canvas_size (sz.width, sz.height);
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
