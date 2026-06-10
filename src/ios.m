@@ -499,11 +499,20 @@ ios_auto_input_thread (void *unused)
 {
   (void) unused;
   sleep (5);
+  /* Dismiss the splash.  */
   ios_launch_log (@"auto-input(thread): RET");
   ios_enqueue_key (0x0d);
-  sleep (5);
-  ios_launch_log (@"auto-input(thread): 'hello, iOS'");
-  const char *msg = "hello, iOS";
+  sleep (3);
+  /* Switch to *scratch* -- the splash buffer is read-only, so
+     typed text only becomes visible in a writable buffer.
+     C-x b *scratch* RET.  */
+  ios_launch_log (@"auto-input(thread): C-x b *scratch* RET");
+  const char *switchb = "\x18" "b*scratch*\r";
+  for (const char *p = switchb; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
+  sleep (2);
+  ios_launch_log (@"auto-input(thread): typing demo text");
+  const char *msg = "hello from Emacs on iOS!";
   for (const char *p = msg; *p; p++)
     ios_enqueue_key ((int) (unsigned char) *p);
   return NULL;
