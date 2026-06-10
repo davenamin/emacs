@@ -276,6 +276,21 @@ extern void ios_enqueue_event (struct input_event *ie);
                                      initWithTarget:self
                                      action:@selector (handleTap:)];
       [self addGestureRecognizer:tap];
+
+      /* Two-finger pan: page up / page down via C-v / M-v.  A
+         single-finger pan is reserved for future drag-to-select.  */
+      UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc]
+                                     initWithTarget:self
+                                     action:@selector (handlePan:)];
+      pan.minimumNumberOfTouches = 2;
+      pan.maximumNumberOfTouches = 2;
+      [self addGestureRecognizer:pan];
+
+      /* Pinch: text-scale-increase / decrease.  */
+      UIPinchGestureRecognizer *pinch = [[UIPinchGestureRecognizer alloc]
+                                         initWithTarget:self
+                                         action:@selector (handlePinch:)];
+      [self addGestureRecognizer:pinch];
     }
   return self;
 }
@@ -313,6 +328,69 @@ extern void ios_enqueue_event (struct input_event *ie);
   ios_enqueue_event (&ie);
   ie.modifiers = up_modifier;
   ios_enqueue_event (&ie);
+}
+
+/* Two-finger drag: throw C-v (scroll-up-command) or M-v
+   (scroll-down-command) into the key queue every time the cumulative
+   translation crosses a one-line threshold.  Reset the accumulator
+   at gesture begin so cross-gesture deltas don't leak.  */
+- (void) handlePan:(UIPanGestureRecognizer *)gr
+{
+  static CGFloat accum_y = 0;
+  if (gr.state == UIGestureRecognizerStateBegan)
+    {
+      accum_y = 0;
+      return;
+    }
+  if (gr.state != UIGestureRecognizerStateChanged)
+    return;
+  CGPoint t = [gr translationInView:self];
+  accum_y += t.y;
+  [gr setTranslation:CGPointZero inView:self];
+
+  /* One screenful per ~200 pt of drag.  Negative t.y = drag up =
+     scroll forward (C-v); positive = drag down = M-v.  */
+  const CGFloat threshold = 200.0;
+  while (accum_y <= -threshold)
+    {
+      ios_enqueue_key (CHAR_CTL | 'v');
+      accum_y += threshold;
+    }
+  while (accum_y >= threshold)
+    {
+      ios_enqueue_key (CHAR_META | 'v');
+      accum_y -= threshold;
+    }
+}
+
+/* Pinch: each multiplicative step crosses a scale-doubling
+   threshold and emits text-scale-adjust via C-x C-+ / C-x C--.  */
+- (void) handlePinch:(UIPinchGestureRecognizer *)gr
+{
+  static CGFloat accum_scale = 1.0;
+  if (gr.state == UIGestureRecognizerStateBegan)
+    {
+      accum_scale = 1.0;
+      return;
+    }
+  if (gr.state != UIGestureRecognizerStateChanged)
+    return;
+  accum_scale *= gr.scale;
+  gr.scale = 1.0;
+
+  const CGFloat step = 1.15;
+  while (accum_scale >= step)
+    {
+      ios_enqueue_key (CHAR_CTL | 'x');
+      ios_enqueue_key (CHAR_CTL | '+');
+      accum_scale /= step;
+    }
+  while (accum_scale <= 1.0 / step)
+    {
+      ios_enqueue_key (CHAR_CTL | 'x');
+      ios_enqueue_key (CHAR_CTL | '-');
+      accum_scale *= step;
+    }
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
