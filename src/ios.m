@@ -240,6 +240,7 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 extern void ios_enqueue_key (int codepoint);
 extern void ios_enqueue_event (struct input_event *ie);
 extern void ios_publish_canvas_size (double width, double height);
+extern void ios_publish_mouse_motion (double x, double y);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -483,6 +484,7 @@ extern void ios_publish_canvas_size (double width, double height);
   if (gr.state == UIGestureRecognizerStateBegan)
     {
       [self becomeFirstResponder];
+      ios_publish_mouse_motion ((double) x, (double) y);
       struct input_event ie;
       EVENT_INIT (ie);
       ie.kind = MOUSE_CLICK_EVENT;
@@ -493,6 +495,15 @@ extern void ios_publish_canvas_size (double width, double height);
       XSETFRAME (ie.frame_or_window, f);
       ie.timestamp = 0;
       ios_enqueue_event (&ie);
+      return;
+    }
+  if (gr.state == UIGestureRecognizerStateChanged)
+    {
+      /* Publish position so ios_read_socket's pending-motion
+         drain calls note_mouse_highlight and the region
+         highlight follows the finger.  No input_event is
+         emitted; only the position dirty bit.  */
+      ios_publish_mouse_motion ((double) x, (double) y);
       return;
     }
   if (gr.state == UIGestureRecognizerStateEnded

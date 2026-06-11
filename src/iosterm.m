@@ -460,6 +460,35 @@ get_keysym_name (int keysym)
    (output_initial); a real output_ios frame will be created when
    Fx_create_frame is implemented.  */
 
+/* terminal->mouse_position_hook.  Emacs calls this whenever it
+   needs the current cursor coordinates (e.g. mouse-position,
+   minibuffer help).  Reports the last finger position cached by
+   ios_publish_mouse_motion; if nothing has touched yet, returns
+   coordinates of (0,0) which is harmless for the limited callers
+   that probe this from idle.  */
+static void
+ios_mouse_position (struct frame **fp, int insist,
+                    Lisp_Object *bar_window,
+                    enum scroll_bar_part *part,
+                    Lisp_Object *xp, Lisp_Object *yp,
+                    Time *time)
+{
+  (void) insist;
+  if (x_display_list && CONSP (Vframe_list))
+    *fp = XFRAME (XCAR (Vframe_list));
+  else
+    *fp = NULL;
+  *bar_window = Qnil;
+  *part = scroll_bar_above_handle;
+  int x = 0, y = 0;
+  pthread_mutex_lock (&ios_motion_lock);
+  x = ios_motion_x; y = ios_motion_y;
+  pthread_mutex_unlock (&ios_motion_lock);
+  XSETINT (*xp, x);
+  XSETINT (*yp, y);
+  *time = 0;
+}
+
 struct terminal *
 ios_term_init (void)
 {
@@ -486,6 +515,7 @@ ios_term_init (void)
   terminal->defined_color_hook = ios_defined_color;
   terminal->update_begin_hook = ios_term_update_begin;
   terminal->update_end_hook = ios_term_update_end;
+  terminal->mouse_position_hook = ios_mouse_position;
 
   /* Create the input wake pipe and register the read end with
      Emacs so wait_reading_process_input wakes on writes.  */
@@ -606,6 +636,56 @@ static int ios_pending_canvas_w = 0;
 static int ios_pending_canvas_h = 0;
 static bool ios_pending_canvas_valid = false;
 
+/* Last known mouse / finger position in frame-relative pixel
+   coordinates, plus a dirty bit for live-highlight updates.
+   Updated under ios_motion_lock from UIKit gesture handlers.  */
+static pthread_mutex_t ios_motion_lock = PTHREAD_MUTEX_INITIALIZER;
+static int  ios_motion_x = 0;
+static int  ios_motion_y = 0;
+static bool ios_motion_dirty = false;
+
+void
+ios_publish_mouse_motion (double x, double y)
+{
+  pthread_mutex_lock (&ios_motion_lock);
+  ios_motion_x = (int) x;
+  ios_motion_y = (int) y;
+  ios_motion_dirty = true;
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
+/* Consume the dirty bit and call note_mouse_highlight on the
+   selected frame so the region highlight follows the finger
+   during drag-select.  No-op if no motion has been published
+   since last drain.  Runs on the Emacs thread.  */
+static void
+ios_apply_pending_motion (void)
+{
+  int x = 0, y = 0;
+  bool dirty = false;
+  pthread_mutex_lock (&ios_motion_lock);
+  if (ios_motion_dirty)
+    {
+      x = ios_motion_x;
+      y = ios_motion_y;
+      dirty = true;
+      ios_motion_dirty = false;
+    }
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (!dirty || !x_display_list || !CONSP (Vframe_list))
+    return;
+  struct frame *f = XFRAME (XCAR (Vframe_list));
+  if (!f || !FRAME_LIVE_P (f))
+    return;
+  note_mouse_highlight (f, x, y);
+}
+
 void
 ios_publish_canvas_size (double width, double height)
 {
@@ -703,6 +783,9 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   /* Pick up any pending UIView-bounds change (orientation, split
      view, keyboard) before processing events.  */
   ios_apply_pending_resize ();
+  /* And any pending finger-motion so the highlight stays under
+     the user's finger while a drag-select is in progress.  */
+  ios_apply_pending_motion ();
   int n = 0;
   /* Drain the rich event queue first -- mouse clicks should
      get to Emacs before whatever keystrokes piled up next.  */
