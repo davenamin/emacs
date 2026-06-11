@@ -460,6 +460,24 @@ get_keysym_name (int keysym)
    (output_initial); a real output_ios frame will be created when
    Fx_create_frame is implemented.  */
 
+/* terminal->ring_bell_hook.  iOS has no audible bell; the
+   user-facing convention is a single haptic tap (matches
+   what other apps do when they want a discreet "no" beep).
+   Dispatched to the main queue because UIImpactFeedbackGenerator
+   wants the UI thread.  */
+static void
+ios_ring_bell (struct frame *f)
+{
+  (void) f;
+  dispatch_async (dispatch_get_main_queue (), ^{
+    UIImpactFeedbackGenerator *gen
+      = [[UIImpactFeedbackGenerator alloc]
+          initWithStyle:UIImpactFeedbackStyleMedium];
+    [gen prepare];
+    [gen impactOccurred];
+  });
+}
+
 /* terminal->mouse_position_hook.  Emacs calls this whenever it
    needs the current cursor coordinates (e.g. mouse-position,
    minibuffer help).  Reports the last finger position cached by
@@ -516,6 +534,7 @@ ios_term_init (void)
   terminal->update_begin_hook = ios_term_update_begin;
   terminal->update_end_hook = ios_term_update_end;
   terminal->mouse_position_hook = ios_mouse_position;
+  terminal->ring_bell_hook = ios_ring_bell;
 
   /* Create the input wake pipe and register the read end with
      Emacs so wait_reading_process_input wakes on writes.  */
