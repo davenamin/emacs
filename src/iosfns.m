@@ -398,6 +398,10 @@ On iOS there is exactly one display, returned as a single-element list.  */)
    so concurrent presentations can't happen.  */
 static dispatch_semaphore_t ios_pick_sem;
 static NSString *ios_pick_result_path;
+/* The picker's delegate slot is weak; keep a strong ref alive
+   here so ARC doesn't reclaim the delegate between present:
+   and didPick.  */
+static id ios_pick_delegate_keepalive;
 
 @interface IOSPickerDelegate
   : NSObject <UIDocumentPickerDelegate>
@@ -442,7 +446,8 @@ already opened for reading and writing.  */)
       = [[UIDocumentPickerViewController alloc]
           initWithDocumentTypes:@[@"public.item"]
                          inMode:UIDocumentPickerModeOpen];
-    picker.delegate = [[IOSPickerDelegate alloc] init];
+    ios_pick_delegate_keepalive = [[IOSPickerDelegate alloc] init];
+    picker.delegate = ios_pick_delegate_keepalive;
     picker.allowsMultipleSelection = NO;
     UIWindow *window = nil;
     for (UIWindow *w in UIApplication.sharedApplication.windows)
