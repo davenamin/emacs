@@ -551,6 +551,71 @@ ios_pack_uikey (UIKey *key)
   return (int) c | mods;
 }
 
+/* Map a UIKeyboardHIDUsage to an X11-keysym value in 0xff00..0xffff
+   (the FUNCTION_KEY_OFFSET range that keyboard.c's lispy_function_keys
+   indexes).  Returns 0 for keys that should fall through to
+   ios_pack_uikey.  */
+static unsigned
+ios_hid_to_xkeysym (long hid)
+{
+  switch (hid)
+    {
+    case UIKeyboardHIDUsageKeyboardLeftArrow:    return 0xff51;
+    case UIKeyboardHIDUsageKeyboardUpArrow:      return 0xff52;
+    case UIKeyboardHIDUsageKeyboardRightArrow:   return 0xff53;
+    case UIKeyboardHIDUsageKeyboardDownArrow:    return 0xff54;
+    case UIKeyboardHIDUsageKeyboardHome:         return 0xff50;
+    case UIKeyboardHIDUsageKeyboardEnd:          return 0xff57;
+    case UIKeyboardHIDUsageKeyboardPageUp:       return 0xff55;
+    case UIKeyboardHIDUsageKeyboardPageDown:     return 0xff56;
+    case UIKeyboardHIDUsageKeyboardInsert:       return 0xff63;
+    case UIKeyboardHIDUsageKeyboardDeleteForward: return 0xffff;
+    case UIKeyboardHIDUsageKeyboardF1:  return 0xffbe;
+    case UIKeyboardHIDUsageKeyboardF2:  return 0xffbf;
+    case UIKeyboardHIDUsageKeyboardF3:  return 0xffc0;
+    case UIKeyboardHIDUsageKeyboardF4:  return 0xffc1;
+    case UIKeyboardHIDUsageKeyboardF5:  return 0xffc2;
+    case UIKeyboardHIDUsageKeyboardF6:  return 0xffc3;
+    case UIKeyboardHIDUsageKeyboardF7:  return 0xffc4;
+    case UIKeyboardHIDUsageKeyboardF8:  return 0xffc5;
+    case UIKeyboardHIDUsageKeyboardF9:  return 0xffc6;
+    case UIKeyboardHIDUsageKeyboardF10: return 0xffc7;
+    case UIKeyboardHIDUsageKeyboardF11: return 0xffc8;
+    case UIKeyboardHIDUsageKeyboardF12: return 0xffc9;
+    default: return 0;
+    }
+}
+
+/* Emit a NON_ASCII_KEYSTROKE_EVENT for an X11-style function-key
+   code, carrying the same Control / Meta / Super / Shift modifier
+   bits we pack for ASCII.  Returns YES if the press was consumed.  */
+static BOOL
+ios_emit_function_key (UIKey *key)
+{
+  unsigned xk = ios_hid_to_xkeysym ((long) key.keyCode);
+  if (xk == 0)
+    return NO;
+  UIKeyModifierFlags m = key.modifierFlags;
+  int mods = 0;
+  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
+  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
+  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
+  if (m & UIKeyModifierShift)     mods |= CHAR_SHIFT;
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = NON_ASCII_KEYSTROKE_EVENT;
+  ie.code = xk;
+  ie.modifiers = mods;
+  if (x_display_list && CONSP (Vframe_list))
+    {
+      struct frame *f = XFRAME (XCAR (Vframe_list));
+      XSETFRAME (ie.frame_or_window, f);
+    }
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+  return YES;
+}
+
 - (void) pressesBegan:(NSSet<UIPress *> *)presses
             withEvent:(UIPressesEvent *)event
 {
@@ -558,6 +623,11 @@ ios_pack_uikey (UIKey *key)
   BOOL handled = NO;
   for (UIPress *p in presses)
     {
+      if (ios_emit_function_key (p.key))
+        {
+          handled = YES;
+          continue;
+        }
       int packed = ios_pack_uikey (p.key);
       if (packed >= 0)
         {
