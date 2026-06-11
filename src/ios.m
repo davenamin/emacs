@@ -278,6 +278,17 @@ extern void ios_publish_canvas_size (double width, double height);
                                      action:@selector (handleTap:)];
       [self addGestureRecognizer:tap];
 
+      /* Long-press: synthesize mouse-2 (paste / yank).  iOS
+         expects a long-press to bring up clipboard actions, so
+         routing it to mouse-2 (which Emacs binds to yank in
+         most modes) is the closest match.  */
+      UILongPressGestureRecognizer *lp =
+        [[UILongPressGestureRecognizer alloc]
+          initWithTarget:self
+                  action:@selector (handleLongPress:)];
+      lp.minimumPressDuration = 0.5;
+      [self addGestureRecognizer:lp];
+
       /* Two-finger pan: page up / page down via C-v / M-v.  A
          single-finger pan is reserved for future drag-to-select.  */
       UIPanGestureRecognizer *pan = [[UIPanGestureRecognizer alloc]
@@ -321,6 +332,40 @@ extern void ios_publish_canvas_size (double width, double height);
   EVENT_INIT (ie);
   ie.kind = MOUSE_CLICK_EVENT;
   ie.code = 0;                /* button 0 == left */
+  ie.modifiers = down_modifier;
+  ie.x = make_fixnum ((int) pt.x);
+  ie.y = make_fixnum ((int) pt.y);
+  XSETFRAME (ie.frame_or_window, f);
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+  ie.modifiers = up_modifier;
+  ios_enqueue_event (&ie);
+}
+
+/* Long-press: synthesize a mouse-2 click at the press location.
+   Fires once at gesture-begin so the user sees an instant action
+   rather than waiting for finger-lift.  */
+- (void) handleLongPress:(UILongPressGestureRecognizer *)gr
+{
+  if (gr.state != UIGestureRecognizerStateBegan)
+    return;
+  [self becomeFirstResponder];
+  CGPoint pt = [gr locationInView:self];
+  if (!x_display_list)
+    return;
+  struct frame *f = x_display_list->highlight_frame;
+  if (!f)
+    {
+      Lisp_Object frames = Vframe_list;
+      if (CONSP (frames))
+        f = XFRAME (XCAR (frames));
+    }
+  if (!f)
+    return;
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = MOUSE_CLICK_EVENT;
+  ie.code = 1;                 /* button 1 == mouse-2 */
   ie.modifiers = down_modifier;
   ie.x = make_fixnum ((int) pt.x);
   ie.y = make_fixnum ((int) pt.y);
