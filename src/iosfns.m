@@ -272,13 +272,147 @@ iOS displays are full color, not grayscale-only.  */)
   return Qnil;
 }
 
+DEFUN ("x-display-pixel-width", Fx_display_pixel_width,
+       Sx_display_pixel_width, 0, 1, 0,
+       doc: /* Return the width in pixels of the iOS display.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  return make_fixnum (d->pixel_width);
+}
+
+DEFUN ("x-display-pixel-height", Fx_display_pixel_height,
+       Sx_display_pixel_height, 0, 1, 0,
+       doc: /* Return the height in pixels of the iOS display.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  return make_fixnum (d->pixel_height);
+}
+
+DEFUN ("x-display-mm-width", Fx_display_mm_width,
+       Sx_display_mm_width, 0, 1, 0,
+       doc: /* Return the width in millimetres of the iOS display.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  if (d->resx <= 0) return make_fixnum (0);
+  return make_fixnum ((int) (d->pixel_width / d->resx * 25.4));
+}
+
+DEFUN ("x-display-mm-height", Fx_display_mm_height,
+       Sx_display_mm_height, 0, 1, 0,
+       doc: /* Return the height in millimetres of the iOS display.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  if (d->resy <= 0) return make_fixnum (0);
+  return make_fixnum ((int) (d->pixel_height / d->resy * 25.4));
+}
+
+DEFUN ("x-display-planes", Fx_display_planes, Sx_display_planes,
+       0, 1, 0,
+       doc: /* Return the bit depth of the iOS display.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  return make_fixnum (d->n_planes);
+}
+
+DEFUN ("x-display-color-cells", Fx_display_color_cells,
+       Sx_display_color_cells, 0, 1, 0,
+       doc: /* Return the number of distinguishable colors on TERMINAL.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  int n = d->n_planes > 24 ? 24 : d->n_planes;
+  return make_fixnum (1 << n);
+}
+
+DEFUN ("x-display-screens", Fx_display_screens, Sx_display_screens,
+       0, 1, 0,
+       doc: /* Return the number of screens.  iOS has exactly one.  */)
+  (Lisp_Object terminal)
+{
+  check_x_display_info (terminal);
+  return make_fixnum (1);
+}
+
+DEFUN ("x-server-vendor", Fx_server_vendor, Sx_server_vendor,
+       0, 1, 0,
+       doc: /* Return the vendor of the iOS display.  Always "Apple".  */)
+  (Lisp_Object terminal)
+{
+  check_x_display_info (terminal);
+  return build_string ("Apple");
+}
+
+DEFUN ("x-server-version", Fx_server_version, Sx_server_version,
+       0, 1, 0,
+       doc: /* Return the version of the iOS runtime as (MAJOR MINOR PATCH).  */)
+  (Lisp_Object terminal)
+{
+  check_x_display_info (terminal);
+  NSOperatingSystemVersion v
+    = [NSProcessInfo processInfo].operatingSystemVersion;
+  return list3i (v.majorVersion, v.minorVersion, v.patchVersion);
+}
+
+DEFUN ("x-display-backing-store", Fx_display_backing_store,
+       Sx_display_backing_store, 0, 1, 0,
+       doc: /* Return the backing-store policy.  iOS pixels persist
+while the layer is mapped, so this returns `when-mapped'.  */)
+  (Lisp_Object terminal)
+{
+  check_x_display_info (terminal);
+  return Qwhen_mapped;
+}
+
+DEFUN ("x-display-visual-class", Fx_display_visual_class,
+       Sx_display_visual_class, 0, 1, 0,
+       doc: /* Return the visual class.  iOS displays are 24-bit
+direct-color, reported as `true-color'.  */)
+  (Lisp_Object terminal)
+{
+  struct ios_display_info *d = check_x_display_info (terminal);
+  if (d->n_planes < 24)
+    return Qstatic_gray;
+  return Qtrue_color;
+}
+
+DEFUN ("x-display-list", Fx_display_list, Sx_display_list, 0, 0, 0,
+       doc: /* Return the list of display names known to Emacs.
+On iOS there is exactly one display, returned as a single-element list.  */)
+  (void)
+{
+  if (!x_display_list)
+    return Qnil;
+  return list1 (XCAR (x_display_list->name_list_element));
+}
+
 void
 syms_of_iosfns (void)
 {
+  DEFSYM (Qtrue_color, "true-color");
+  DEFSYM (Qstatic_gray, "static-gray");
+  DEFSYM (Qwhen_mapped, "when-mapped");
+
   defsubr (&Sx_hide_tip);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
   defsubr (&Sx_create_frame);
+  defsubr (&Sx_display_pixel_width);
+  defsubr (&Sx_display_pixel_height);
+  defsubr (&Sx_display_mm_width);
+  defsubr (&Sx_display_mm_height);
+  defsubr (&Sx_display_planes);
+  defsubr (&Sx_display_color_cells);
+  defsubr (&Sx_display_screens);
+  defsubr (&Sx_server_vendor);
+  defsubr (&Sx_server_version);
+  defsubr (&Sx_display_backing_store);
+  defsubr (&Sx_display_visual_class);
+  defsubr (&Sx_display_list);
 }
 
 #endif /* HAVE_IOS */
