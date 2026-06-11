@@ -186,9 +186,9 @@ Inspect the formula dependency plan before installing with `brew install --ask`.
 Enable ask mode by setting `HOMEBREW_ASK=1`.
 Hide these hints with `HOMEBREW_NO_ENV_HINTS=1` (see `man brew`).
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m and [32mtexinfo[39m[0m
-✔︎ Bottle Manifest automake (1.18.1)
 ✔︎ Bottle Manifest autoconf (2.73)
 ✔︎ Bottle Manifest texinfo (7.3)
+✔︎ Bottle Manifest automake (1.18.1)
 ✔︎ Bottle Manifest libtool (2.5.4)
 ✔︎ Bottle Manifest m4 (1.4.21)
 ✔︎ Bottle m4 (1.4.21)
@@ -344,7 +344,7 @@ File Doesn't Exist, Will Create: build-ios-sim/ios/Emacs.app/Info.plist
 [exit=1]
 
 $ plutil -lint build-ios-sim/ios/Emacs.app/Info.plist
-build-ios-sim/ios/Emacs.app/Info.plist: file does not exist or is not readable or is not a regular file (Error Domain=NSCocoaErrorDomain Code=260 "The file “Info.plist” couldn’t be opened because there is no such file." UserInfo={NSFilePath=build-ios-sim/ios/Emacs.app/Info.plist, NSURL=build-ios-sim/ios/Emacs.app/Info.plist -- file:///Users/runner/work/emacs/emacs/, NSUnderlyingError=0x6000033ec870 {Error Domain=NSPOSIXErrorDomain Code=2 "No such file or directory"}})
+build-ios-sim/ios/Emacs.app/Info.plist: file does not exist or is not readable or is not a regular file (Error Domain=NSCocoaErrorDomain Code=260 "The file “Info.plist” couldn’t be opened because there is no such file." UserInfo={NSFilePath=build-ios-sim/ios/Emacs.app/Info.plist, NSURL=build-ios-sim/ios/Emacs.app/Info.plist -- file:///Users/runner/work/emacs/emacs/, NSUnderlyingError=0x600003b700c0 {Error Domain=NSPOSIXErrorDomain Code=2 "No such file or directory"}})
 [exit=1]
 
 $ file build-ios-sim/ios/Emacs.app/Info.plist
@@ -388,109 +388,106 @@ error: /Applications/Xcode_16.4.app/Contents/Developer/Toolchains/XcodeDefault.x
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2'
-device=37AE46DB-B9BB-47B2-B5B3-38A466C0E35E
+device=F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D
 
-$ xcrun simctl boot 37AE46DB-B9BB-47B2-B5B3-38A466C0E35E
+$ xcrun simctl boot F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D
 [exit=0]
 
-$ xcrun simctl bootstatus 37AE46DB-B9BB-47B2-B5B3-38A466C0E35E -b
-Monitoring boot status for ci-diag-phone (37AE46DB-B9BB-47B2-B5B3-38A466C0E35E).
-[2026-06-11 11:23:38 +0000] Status=2, isTerminal=NO, Elapsed=00:35.
+$ xcrun simctl bootstatus F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D -b
+Monitoring boot status for ci-diag-phone (F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D).
+[2026-06-11 11:32:13 +0000] Status=2, isTerminal=NO, Elapsed=00:35.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:29 seconds
 
-[2026-06-11 11:23:39 +0000] Status=2, isTerminal=NO, Elapsed=00:36.
+[2026-06-11 11:32:14 +0000] Status=2, isTerminal=NO, Elapsed=00:36.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:30 seconds
 
-[2026-06-11 11:23:40 +0000] Status=2, isTerminal=NO, Elapsed=00:37.
+[2026-06-11 11:32:15 +0000] Status=2, isTerminal=NO, Elapsed=00:37.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:31 seconds
 
-[2026-06-11 11:23:41 +0000] Status=2, isTerminal=NO, Elapsed=00:38.
+[2026-06-11 11:32:16 +0000] Status=2, isTerminal=NO, Elapsed=00:38.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:32 seconds
 
-[2026-06-11 11:23:42 +0000] Status=2, isTerminal=NO, Elapsed=00:39.
+[2026-06-11 11:32:17 +0000] Status=2, isTerminal=NO, Elapsed=00:39.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:33 seconds
 
-[2026-06-11 11:23:43 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
+[2026-06-11 11:32:18 +0000] Status=2, isTerminal=NO, Elapsed=00:40.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:34 seconds
 
-[2026-06-11 11:23:44 +0000] Status=2, isTerminal=NO, Elapsed=00:41.
+[2026-06-11 11:32:19 +0000] Status=2, isTerminal=NO, Elapsed=00:41.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:35 seconds
 
-[2026-06-11 11:23:45 +0000] Status=2, isTerminal=NO, Elapsed=00:42.
+[2026-06-11 11:32:20 +0000] Status=2, isTerminal=NO, Elapsed=00:42.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:36 seconds
 
-[2026-06-11 11:23:46 +0000] Status=2, isTerminal=NO, Elapsed=00:43.
+[2026-06-11 11:32:21 +0000] Status=2, isTerminal=NO, Elapsed=00:43.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:37 seconds
 
-[2026-06-11 11:23:47 +0000] Status=2, isTerminal=NO, Elapsed=00:44.
+[2026-06-11 11:32:22 +0000] Status=2, isTerminal=NO, Elapsed=00:44.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
 		Migration Elapsed:00:38 seconds
 
-[2026-06-11 11:23:48 +0000] Status=2, isTerminal=NO, Elapsed=00:45.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:39 seconds
-
-[2026-06-11 11:23:53 +0000] Status=2, isTerminal=NO, Elapsed=00:49.
+[2026-06-11 11:32:26 +0000] Status=2, isTerminal=NO, Elapsed=00:48.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:00:41 seconds
+		Migration Elapsed:00:39 seconds
 
-[2026-06-11 11:23:54 +0000] Status=2, isTerminal=NO, Elapsed=00:50.
+[2026-06-11 11:32:27 +0000] Status=2, isTerminal=NO, Elapsed=00:49.
 	Waiting on Data Migration
-		Reason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)
-		Migration Elapsed:00:44 seconds
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:00:42 seconds
 
-[2026-06-11 11:23:56 +0000] Status=4, isTerminal=NO, Elapsed=00:52.
+[2026-06-11 11:32:29 +0000] Status=2, isTerminal=NO, Elapsed=00:51.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.dataaccess.migrator (DAAccount.migrator)
+		Migration Elapsed:00:43 seconds
+
+[2026-06-11 11:32:31 +0000] Status=4, isTerminal=NO, Elapsed=00:53.
 	Waiting on System App
 
-[2026-06-11 11:23:57 +0000] Status=4, isTerminal=NO, Elapsed=00:53.
+[2026-06-11 11:32:32 +0000] Status=4, isTerminal=NO, Elapsed=00:54.
 	Waiting on System App
 
-[2026-06-11 11:23:58 +0000] Status=4, isTerminal=NO, Elapsed=00:54.
+[2026-06-11 11:32:33 +0000] Status=4, isTerminal=NO, Elapsed=00:55.
 	Waiting on System App
 
-[2026-06-11 11:23:59 +0000] Status=4, isTerminal=NO, Elapsed=00:55.
+[2026-06-11 11:32:34 +0000] Status=4, isTerminal=NO, Elapsed=00:56.
 	Waiting on System App
 
-[2026-06-11 11:24:00 +0000] Status=4, isTerminal=NO, Elapsed=00:57.
+[2026-06-11 11:32:34 +0000] Status=4, isTerminal=NO, Elapsed=00:56.
 	Waiting on System App
 
-[2026-06-11 11:24:01 +0000] Status=4, isTerminal=NO, Elapsed=00:57.
+[2026-06-11 11:32:35 +0000] Status=4, isTerminal=NO, Elapsed=00:57.
 	Waiting on System App
 
-[2026-06-11 11:24:02 +0000] Status=4, isTerminal=NO, Elapsed=00:59.
+[2026-06-11 11:32:36 +0000] Status=4, isTerminal=NO, Elapsed=00:58.
 	Waiting on System App
 
-[2026-06-11 11:24:03 +0000] Status=4, isTerminal=NO, Elapsed=00:59.
+[2026-06-11 11:32:37 +0000] Status=4, isTerminal=NO, Elapsed=00:59.
 	Waiting on System App
 
-[2026-06-11 11:24:04 +0000] Status=4, isTerminal=NO, Elapsed=01:00.
+[2026-06-11 11:32:38 +0000] Status=4, isTerminal=NO, Elapsed=01:00.
 	Waiting on System App
 
-[2026-06-11 11:24:05 +0000] Status=4, isTerminal=NO, Elapsed=01:01.
-	Waiting on System App
-
-[2026-06-11 11:24:11 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:07.
+[2026-06-11 11:32:44 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:06.
 	Finished
 
 [exit=0]
@@ -523,12 +520,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 37AE46DB-B9BB-47B2-B5B3-38A466C0E35E ref-app/Hello.app
+$ xcrun simctl install F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 37AE46DB-B9BB-47B2-B5B3-38A466C0E35E build-ios-sim/ios/Emacs.app
+$ xcrun simctl install F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D build-ios-sim/ios/Emacs.app
 An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
 Simulator device failed to install the application.
 Unhandled error domain NSPOSIXErrorDomain, code 2
@@ -543,7 +540,7 @@ $ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
 {"CFBundleShortVersionString":"1.0","CFBundleIdentifier":"org.gnu.hello","CFBundleVersion":"1","CFBundleName":"Hello","DTPlatformName":"iphonesimulator","LSRequiresIPhoneOS":true,"UIDeviceFamily":[1,2],"CFBundleExecutable":"Hello","CFBundlePackageType":"APPL","MinimumOSVersion":"15.0","CFBundleSupportedPlatforms":["iPhoneSimulator"]}[exit=0]
 
 $ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
-build-ios-sim/ios/Emacs.app/Info.plist: file does not exist or is not readable or is not a regular file (Error Domain=NSCocoaErrorDomain Code=260 "The file “Info.plist” couldn’t be opened because there is no such file." UserInfo={NSFilePath=build-ios-sim/ios/Emacs.app/Info.plist, NSURL=build-ios-sim/ios/Emacs.app/Info.plist -- file:///Users/runner/work/emacs/emacs/, NSUnderlyingError=0x600001abc8a0 {Error Domain=NSPOSIXErrorDomain Code=2 "No such file or directory"}})
+build-ios-sim/ios/Emacs.app/Info.plist: file does not exist or is not readable or is not a regular file (Error Domain=NSCocoaErrorDomain Code=260 "The file “Info.plist” couldn’t be opened because there is no such file." UserInfo={NSFilePath=build-ios-sim/ios/Emacs.app/Info.plist, NSURL=build-ios-sim/ios/Emacs.app/Info.plist -- file:///Users/runner/work/emacs/emacs/, NSUnderlyingError=0x6000031342d0 {Error Domain=NSPOSIXErrorDomain Code=2 "No such file or directory"}})
 [exit=1]
 
 ===== LAUNCH OUR APP AND CAPTURE LOGS =====
@@ -583,8 +580,8 @@ Timestamp               Ty Process[PID:TID]
 --- unified log crash signatures ---
 
 --- crash reports ---
-  scanning /Users/runner/Library/Logs/CoreSimulator/37AE46DB-B9BB-47B2-B5B3-38A466C0E35E/CrashReporter (recursive)
-  scanning /Users/runner/Library/Logs/CoreSimulator/37AE46DB-B9BB-47B2-B5B3-38A466C0E35E (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D/CrashReporter (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/F572BFFE-4FC0-4F6A-86D1-C0547AD43D5D (recursive)
   scanning /Users/runner/Library/Logs/CoreSimulator/CrashReporter/Standalone (recursive)
   scanning /Users/runner/Library/Logs/DiagnosticReports (recursive)
 
