@@ -1190,6 +1190,42 @@ ios_emacs_bg_thread (void *unused)
   ios_launch_log (@"AppDelegate applicationWillTerminate");
 }
 
+/* iOS hands files opened from Files / Mail / Safari / share
+   sheet to the app via this callback.  The URL is security-scoped;
+   start access, then enqueue a synthetic key sequence that lands
+   in *scratch* as (find-file "PATH") -- Emacs's command loop
+   evaluates it and the user sees the file open.
+
+   Building a NON_ASCII_KEYSTROKE_EVENT for each char keeps us out
+   of any Lisp eval machinery on the wrong thread; the keystrokes
+   simply replay as if the user typed them.  */
+- (BOOL)application:(UIApplication *)application
+            openURL:(NSURL *)url
+            options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options
+{
+  if (url == nil)
+    return NO;
+  BOOL scoped = [url startAccessingSecurityScopedResource];
+  NSString *path = url.path;
+  if (path.length == 0)
+    {
+      if (scoped) [url stopAccessingSecurityScopedResource];
+      return NO;
+    }
+  ios_launch_log ([NSString stringWithFormat:
+                   @"AppDelegate openURL: %@", path]);
+  /* Send: C-x C-f <path> RET.  Each enqueue_key call is fast and
+     non-blocking, so the loop completes well within UIKit's
+     openURL: timeout.  */
+  ios_enqueue_key (CHAR_CTL | 'x');
+  ios_enqueue_key (CHAR_CTL | 'f');
+  const char *utf8 = path.UTF8String;
+  for (const char *p = utf8; p && *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
+  ios_enqueue_key (0x0d);
+  return YES;
+}
+
 @end
 
 
