@@ -465,6 +465,14 @@ get_keysym_name (int keysym)
    what other apps do when they want a discreet "no" beep).
    Dispatched to the main queue because UIImpactFeedbackGenerator
    wants the UI thread.  */
+/* Hoisted up here so ios_mouse_position below can reference them
+   directly; the publish / drain helpers further down use the same
+   storage.  */
+static pthread_mutex_t ios_motion_lock = PTHREAD_MUTEX_INITIALIZER;
+static int  ios_motion_x = 0;
+static int  ios_motion_y = 0;
+static bool ios_motion_dirty = false;
+
 static void
 ios_ring_bell (struct frame *f)
 {
@@ -655,13 +663,8 @@ static int ios_pending_canvas_w = 0;
 static int ios_pending_canvas_h = 0;
 static bool ios_pending_canvas_valid = false;
 
-/* Last known mouse / finger position in frame-relative pixel
-   coordinates, plus a dirty bit for live-highlight updates.
-   Updated under ios_motion_lock from UIKit gesture handlers.  */
-static pthread_mutex_t ios_motion_lock = PTHREAD_MUTEX_INITIALIZER;
-static int  ios_motion_x = 0;
-static int  ios_motion_y = 0;
-static bool ios_motion_dirty = false;
+/* Last known mouse / finger position lives further up (above
+   ios_mouse_position, which reads it directly).  */
 
 void
 ios_publish_mouse_motion (double x, double y)
