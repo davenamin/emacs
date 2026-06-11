@@ -1121,8 +1121,12 @@ ios_emacs_bg_thread (void *unused)
                                               constant:8],
       [logView.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor],
       [logView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
-      [logView.heightAnchor   constraintEqualToAnchor:safe.heightAnchor
-                                           multiplier:0.30],
+      /* Log strip stays ~one notebook-tab tall.  Was 30% of the
+         safe area, which left the canvas with barely more than
+         half the screen on iPhone; users want most of the screen
+         for actual Emacs.  Diagnostics fit comfortably in 120pt
+         and a long tail scrolls inside the UITextView.  */
+      [logView.heightAnchor   constraintEqualToConstant:120],
       [canvas.topAnchor       constraintEqualToAnchor:logView.bottomAnchor
                                               constant:8],
       [canvas.leadingAnchor   constraintEqualToAnchor:safe.leadingAnchor],
