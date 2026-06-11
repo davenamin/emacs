@@ -16,9 +16,10 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
-/* This file is the iOS analogue of src/androidselect.c / src/nsselect.m.
-   It bridges Emacs selection / clipboard operations onto
-   UIPasteboard.  Skeleton only.  */
+/* iOS analogue of src/androidselect.c / src/nsselect.m.  Wires
+   UIPasteboard.generalPasteboard onto the standard
+   interprogram-cut-function / interprogram-paste-function
+   protocol via three small Lisp primitives.  */
 
 #include <config.h>
 
@@ -27,11 +28,75 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <UIKit/UIKit.h>
 
 #include "lisp.h"
+#include "coding.h"
 #include "iosterm.h"
+
+DEFUN ("ios-set-clipboard", Fios_set_clipboard, Sios_set_clipboard,
+       1, 1, 0,
+       doc: /* Copy STRING to the iOS general pasteboard.  */)
+  (Lisp_Object string)
+{
+  CHECK_STRING (string);
+  Lisp_Object encoded = code_convert_string_norecord (string, Qutf_8, true);
+  NSString *ns = [[NSString alloc]
+                   initWithBytes:SSDATA (encoded)
+                          length:SBYTES (encoded)
+                        encoding:NSUTF8StringEncoding];
+  if (ns == nil)
+    return Qnil;
+  dispatch_async (dispatch_get_main_queue (), ^{
+    UIPasteboard.generalPasteboard.string = ns;
+  });
+  return Qt;
+}
+
+DEFUN ("ios-get-clipboard", Fios_get_clipboard, Sios_get_clipboard,
+       0, 0, 0,
+       doc: /* Return the contents of the iOS general pasteboard.
+Value is a multibyte string, or nil if the pasteboard holds no
+plain-text item.  */)
+  (void)
+{
+  __block NSString *captured = nil;
+  /* Pasteboard access must hit the main thread or UIKit logs a
+     hostile warning; do it synchronously since the caller (Emacs's
+     paste machinery) expects an immediate value.  */
+  if ([NSThread isMainThread])
+    captured = UIPasteboard.generalPasteboard.string;
+  else
+    dispatch_sync (dispatch_get_main_queue (), ^{
+      captured = UIPasteboard.generalPasteboard.string;
+    });
+  if (captured == nil || captured.length == 0)
+    return Qnil;
+  const char *utf8 = [captured UTF8String];
+  if (utf8 == NULL)
+    return Qnil;
+  Lisp_Object raw = make_unibyte_string (utf8, strlen (utf8));
+  return code_convert_string_norecord (raw, Qutf_8, false);
+}
+
+DEFUN ("ios-clipboard-exists-p", Fios_clipboard_exists_p,
+       Sios_clipboard_exists_p, 0, 0, 0,
+       doc: /* Return t if the iOS pasteboard currently holds text.  */)
+  (void)
+{
+  __block BOOL has = NO;
+  if ([NSThread isMainThread])
+    has = UIPasteboard.generalPasteboard.hasStrings;
+  else
+    dispatch_sync (dispatch_get_main_queue (), ^{
+      has = UIPasteboard.generalPasteboard.hasStrings;
+    });
+  return has ? Qt : Qnil;
+}
 
 void
 syms_of_iosselect (void)
 {
+  defsubr (&Sios_set_clipboard);
+  defsubr (&Sios_get_clipboard);
+  defsubr (&Sios_clipboard_exists_p);
 }
 
 #endif /* HAVE_IOS */

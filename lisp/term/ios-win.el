@@ -66,6 +66,23 @@ actual graphics back end and is still being filled in."
 (cl-defmethod frame-creation-function (params &context (window-system ios))
   (x-create-frame-with-faces params))
 
+;; Pasteboard glue.  The C primitives live in src/iosselect.m.
+(declare-function ios-set-clipboard "iosselect.m" (string))
+(declare-function ios-get-clipboard "iosselect.m" ())
+(declare-function ios-clipboard-exists-p "iosselect.m" ())
+
+(defun ios-interprogram-cut (text)
+  "Send TEXT to the iOS general pasteboard."
+  (ios-set-clipboard text))
+
+(defun ios-interprogram-paste ()
+  "Return the current iOS general-pasteboard text, or nil if none."
+  (when (ios-clipboard-exists-p)
+    (ios-get-clipboard)))
+
+(setq interprogram-cut-function   #'ios-interprogram-cut)
+(setq interprogram-paste-function #'ios-interprogram-paste)
+
 (provide 'ios-win)
 
 ;;; ios-win.el ends here
