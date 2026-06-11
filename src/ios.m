@@ -1161,6 +1161,35 @@ ios_setenv_bundle_paths (void)
   ios_launch_log ([NSString stringWithFormat:
                    @"ios_setenv_bundle_paths: EMACSLOADPATH=%@ EMACSDATA=%@",
                    lisp, etc]);
+
+  /* Point HOME at the Documents/ subtree of the sandbox.  iOS
+     defaults getenv("HOME") to the app container's root, but the
+     directory users see in the Files app -- and the only one
+     visible in iCloud sync -- is Documents/.  Files saved
+     anywhere else are effectively invisible to the user.
+
+     If Documents/ doesn't exist yet (first launch), create it.
+     Also create an Emacs/ subfolder there for user-init-file and
+     stash that as XDG_CONFIG_HOME so site-start.el's lookup
+     points inside it.  */
+  NSArray<NSString *> *docs = NSSearchPathForDirectoriesInDomains
+    (NSDocumentDirectory, NSUserDomainMask, YES);
+  if (docs.count > 0)
+    {
+      NSString *home = docs[0];
+      [[NSFileManager defaultManager] createDirectoryAtPath:home
+                                withIntermediateDirectories:YES
+                                                 attributes:nil
+                                                      error:nil];
+      setenv ("HOME", home.UTF8String, 1);
+      NSString *cfg = [home stringByAppendingPathComponent:@".emacs.d"];
+      [[NSFileManager defaultManager] createDirectoryAtPath:cfg
+                                withIntermediateDirectories:YES
+                                                 attributes:nil
+                                                      error:nil];
+      ios_launch_log ([NSString stringWithFormat:
+                       @"ios_setenv_bundle_paths: HOME=%@", home]);
+    }
 }
 
 int
