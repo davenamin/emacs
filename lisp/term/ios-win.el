@@ -49,6 +49,8 @@
 
 (add-to-list 'display-format-alist '(".*" . ios))
 
+(declare-function ios-system-appearance "iosfns.m" ())
+
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
@@ -57,6 +59,14 @@ that lets startup.el's window-system bring-up reach completion; the
 underlying terminal (the one ios_term_init will produce) is the
 actual graphics back end and is still being filled in."
   (create-default-fontset)
+  ;; Seed frame-background-mode from the OS-wide appearance so the
+  ;; default theme picks dark or light accordingly.  Defensive: a
+  ;; stub binary built before ios-system-appearance landed would
+  ;; signal void-function and break startup.
+  (when (fboundp 'ios-system-appearance)
+    (let ((mode (ios-system-appearance)))
+      (when (memq mode '(dark light))
+        (setq frame-background-mode mode))))
   (setq ios-initialized t))
 
 (cl-defmethod handle-args-function (args &context (window-system ios))

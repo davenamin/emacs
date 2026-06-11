@@ -431,6 +431,27 @@ static id ios_pick_delegate_keepalive;
 }
 @end
 
+DEFUN ("ios-system-appearance", Fios_system_appearance,
+       Sios_system_appearance, 0, 0, 0,
+       doc: /* Return the system-wide appearance, `dark' or `light'.
+Reads UIScreen.mainScreen.traitCollection.userInterfaceStyle on
+the main thread.  Lisp init code in ios-win.el calls this to
+seed frame-background-mode so the user's default theme matches
+the OS-wide setting at launch.  */)
+  (void)
+{
+  __block UIUserInterfaceStyle style = UIUserInterfaceStyleUnspecified;
+  if ([NSThread isMainThread])
+    style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+  else
+    dispatch_sync (dispatch_get_main_queue (), ^{
+      style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+    });
+  return style == UIUserInterfaceStyleDark
+         ? intern_c_string ("dark")
+         : intern_c_string ("light");
+}
+
 DEFUN ("ios-pick-file", Fios_pick_file, Sios_pick_file, 0, 0, 0,
        doc: /* Present the iOS Files picker; return the picked path.
 Blocks until the user picks a document or cancels.  Returns nil
@@ -497,6 +518,7 @@ syms_of_iosfns (void)
   defsubr (&Sx_display_visual_class);
   defsubr (&Sx_display_list);
   defsubr (&Sios_pick_file);
+  defsubr (&Sios_system_appearance);
 }
 
 #endif /* HAVE_IOS */
