@@ -30,6 +30,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <UIKit/UIKit.h>
 
 #include "lisp.h"
+#include "coding.h"
 #include "iosterm.h"
 #include "frame.h"
 #include "window.h"
@@ -390,6 +391,83 @@ On iOS there is exactly one display, returned as a single-element list.  */)
   return list1 (XCAR (x_display_list->name_list_element));
 }
 
+/* UIDocumentPickerViewController delegate.  Owns the result
+   semaphore and copies the picked path into ios_pick_result_path
+   before signalling.  One global instance is enough since
+   ios-pick-file blocks the Emacs thread for the picker's lifetime,
+   so concurrent presentations can't happen.  */
+static dispatch_semaphore_t ios_pick_sem;
+static NSString *ios_pick_result_path;
+
+@interface IOSPickerDelegate
+  : NSObject <UIDocumentPickerDelegate>
+@end
+@implementation IOSPickerDelegate
+- (void) documentPicker:(UIDocumentPickerViewController *)c
+  didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+  if (urls.count > 0)
+    {
+      NSURL *url = urls[0];
+      /* iOS hands us a security-scoped URL the app would
+         otherwise be sandboxed away from.  Hold the scope open
+         for the lifetime of the process -- a future commit will
+         pair this with stopAccessing... once the file is
+         saved.  */
+      [url startAccessingSecurityScopedResource];
+      ios_pick_result_path = [url.path copy];
+    }
+  if (ios_pick_sem)
+    dispatch_semaphore_signal (ios_pick_sem);
+}
+- (void) documentPickerWasCancelled:(UIDocumentPickerViewController *)c
+{
+  if (ios_pick_sem)
+    dispatch_semaphore_signal (ios_pick_sem);
+}
+@end
+
+DEFUN ("ios-pick-file", Fios_pick_file, Sios_pick_file, 0, 0, 0,
+       doc: /* Present the iOS Files picker; return the picked path.
+Blocks until the user picks a document or cancels.  Returns nil
+on cancel.  The returned path is a security-scoped sandbox URL
+already opened for reading and writing.  */)
+  (void)
+{
+  ios_pick_sem = dispatch_semaphore_create (0);
+  ios_pick_result_path = nil;
+
+  dispatch_async (dispatch_get_main_queue (), ^{
+    UIDocumentPickerViewController *picker
+      = [[UIDocumentPickerViewController alloc]
+          initWithDocumentTypes:@[@"public.item"]
+                         inMode:UIDocumentPickerModeOpen];
+    picker.delegate = [[IOSPickerDelegate alloc] init];
+    picker.allowsMultipleSelection = NO;
+    UIWindow *window = nil;
+    for (UIWindow *w in UIApplication.sharedApplication.windows)
+      if (w.isKeyWindow) { window = w; break; }
+    if (window == nil
+        && UIApplication.sharedApplication.windows.count > 0)
+      window = UIApplication.sharedApplication.windows.firstObject;
+    UIViewController *root = window.rootViewController;
+    while (root.presentedViewController != nil)
+      root = root.presentedViewController;
+    [root presentViewController:picker animated:YES completion:nil];
+  });
+
+  dispatch_semaphore_wait (ios_pick_sem, DISPATCH_TIME_FOREVER);
+  ios_pick_sem = nil;
+  if (ios_pick_result_path == nil)
+    return Qnil;
+  const char *utf8 = ios_pick_result_path.UTF8String;
+  if (utf8 == NULL)
+    return Qnil;
+  Lisp_Object raw = make_unibyte_string (utf8, strlen (utf8));
+  ios_pick_result_path = nil;
+  return code_convert_string_norecord (raw, Qutf_8, false);
+}
+
 void
 syms_of_iosfns (void)
 {
@@ -413,6 +491,7 @@ syms_of_iosfns (void)
   defsubr (&Sx_display_backing_store);
   defsubr (&Sx_display_visual_class);
   defsubr (&Sx_display_list);
+  defsubr (&Sios_pick_file);
 }
 
 #endif /* HAVE_IOS */

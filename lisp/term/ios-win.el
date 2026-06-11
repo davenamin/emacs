@@ -83,6 +83,18 @@ actual graphics back end and is still being filled in."
 (setq interprogram-cut-function   #'ios-interprogram-cut)
 (setq interprogram-paste-function #'ios-interprogram-paste)
 
+;; Files-app integration.  ios-pick-file is implemented in C; it
+;; presents UIDocumentPickerViewController and blocks until the user
+;; picks something or cancels.
+(declare-function ios-pick-file "iosfns.m" ())
+
+(defun ios-find-file ()
+  "Pick a file via the iOS Files app and open it."
+  (interactive)
+  (let ((path (ios-pick-file)))
+    (when (and path (file-readable-p path))
+      (find-file path))))
+
 (provide 'ios-win)
 
 ;;; ios-win.el ends here
