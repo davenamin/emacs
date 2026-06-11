@@ -303,6 +303,17 @@ extern void ios_publish_canvas_size (double width, double height);
                                          initWithTarget:self
                                          action:@selector (handlePinch:)];
       [self addGestureRecognizer:pinch];
+
+      /* Single-finger pan: drag to select region.  Begin sends
+         mouse-1 down, change sends a drag, end sends mouse-1 up.
+         Configured to start after a small minimum displacement so
+         a hesitant tap stays a tap.  */
+      UIPanGestureRecognizer *drag = [[UIPanGestureRecognizer alloc]
+                                       initWithTarget:self
+                                       action:@selector (handleDrag:)];
+      drag.minimumNumberOfTouches = 1;
+      drag.maximumNumberOfTouches = 1;
+      [self addGestureRecognizer:drag];
     }
   return self;
 }
@@ -450,6 +461,54 @@ extern void ios_publish_canvas_size (double width, double height);
   CGSize sz = self.bounds.size;
   if (sz.width > 0 && sz.height > 0)
     ios_publish_canvas_size (sz.width, sz.height);
+}
+
+/* Single-finger drag: emit mouse-1 down at gesture begin and
+   mouse-1 up at gesture end, leaving Emacs's existing click vs
+   drag promotion to do the rest.  Intermediate motion events
+   need a mouse_position_hook to be useful; a future pass adds
+   that and the live highlight follows the finger.  */
+- (void) handleDrag:(UIPanGestureRecognizer *)gr
+{
+  if (!x_display_list)
+    return;
+  struct frame *f = x_display_list->highlight_frame;
+  if (!f && CONSP (Vframe_list))
+    f = XFRAME (XCAR (Vframe_list));
+  if (!f)
+    return;
+  CGPoint pt = [gr locationInView:self];
+  int x = (int) pt.x, y = (int) pt.y;
+
+  if (gr.state == UIGestureRecognizerStateBegan)
+    {
+      [self becomeFirstResponder];
+      struct input_event ie;
+      EVENT_INIT (ie);
+      ie.kind = MOUSE_CLICK_EVENT;
+      ie.code = 0;
+      ie.modifiers = down_modifier;
+      ie.x = make_fixnum (x);
+      ie.y = make_fixnum (y);
+      XSETFRAME (ie.frame_or_window, f);
+      ie.timestamp = 0;
+      ios_enqueue_event (&ie);
+      return;
+    }
+  if (gr.state == UIGestureRecognizerStateEnded
+      || gr.state == UIGestureRecognizerStateCancelled)
+    {
+      struct input_event ie;
+      EVENT_INIT (ie);
+      ie.kind = MOUSE_CLICK_EVENT;
+      ie.code = 0;
+      ie.modifiers = up_modifier;
+      ie.x = make_fixnum (x);
+      ie.y = make_fixnum (y);
+      XSETFRAME (ie.frame_or_window, f);
+      ie.timestamp = 0;
+      ios_enqueue_event (&ie);
+    }
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
