@@ -1258,6 +1258,41 @@ ios_emacs_bg_thread (void *unused)
    and EMACSDATA before ios_emacs_init is the same mechanism the
    Android port uses; the load-path bootstrap in emacs.c reads these
    envvars before computing the built-in fallback list.  */
+/* C-callable accessor for the sandbox path enumeration declared
+   in iosvfs.c.  Returns a pointer into an internal cache; callers
+   must not free.  */
+const char *
+ios_sandbox_directory (int which)
+{
+  static NSString *cache[5] = {0};
+  if (which < 0 || which > 4)
+    return NULL;
+  if (cache[which])
+    return cache[which].fileSystemRepresentation;
+  NSArray<NSString *> *arr = nil;
+  switch (which)
+    {
+    case 0: cache[0] = [NSBundle mainBundle].bundlePath; break;
+    case 1:
+      arr = NSSearchPathForDirectoriesInDomains
+            (NSDocumentDirectory, NSUserDomainMask, YES);
+      if (arr.count > 0) cache[1] = arr[0];
+      break;
+    case 2:
+      arr = NSSearchPathForDirectoriesInDomains
+            (NSLibraryDirectory, NSUserDomainMask, YES);
+      if (arr.count > 0) cache[2] = arr[0];
+      break;
+    case 3:
+      arr = NSSearchPathForDirectoriesInDomains
+            (NSCachesDirectory, NSUserDomainMask, YES);
+      if (arr.count > 0) cache[3] = arr[0];
+      break;
+    case 4: cache[4] = NSTemporaryDirectory (); break;
+    }
+  return cache[which] ? cache[which].fileSystemRepresentation : NULL;
+}
+
 static void
 ios_setenv_bundle_paths (void)
 {
