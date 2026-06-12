@@ -280,5 +280,18 @@ extern Lisp_Object ios_menu_show (struct frame *f, int x, int y,
                                   int menuflags, Lisp_Object title,
                                   const char **error_name);
 
+/* Nested input pump + serial-tagged menu-selection channel
+   (iosterm.m).  The pump runs one normal input drain so the menu
+   loop stays responsive to C-g; the channel carries the action
+   sheet's chosen menu_items index back to the pump.  */
+extern void ios_pump_input (int timeout_ms);
+extern void ios_publish_menu_selection (int serial, int index);
+extern bool ios_take_menu_selection (int serial, int *index);
+
+/* Async file-arrival channel (iosterm.m): the path is drained into
+   a DRAG_N_DROP_EVENT on the Emacs thread.  Fed by openURL: and by
+   the document-picker delegate.  */
+extern void ios_publish_open_file (const char *path);
+
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */

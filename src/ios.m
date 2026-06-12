@@ -323,33 +323,18 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
   return self;
 }
 
-/* The frame gesture events should target: the display's
-   highlight frame if set, else the first live frame.  Safe to
-   call from the UIKit thread -- it only reads tagged pointers,
-   never allocates.  Returns NULL during early bring-up.  */
-static struct frame *
-ios_target_frame (void)
-{
-  if (!x_display_list)
-    return NULL;
-  struct frame *f = x_display_list->highlight_frame;
-  if (!f && CONSP (Vframe_list))
-    f = XFRAME (XCAR (Vframe_list));
-  if (f && !FRAME_LIVE_P (f))
-    f = NULL;
-  return f;
-}
-
 /* Enqueue one half of a synthesized mouse-button event.  BUTTON
    is the Emacs button number (0 = mouse-1, 1 = mouse-2, ...);
-   UPDOWN is down_modifier or up_modifier.  No-op when no frame
-   exists yet.  */
+   UPDOWN is down_modifier or up_modifier.
+
+   frame_or_window is deliberately left nil: this runs on the
+   UIKit thread, where reading frame state (Vframe_list,
+   highlight_frame) would race frame deletion on the Emacs
+   thread.  The drain in iosterm.m attaches the frame on the
+   Emacs thread before storing the event.  */
 static void
 ios_emit_button_event (int button, int updown, CGPoint pt)
 {
-  struct frame *f = ios_target_frame ();
-  if (!f)
-    return;
   struct input_event ie;
   EVENT_INIT (ie);
   ie.kind = MOUSE_CLICK_EVENT;
@@ -357,19 +342,17 @@ ios_emit_button_event (int button, int updown, CGPoint pt)
   ie.modifiers = updown;
   ie.x = make_fixnum ((int) pt.x);
   ie.y = make_fixnum ((int) pt.y);
-  XSETFRAME (ie.frame_or_window, f);
+  ie.frame_or_window = Qnil;
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
 }
 
 /* Enqueue a wheel event at PT.  FORWARD true = scroll content
-   forward (wheel-down in mwheel's terms).  */
+   forward (wheel-down in mwheel's terms).  Frame attached on the
+   Emacs thread, as above.  */
 static void
 ios_emit_wheel_event (bool forward, CGPoint pt)
 {
-  struct frame *f = ios_target_frame ();
-  if (!f)
-    return;
   struct input_event ie;
   EVENT_INIT (ie);
   ie.kind = WHEEL_EVENT;
@@ -377,7 +360,7 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
   ie.modifiers = forward ? down_modifier : up_modifier;
   ie.x = make_fixnum ((int) pt.x);
   ie.y = make_fixnum ((int) pt.y);
-  XSETFRAME (ie.frame_or_window, f);
+  ie.frame_or_window = Qnil;
   ie.arg = Qnil;
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
@@ -743,14 +726,13 @@ ios_emit_function_key (UIKey *key)
   if (xk == 0)
     return NO;
   int mods = ios_mods_from_flags (key.modifierFlags, true);
-  struct frame *f = ios_target_frame ();
   struct input_event ie;
   EVENT_INIT (ie);
   ie.kind = NON_ASCII_KEYSTROKE_EVENT;
   ie.code = xk;
   ie.modifiers = mods;
-  if (f)
-    XSETFRAME (ie.frame_or_window, f);
+  /* Frame attached by the drain on the Emacs thread.  */
+  ie.frame_or_window = Qnil;
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
   return YES;

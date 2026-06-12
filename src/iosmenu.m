@@ -37,11 +37,16 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "coding.h"
 #include "menu.h"
 
-/* Selection state shared between the UIKit action handlers and the
-   blocked Emacs thread.  INDEX is the menu_items vector index of
-   the chosen item, or -1 for cancel / dismissal.  */
-static dispatch_semaphore_t ios_menu_sem;
-static int ios_menu_selection;
+/* Serial of the menu invocation currently (or most recently) on
+   screen.  Handlers capture their own invocation's serial and
+   publish through ios_publish_menu_selection, which discards
+   anything whose serial does not match what the pump is waiting
+   for -- a tap on a stale sheet cannot leak into a newer menu.  */
+static int ios_menu_serial_counter;
+
+/* Strong reference to the on-screen sheet so the pump can dismiss
+   it programmatically on C-g.  Main-thread access only.  */
+static UIAlertController *ios_menu_sheet;
 
 /* terminal->menu_show_hook.  Walks the shared menu_items vector
    (already populated by menu.c), presents an action sheet, blocks
@@ -103,8 +108,7 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
     sheet_title =
       [NSString stringWithUTF8String:SSDATA (ENCODE_UTF_8 (title))];
 
-  ios_menu_sem = dispatch_semaphore_create (0);
-  ios_menu_selection = -1;
+  int serial = ++ios_menu_serial_counter;
 
   dispatch_async (dispatch_get_main_queue (), ^{
     UIAlertController *sheet =
@@ -119,9 +123,8 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
           [UIAlertAction actionWithTitle:titles[k]
                                    style:UIAlertActionStyleDefault
                                  handler:^(UIAlertAction *a) {
-            ios_menu_selection = item_index;
-            if (ios_menu_sem)
-              dispatch_semaphore_signal (ios_menu_sem);
+            ios_menu_sheet = nil;
+            ios_publish_menu_selection (serial, item_index);
           }];
         act.enabled = enabled[k].boolValue && item_index >= 0;
         [sheet addAction:act];
@@ -130,9 +133,8 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
        [UIAlertAction actionWithTitle:@"Cancel"
                                 style:UIAlertActionStyleCancel
                               handler:^(UIAlertAction *a) {
-         ios_menu_selection = -1;
-         if (ios_menu_sem)
-           dispatch_semaphore_signal (ios_menu_sem);
+         ios_menu_sheet = nil;
+         ios_publish_menu_selection (serial, -1);
        }]];
 
     UIWindow *window = nil;
@@ -153,8 +155,7 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
       root = root.presentedViewController;
     if (root == nil)
       {
-        if (ios_menu_sem)
-          dispatch_semaphore_signal (ios_menu_sem);
+        ios_publish_menu_selection (serial, -1);
         return;
       }
     /* iPad: action sheets present as popovers and need an anchor;
@@ -166,24 +167,36 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
         pop.sourceView = root.view;
         pop.sourceRect = CGRectMake (x, y, 1, 1);
       }
+    ios_menu_sheet = sheet;
     [root presentViewController:sheet animated:YES completion:nil];
   });
 
-  /* Same bounded wait as ios-pick-file: never hang the Emacs
-     thread forever if UIKit tears the sheet down without firing a
-     handler.  */
-  int waited = 0;
-  while (dispatch_semaphore_wait
-           (ios_menu_sem,
-            dispatch_time (DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC)))
+  /* Nested input pump, the same shape as every other port's modal
+     menu loop: keep draining input so type-ahead lands in the kbd
+     buffer and a typed C-g sets Vquit_flag (the drain path detects
+     the quit character in kbd_buffer_store_event).  Exits on
+     selection, cancellation, or quit -- all events, so there is no
+     wall-clock timeout to guess at.  */
+  int sel = -1;
+  for (;;)
     {
-      waited += 30;
-      if (waited >= 600)
+      if (ios_take_menu_selection (serial, &sel))
         break;
+      if (!NILP (Vquit_flag))
+        {
+          /* User quit from the keyboard: tear the sheet down and
+             let the pending quit propagate.  */
+          dispatch_async (dispatch_get_main_queue (), ^{
+            UIAlertController *sheet = ios_menu_sheet;
+            ios_menu_sheet = nil;
+            [sheet.presentingViewController
+              dismissViewControllerAnimated:YES completion:nil];
+          });
+          sel = -1;
+          break;
+        }
+      ios_pump_input (200);
     }
-  ios_menu_sem = nil;
-
-  int sel = ios_menu_selection;
   if (sel < 0 || sel + MENU_ITEMS_ITEM_VALUE >= menu_items_used)
     {
       if (!(menuflags & MENU_FOR_CLICK))

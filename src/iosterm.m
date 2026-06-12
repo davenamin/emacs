@@ -33,6 +33,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <UIKit/UIKit.h>
 
 #include <pthread.h>
+#include <poll.h>
 #include <fcntl.h>
 #include <unistd.h>
 
@@ -958,18 +959,9 @@ ios_enqueue_key (int codepoint)
   ios_wake ();
 }
 
-int
-ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
+static int
+ios_drain_events (struct terminal *terminal, struct input_event *hold_quit)
 {
-  (void) hold_quit;
-  /* Drain the wake pipe -- we only used it to be selectable; the
-     actual data are in ios_input_queue.  */
-  if (ios_wake_pipe[0] >= 0)
-    {
-      char buf[64];
-      while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
-        continue;
-    }
   /* Pick up any pending UIView-bounds change (orientation, split
      view, keyboard) before processing events.  */
   ios_apply_pending_resize ();
@@ -993,8 +985,29 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
       struct input_event ie = ios_event_queue[ios_event_head];
       ios_event_head = (ios_event_head + 1) % IOS_EVENT_QUEUE_CAP;
       pthread_mutex_unlock (&ios_input_lock);
-      kbd_buffer_store_event_hold (&ie, hold_quit);
-      n++;
+      /* The UIKit thread leaves frame_or_window nil -- reading
+         frame state over there would race frame deletion here.
+         Attach the frame on this (the Emacs) thread, and drop the
+         event if no frame exists yet.  */
+      if (NILP (ie.frame_or_window))
+        {
+          struct frame *f
+            = (terminal->display_info.ios
+               && terminal->display_info.ios->highlight_frame)
+              ? terminal->display_info.ios->highlight_frame
+              : (FRAMEP (selected_frame) ? XFRAME (selected_frame) : NULL);
+          if (f && FRAME_LIVE_P (f))
+            {
+              XSETFRAME (ie.frame_or_window, f);
+              kbd_buffer_store_event_hold (&ie, hold_quit);
+              n++;
+            }
+        }
+      else
+        {
+          kbd_buffer_store_event_hold (&ie, hold_quit);
+          n++;
+        }
       pthread_mutex_lock (&ios_input_lock);
     }
   while (ios_input_head != ios_input_tail)
@@ -1025,6 +1038,75 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
     }
   pthread_mutex_unlock (&ios_input_lock);
   return n;
+}
+
+int
+ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
+{
+  /* Drain the wake pipe -- we only used it to be selectable; the
+     actual data are in the queues ios_drain_events consumes.  */
+  if (ios_wake_pipe[0] >= 0)
+    {
+      char buf[64];
+      while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
+        continue;
+    }
+  return ios_drain_events (terminal, hold_quit);
+}
+
+/* Nested input pump for synchronous UI (popup menus).  Waits up to
+   TIMEOUT_MS for wake-pipe traffic, then runs one normal drain so
+   queued keystrokes land in the kbd buffer for later and -- the
+   point of pumping instead of sleeping -- a typed quit character
+   sets Vquit_flag through kbd_buffer_store_event's quit detection.
+   Emacs thread only.  */
+void
+ios_pump_input (int timeout_ms)
+{
+  if (ios_wake_pipe[0] >= 0)
+    {
+      struct pollfd pfd = { ios_wake_pipe[0], POLLIN, 0 };
+      poll (&pfd, 1, timeout_ms);
+      char buf[64];
+      while (read (ios_wake_pipe[0], buf, sizeof buf) > 0)
+        continue;
+    }
+  if (x_display_list && x_display_list->terminal)
+    ios_drain_events (x_display_list->terminal, NULL);
+}
+
+/* Menu-selection channel.  The action-sheet handlers publish the
+   chosen menu_items index tagged with the show-invocation's serial;
+   the pump loop in ios_menu_show takes it only when the serial
+   matches, so a tap on a stale, torn-down sheet can never leak into
+   a newer menu.  */
+static pthread_mutex_t ios_menu_lock = PTHREAD_MUTEX_INITIALIZER;
+static int ios_menu_done_serial = 0;   /* 0 = nothing published */
+static int ios_menu_done_index = -1;
+
+void
+ios_publish_menu_selection (int serial, int index)
+{
+  pthread_mutex_lock (&ios_menu_lock);
+  ios_menu_done_serial = serial;
+  ios_menu_done_index = index;
+  pthread_mutex_unlock (&ios_menu_lock);
+  ios_wake ();
+}
+
+bool
+ios_take_menu_selection (int serial, int *index)
+{
+  bool hit = false;
+  pthread_mutex_lock (&ios_menu_lock);
+  if (ios_menu_done_serial == serial)
+    {
+      *index = ios_menu_done_index;
+      ios_menu_done_serial = 0;
+      hit = true;
+    }
+  pthread_mutex_unlock (&ios_menu_lock);
+  return hit;
 }
 
 /* Cross-port required entry point: frame.c calls this from inside

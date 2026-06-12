@@ -392,18 +392,15 @@ On iOS there is exactly one display, returned as a single-element list.  */)
   return list1 (XCAR (x_display_list->name_list_element));
 }
 
-/* UIDocumentPickerViewController delegate.  Owns the result
-   semaphore and copies the picked path into ios_pick_result_path
-   before signalling.  One global instance is enough since
-   ios-pick-file blocks the Emacs thread for the picker's lifetime,
-   so concurrent presentations can't happen.  */
-static dispatch_semaphore_t ios_pick_sem;
-static NSString *ios_pick_result_path;
-/* The picker's delegate slot is weak; keep a strong ref alive
-   here so ARC doesn't reclaim the delegate between present:
-   and didPick.  */
-static id ios_pick_delegate_keepalive;
+/* UIDocumentPickerViewController delegate.  Picked files feed the
+   same async channel as application:openURL: -- the path is
+   published to the Emacs thread, which builds a DRAG_N_DROP_EVENT,
+   and the [drag-n-drop] binding in ios-win.el visits the file.
+   Nothing blocks, so the user can browse the picker indefinitely
+   and Emacs (timers, redisplay, C-g) stays fully alive.
 
+   The delegate property on the picker is weak; this single static
+   instance keeps it pinned for the app's lifetime.  */
 @interface IOSPickerDelegate
   : NSObject <UIDocumentPickerDelegate>
 @end
@@ -411,49 +408,22 @@ static id ios_pick_delegate_keepalive;
 - (void) documentPicker:(UIDocumentPickerViewController *)c
   didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
 {
-  if (urls.count > 0)
+  for (NSURL *url in urls)
     {
-      NSURL *url = urls[0];
-      /* iOS hands us a security-scoped URL the app would
-         otherwise be sandboxed away from.  Hold the scope open
-         for the lifetime of the process -- a future commit will
-         pair this with stopAccessing... once the file is
-         saved.  */
+      /* Hold the security scope open for the process lifetime so
+         the sandboxed-out path stays readable.  */
       [url startAccessingSecurityScopedResource];
-      ios_pick_result_path = [url.path copy];
+      if (url.path.length > 0)
+        ios_publish_open_file (url.fileSystemRepresentation);
     }
-  if (ios_pick_sem)
-    dispatch_semaphore_signal (ios_pick_sem);
 }
 - (void) documentPickerWasCancelled:(UIDocumentPickerViewController *)c
 {
-  if (ios_pick_sem)
-    dispatch_semaphore_signal (ios_pick_sem);
+  /* Nothing to do: no thread is waiting.  */
 }
 @end
 
-DEFUN ("ios-system-appearance", Fios_system_appearance,
-       Sios_system_appearance, 0, 0, 0,
-       doc: /* Return the system-wide appearance, `dark' or `light'.
-Reads UIScreen.mainScreen.traitCollection.userInterfaceStyle on
-the main thread.  Lisp init code in ios-win.el calls this to
-seed frame-background-mode so the user's default theme matches
-the OS-wide setting at launch.  */)
-  (void)
-{
-  __block UIUserInterfaceStyle style = UIUserInterfaceStyleUnspecified;
-  if ([NSThread isMainThread])
-    style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
-  else
-    dispatch_sync (dispatch_get_main_queue (), ^{
-      style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
-    });
-  return style == UIUserInterfaceStyleDark
-         ? intern_c_string ("dark")
-         : intern_c_string ("light");
-}
-
-extern void ios_set_keyboard_visible (bool visible);
+static IOSPickerDelegate *ios_picker_delegate;
 
 DEFUN ("ios-show-keyboard", Fios_show_keyboard, Sios_show_keyboard,
        0, 0, 0,
@@ -476,21 +446,19 @@ on-screen keyboard away to reclaim canvas space.  */)
 }
 
 DEFUN ("ios-pick-file", Fios_pick_file, Sios_pick_file, 0, 0, 0,
-       doc: /* Present the iOS Files picker; return the picked path.
-Blocks until the user picks a document or cancels.  Returns nil
-on cancel.  The returned path is a security-scoped sandbox URL
-already opened for reading and writing.  */)
+       doc: /* Present the iOS Files picker.
+Returns immediately; when the user picks a document, it arrives as a
+drag-n-drop event (see `ios-handle-drag-n-drop') and is visited like
+a file handed to Emacs by any other app.  Returns nil.  */)
   (void)
 {
-  ios_pick_sem = dispatch_semaphore_create (0);
-  ios_pick_result_path = nil;
-
   dispatch_async (dispatch_get_main_queue (), ^{
     UIDocumentPickerViewController *picker
       = [[UIDocumentPickerViewController alloc]
           initForOpeningContentTypes:@[UTTypeItem]];
-    ios_pick_delegate_keepalive = [[IOSPickerDelegate alloc] init];
-    picker.delegate = ios_pick_delegate_keepalive;
+    if (ios_picker_delegate == nil)
+      ios_picker_delegate = [[IOSPickerDelegate alloc] init];
+    picker.delegate = ios_picker_delegate;
     picker.allowsMultipleSelection = NO;
     /* UIApplication.windows is deprecated; walk the connected
        scenes instead (UIWindowScene.keyWindow needs iOS 15,
@@ -511,40 +479,10 @@ already opened for reading and writing.  */)
     UIViewController *root = window.rootViewController;
     while (root.presentedViewController != nil)
       root = root.presentedViewController;
-    if (root == nil)
-      {
-        /* No view controller to present from (window torn down,
-           app backgrounded mid-call).  Signal "cancelled" instead
-           of leaving the Emacs thread blocked forever.  */
-        if (ios_pick_sem)
-          dispatch_semaphore_signal (ios_pick_sem);
-        return;
-      }
-    [root presentViewController:picker animated:YES completion:nil];
+    if (root != nil)
+      [root presentViewController:picker animated:YES completion:nil];
   });
-
-  /* Wake every 30s as a backstop: if the picker was torn down
-     without a delegate callback (UIKit does this when the app is
-     backgrounded under memory pressure), give up after 10 min
-     rather than hanging the Emacs thread permanently.  */
-  int waited = 0;
-  while (dispatch_semaphore_wait
-           (ios_pick_sem,
-            dispatch_time (DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC)))
-    {
-      waited += 30;
-      if (waited >= 600)
-        break;
-    }
-  ios_pick_sem = nil;
-  if (ios_pick_result_path == nil)
-    return Qnil;
-  const char *utf8 = ios_pick_result_path.UTF8String;
-  if (utf8 == NULL)
-    return Qnil;
-  Lisp_Object raw = make_unibyte_string (utf8, strlen (utf8));
-  ios_pick_result_path = nil;
-  return code_convert_string_norecord (raw, Qutf_8, false);
+  return Qnil;
 }
 
 void
