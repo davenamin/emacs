@@ -274,5 +274,11 @@ extern void syms_of_iosselect (void);
 extern void syms_of_iosfont (void);
 extern void syms_of_iosvfs (void);
 
+/* Popup-menu hook implementation in iosmenu.m, registered on the
+   terminal in ios_term_init.  */
+extern Lisp_Object ios_menu_show (struct frame *f, int x, int y,
+                                  int menuflags, Lisp_Object title,
+                                  const char **error_name);
+
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */

@@ -553,6 +553,7 @@ ios_term_init (void)
   terminal->update_end_hook = ios_term_update_end;
   terminal->mouse_position_hook = ios_mouse_position;
   terminal->ring_bell_hook = ios_ring_bell;
+  terminal->menu_show_hook = ios_menu_show;
 
   /* Create the input wake pipe and register the read end with
      Emacs so wait_reading_process_input wakes on writes.  */
