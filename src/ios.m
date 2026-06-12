@@ -192,6 +192,87 @@ ios_dump_path (void)
 }
 
 
+/* ---- Security-scoped bookmark persistence --------------------- */
+
+/* startAccessingSecurityScopedResource grants die with the
+   process.  To let the user re-visit a Files-app document after a
+   relaunch (recentf, desktop-save, plain find-file from history),
+   persist a security-scoped bookmark per external URL and resolve
+   the lot at startup.  NSUserDefaults is documented thread-safe;
+   the restore runs once on the main queue during launch.  */
+
+static NSString *const ios_bookmark_key = @"EmacsSecurityBookmarks";
+#define IOS_BOOKMARK_CAP 64
+
+void
+ios_save_bookmark (NSURL *url)
+{
+  if (url == nil)
+    return;
+  NSError *err = nil;
+  NSData *bm = [url bookmarkDataWithOptions:
+                      NSURLBookmarkCreationMinimalBookmark
+               includingResourceValuesForKeys:nil
+                                relativeToURL:nil
+                                        error:&err];
+  if (bm == nil)
+    return;
+  NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
+  NSMutableDictionary *all =
+    [[ud dictionaryForKey:ios_bookmark_key] mutableCopy]
+    ?: [NSMutableDictionary dictionary];
+  all[url.path] = bm;
+  /* Cap: drop arbitrary entries beyond the cap.  A proper LRU
+     would store timestamps; eviction is rare enough (64 distinct
+     external documents) that arbitrary eviction is acceptable.  */
+  while (all.count > IOS_BOOKMARK_CAP)
+    [all removeObjectForKey:all.allKeys.firstObject];
+  [ud setObject:all forKey:ios_bookmark_key];
+}
+
+static void
+ios_restore_bookmarks (void)
+{
+  NSUserDefaults *ud = NSUserDefaults.standardUserDefaults;
+  NSDictionary *all = [ud dictionaryForKey:ios_bookmark_key];
+  if (all.count == 0)
+    return;
+  NSMutableDictionary *kept = [NSMutableDictionary dictionary];
+  for (NSString *path in all)
+    {
+      NSData *bm = all[path];
+      if (![bm isKindOfClass:NSData.class])
+        continue;
+      BOOL stale = NO;
+      NSError *err = nil;
+      NSURL *url = [NSURL URLByResolvingBookmarkData:bm
+                                             options:
+                      NSURLBookmarkResolutionWithoutUI
+                                       relativeToURL:nil
+                                 bookmarkDataIsStale:&stale
+                                               error:&err];
+      if (url == nil)
+        continue;          /* gone; prune */
+      [url startAccessingSecurityScopedResource];
+      if (stale)
+        {
+          NSData *fresh = [url bookmarkDataWithOptions:
+                                 NSURLBookmarkCreationMinimalBookmark
+                          includingResourceValuesForKeys:nil
+                                           relativeToURL:nil
+                                                   error:&err];
+          if (fresh)
+            kept[url.path] = fresh;
+        }
+      else
+        kept[path] = bm;
+    }
+  [ud setObject:kept forKey:ios_bookmark_key];
+  ios_launch_log ([NSString stringWithFormat:
+                   @"restored %lu security-scoped bookmarks",
+                   (unsigned long) kept.count]);
+}
+
 /* ---- EmacsUIView -- the glyph canvas -------------------------- */
 
 /* Each draw_glyph_string call from the Emacs redisplay engine on
@@ -1316,6 +1397,10 @@ ios_emacs_bg_thread (void *unused)
 {
   ios_redirect_stdio ();
   ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: enter");
+  /* Re-acquire access to external documents the user opened in
+     previous sessions, before Emacs init starts visiting files
+     from recentf / desktop.  */
+  ios_restore_bookmarks ();
 
   self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
   self.window.backgroundColor = UIColor.blackColor;
@@ -1488,6 +1573,8 @@ ios_emacs_bg_thread (void *unused)
   if (url == nil)
     return NO;
   BOOL scoped = [url startAccessingSecurityScopedResource];
+  (void) scoped;
+  ios_save_bookmark (url);
   NSString *path = url.path;
   if (path.length == 0)
     {

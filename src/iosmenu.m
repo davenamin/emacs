@@ -48,6 +48,9 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 @property (nonatomic) int item_index;
 @property (nonatomic) BOOL enabled;
 @property (nonatomic) BOOL separator;
+/* Checkbox state: 0 = plain item, 1 = unchecked, 2 = checked.
+   Radio items use 3 = unselected, 4 = selected.  */
+@property (nonatomic) int checkmark;
 @property (nonatomic) NSMutableArray<IOSMenuNode *> *children;
 @end
 @implementation IOSMenuNode
@@ -148,11 +151,17 @@ ios_build_menu_tree (IOSMenuNode *root)
           Lisp_Object name = AREF (menu_items, i + MENU_ITEMS_ITEM_NAME);
           Lisp_Object en   = AREF (menu_items, i + MENU_ITEMS_ITEM_ENABLE);
           Lisp_Object def  = AREF (menu_items, i + MENU_ITEMS_ITEM_DEFINITION);
+          Lisp_Object type = AREF (menu_items, i + MENU_ITEMS_ITEM_TYPE);
+          Lisp_Object sel  = AREF (menu_items, i + MENU_ITEMS_ITEM_SELECTED);
 
           IOSMenuNode *node = [IOSMenuNode new];
           node.title = ios_nsstring_from_lisp (name);
           node.item_index = i;
           node.enabled = !NILP (en);
+          if (EQ (type, QCtoggle))
+            node.checkmark = NILP (sel) ? 1 : 2;
+          else if (EQ (type, QCradio))
+            node.checkmark = NILP (sel) ? 3 : 4;
 
           /* Emacs encodes separators as items whose definition is
              nil and whose name matches the separator pattern
@@ -240,6 +249,17 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y,
   for (IOSMenuNode *child in node.children)
     {
       NSString *title = child.title.length ? child.title : @" ";
+      /* Checkbox / radio state.  UIAlertAction has no checkmark
+         accessory, so encode the state as a leading glyph the way
+         tmm does in the minibuffer.  */
+      switch (child.checkmark)
+        {
+        case 1: title = [@"\u2610 " stringByAppendingString:title]; break;
+        case 2: title = [@"\u2611 " stringByAppendingString:title]; break;
+        case 3: title = [@"\u25cb " stringByAppendingString:title]; break;
+        case 4: title = [@"\u25c9 " stringByAppendingString:title]; break;
+        default: break;
+        }
       if (child.children.count > 0)
         /* Disclosure marker so the user sees the chain.  */
         title = [title stringByAppendingString:@" ▸"];

@@ -296,5 +296,12 @@ extern bool ios_take_menu_selection (int serial, int *index);
    the document-picker delegate.  */
 extern void ios_publish_open_file (const char *path);
 
+#ifdef __OBJC__
+/* Persist a security-scoped bookmark for URL so a relaunch can
+   restore access (ios.m).  Safe from any thread.  */
+@class NSURL;
+extern void ios_save_bookmark (NSURL *url);
+#endif
+
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */

@@ -433,8 +433,10 @@ On iOS there is exactly one display, returned as a single-element list.  */)
   for (NSURL *url in urls)
     {
       /* Hold the security scope open for the process lifetime so
-         the sandboxed-out path stays readable.  */
+         the sandboxed-out path stays readable, and persist a
+         bookmark so a relaunch can restore the grant.  */
       [url startAccessingSecurityScopedResource];
+      ios_save_bookmark (url);
       if (url.path.length > 0)
         ios_publish_open_file (url.fileSystemRepresentation);
     }

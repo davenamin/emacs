@@ -151,6 +151,20 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
      integer.  Fall back to the frame's current size.  */
   if (pixel_size < 6)
     {
+      /* Log the entity verbatim once per startup so we can name
+         the upstream caller without spamming every redisplay
+         (face realization re-opens lazily on demand).  */
+      static bool logged = false;
+      if (!logged)
+        {
+          logged = true;
+          Lisp_Object entity_str
+            = Fprin1_to_string (font_entity, Qnil, Qnil);
+          ios_launch_log ([NSString stringWithFormat:
+            @"ios_font_open: degenerate request size=%d entity=%s",
+            requested,
+            STRINGP (entity_str) ? SSDATA (entity_str) : "(?)"]);
+        }
       if (FRAME_FONT (f))
         pixel_size = FRAME_FONT (f)->pixel_size;
       else
