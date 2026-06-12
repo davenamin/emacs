@@ -178,7 +178,12 @@ jobs:
           # in-sandbox log files.  If the app crashed before opening
           # Documents/, the cat commands will report "(missing)" and
           # the unified-log fallback may still have NSLog output.
-          run xcrun simctl launch booted org.gnu.emacs
+          # SIMCTL_CHILD_* variables are forwarded into the app's
+          # environment; EMACS_IOS_AUTO_INPUT enables the demo
+          # keystroke driver that is compiled in but inert for
+          # normal user launches.
+          run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
+            xcrun simctl launch booted org.gnu.emacs
           log "--- sleeping 20s for Emacs init to do something ---"
           sleep 25
           log "--- capturing simulator screenshot ---"

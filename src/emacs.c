@@ -2474,6 +2474,7 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_iosmenu ();
       syms_of_iosselect ();
       syms_of_iosfont ();
+      syms_of_iosvfs ();
       syms_of_fontset ();
 #endif /* HAVE_IOS */
 

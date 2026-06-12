@@ -120,6 +120,17 @@ actual graphics back end and is still being filled in."
     (when (and path (file-readable-p path))
       (find-file path))))
 
+(defun ios-handle-drag-n-drop (event)
+  "Visit the files in the drag-n-drop EVENT.
+The iOS terminal generates one of these when another app hands
+Emacs a file (Files.app share sheet, Mail attachment, etc.)."
+  (interactive "e")
+  (dolist (file (nth 2 event))
+    (when (stringp file)
+      (find-file file))))
+
+(global-set-key [drag-n-drop] #'ios-handle-drag-n-drop)
+
 (provide 'ios-win)
 
 ;;; ios-win.el ends here

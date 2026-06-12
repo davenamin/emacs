@@ -479,10 +479,31 @@ already opened for reading and writing.  */)
     UIViewController *root = window.rootViewController;
     while (root.presentedViewController != nil)
       root = root.presentedViewController;
+    if (root == nil)
+      {
+        /* No view controller to present from (window torn down,
+           app backgrounded mid-call).  Signal "cancelled" instead
+           of leaving the Emacs thread blocked forever.  */
+        if (ios_pick_sem)
+          dispatch_semaphore_signal (ios_pick_sem);
+        return;
+      }
     [root presentViewController:picker animated:YES completion:nil];
   });
 
-  dispatch_semaphore_wait (ios_pick_sem, DISPATCH_TIME_FOREVER);
+  /* Wake every 30s as a backstop: if the picker was torn down
+     without a delegate callback (UIKit does this when the app is
+     backgrounded under memory pressure), give up after 10 min
+     rather than hanging the Emacs thread permanently.  */
+  int waited = 0;
+  while (dispatch_semaphore_wait
+           (ios_pick_sem,
+            dispatch_time (DISPATCH_TIME_NOW, 30 * NSEC_PER_SEC)))
+    {
+      waited += 30;
+      if (waited >= 600)
+        break;
+    }
   ios_pick_sem = nil;
   if (ios_pick_result_path == nil)
     return Qnil;

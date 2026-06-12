@@ -242,6 +242,7 @@ extern void ios_enqueue_event (struct input_event *ie);
 extern void ios_publish_canvas_size (double width, double height);
 extern void ios_publish_mouse_motion (double x, double y);
 extern void ios_publish_appearance_change (void);
+extern void ios_publish_open_file (const char *path);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -885,21 +886,39 @@ ios_emit_function_key (UIKey *key)
           continue;
         }
 
-      /* Weight + italic from the face decoration flags.  */
-      UIFontWeight wt = (cmd.deco & EmacsDrawDecoBold)
-                        ? UIFontWeightBold
-                        : UIFontWeightRegular;
-      UIFont *font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
-                                                 weight:wt];
+      /* Weight + italic from the face decoration flags.  Cache
+         resolved fonts: drawRect runs once per redisplay over
+         hundreds of commands, and UIFont lookup + descriptor
+         mutation per command dominated the profile.  Key packs
+         (size << 2 | bold | italic<<1); sizes are whole points
+         in practice so the int cast is lossless.  */
+      static NSMutableDictionary<NSNumber *, UIFont *> *fontCache;
+      if (!fontCache)
+        fontCache = [NSMutableDictionary dictionary];
+      BOOL wantBold   = (cmd.deco & EmacsDrawDecoBold) != 0;
+      BOOL wantItalic = (cmd.deco & EmacsDrawDecoItalic) != 0;
+      NSNumber *fontKey = @(((int) cmd.fontSize << 2)
+                            | (wantBold ? 1 : 0)
+                            | (wantItalic ? 2 : 0));
+      UIFont *font = fontCache[fontKey];
       if (!font)
-        font = [UIFont systemFontOfSize:cmd.fontSize];
-      if (cmd.deco & EmacsDrawDecoItalic)
         {
-          UIFontDescriptor *d = [font.fontDescriptor
-                                  fontDescriptorWithSymbolicTraits:
-                                  UIFontDescriptorTraitItalic];
-          if (d)
-            font = [UIFont fontWithDescriptor:d size:cmd.fontSize];
+          UIFontWeight wt = wantBold ? UIFontWeightBold
+                                     : UIFontWeightRegular;
+          font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
+                                             weight:wt];
+          if (!font)
+            font = [UIFont systemFontOfSize:cmd.fontSize];
+          if (wantItalic)
+            {
+              UIFontDescriptor *d = [font.fontDescriptor
+                                      fontDescriptorWithSymbolicTraits:
+                                      UIFontDescriptorTraitItalic];
+              if (d)
+                font = [UIFont fontWithDescriptor:d size:cmd.fontSize];
+            }
+          if (font)
+            fontCache[fontKey] = font;
         }
 
       if (cmd.width > 0 && cmd.height > 0)
@@ -1250,12 +1269,20 @@ ios_emacs_bg_thread (void *unused)
      operation appears to nudge the app's lifecycle in a way that
      drops queued blocks.  A standalone pthread with sleep() is
      immune to that.  */
-  pthread_t auto_thread;
-  pthread_attr_t auto_attr;
-  pthread_attr_init (&auto_attr);
-  pthread_attr_setdetachstate (&auto_attr, PTHREAD_CREATE_DETACHED);
-  pthread_create (&auto_thread, &auto_attr, ios_auto_input_thread, NULL);
-  pthread_attr_destroy (&auto_attr);
+  /* Only run the auto-typing driver when CI asks for it
+     (simctl launch inherits SIMCTL_CHILD_* variables into the
+     app's environment).  A real user's launch must not have demo
+     keystrokes injected 5 seconds in.  */
+  if (getenv ("EMACS_IOS_AUTO_INPUT"))
+    {
+      pthread_t auto_thread;
+      pthread_attr_t auto_attr;
+      pthread_attr_init (&auto_attr);
+      pthread_attr_setdetachstate (&auto_attr, PTHREAD_CREATE_DETACHED);
+      pthread_create (&auto_thread, &auto_attr,
+                      ios_auto_input_thread, NULL);
+      pthread_attr_destroy (&auto_attr);
+    }
   return YES;
 }
 
@@ -1303,15 +1330,11 @@ ios_emacs_bg_thread (void *unused)
     }
   ios_launch_log ([NSString stringWithFormat:
                    @"AppDelegate openURL: %@", path]);
-  /* Send: C-x C-f <path> RET.  Each enqueue_key call is fast and
-     non-blocking, so the loop completes well within UIKit's
-     openURL: timeout.  */
-  ios_enqueue_key (CHAR_CTL | 'x');
-  ios_enqueue_key (CHAR_CTL | 'f');
-  const char *utf8 = path.UTF8String;
-  for (const char *p = utf8; p && *p; p++)
-    ios_enqueue_key ((int) (unsigned char) *p);
-  ios_enqueue_key (0x0d);
+  /* Publish the path; the Emacs thread builds a DRAG_N_DROP_EVENT
+     from it inside read_socket (Lisp allocation is unsafe on
+     this thread, and synthesizing keystrokes would misfire if
+     the minibuffer happens to be active).  */
+  ios_publish_open_file (path.fileSystemRepresentation);
   return YES;
 }
 

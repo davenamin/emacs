@@ -272,6 +272,7 @@ extern void syms_of_iosfns (void);
 extern void syms_of_iosmenu (void);
 extern void syms_of_iosselect (void);
 extern void syms_of_iosfont (void);
+extern void syms_of_iosvfs (void);
 
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */

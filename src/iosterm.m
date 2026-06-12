@@ -44,6 +44,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "window.h"
 #include "dispextern.h"
 #include "font.h"
+#include "coding.h"
 
 /* Forward declaration so ios_launch_log can be called from this file.
    Implementation lives in ios.m.  */
@@ -475,7 +476,11 @@ static bool ios_motion_dirty = false;
 
 /* User toggled system appearance.  Set from
    traitCollectionDidChange on the UI thread; consumed inside
-   ios_read_socket which runs ios-appearance-changed-hook.  */
+   ios_read_socket which runs ios-appearance-changed-hook.
+   Guarded by ios_motion_lock -- it's a UI-thread-publishes /
+   Emacs-thread-drains flag exactly like the motion state, and
+   sharing the (uncontended) lock keeps the cross-thread
+   publishing protocol uniform.  */
 static bool ios_appearance_dirty = false;
 
 static void
@@ -687,12 +692,78 @@ ios_publish_mouse_motion (double x, double y)
     }
 }
 
+/* Path of a file another app asked us to open (Files.app share
+   sheet, Mail attachment, ...).  Published from the UIKit
+   thread's application:openURL:; the Emacs thread drains it
+   into a DRAG_N_DROP_EVENT, building the Lisp string on the
+   correct thread (Lisp allocation is not legal on the UIKit
+   thread).  Guarded by ios_motion_lock like the other
+   publish/drain channels.  */
+static char *ios_pending_open_path = NULL;
+
+void
+ios_publish_open_file (const char *path)
+{
+  if (path == NULL || *path == 0)
+    return;
+  char *copy = strdup (path);
+  if (copy == NULL)
+    return;
+  pthread_mutex_lock (&ios_motion_lock);
+  free (ios_pending_open_path);
+  ios_pending_open_path = copy;
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
+/* Turn a pending open-file request into a DRAG_N_DROP_EVENT.
+   Runs on the Emacs thread inside read_socket, where building
+   Lisp strings is safe.  The Lisp side (ios-win.el) binds
+   [drag-n-drop] to a handler that visits the file.  */
+static void
+ios_apply_pending_open (struct input_event *hold_quit)
+{
+  char *path = NULL;
+  pthread_mutex_lock (&ios_motion_lock);
+  path = ios_pending_open_path;
+  ios_pending_open_path = NULL;
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (path == NULL)
+    return;
+  if (x_display_list && CONSP (Vframe_list))
+    {
+      struct frame *f = XFRAME (XCAR (Vframe_list));
+      if (f && FRAME_LIVE_P (f))
+        {
+          struct input_event ie;
+          EVENT_INIT (ie);
+          ie.kind = DRAG_N_DROP_EVENT;
+          ie.code = 0;
+          ie.modifiers = 0;
+          ie.x = make_fixnum (0);
+          ie.y = make_fixnum (0);
+          XSETFRAME (ie.frame_or_window, f);
+          ie.arg = list1 (DECODE_FILE (build_unibyte_string (path)));
+          ie.timestamp = 0;
+          kbd_buffer_store_event_hold (&ie, hold_quit);
+        }
+    }
+  free (path);
+}
+
 /* Publish appearance change.  Cheap on the UI thread; the
    Emacs thread picks it up on its next read_socket tick.  */
 void
 ios_publish_appearance_change (void)
 {
+  pthread_mutex_lock (&ios_motion_lock);
   ios_appearance_dirty = true;
+  pthread_mutex_unlock (&ios_motion_lock);
   if (ios_wake_pipe[1] >= 0)
     {
       char b = 1;
@@ -707,9 +778,13 @@ ios_publish_appearance_change (void)
 static void
 ios_apply_pending_appearance (void)
 {
-  if (!ios_appearance_dirty)
-    return;
+  bool dirty;
+  pthread_mutex_lock (&ios_motion_lock);
+  dirty = ios_appearance_dirty;
   ios_appearance_dirty = false;
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (!dirty)
+    return;
   safe_run_hooks (intern_c_string ("ios-appearance-changed-hook"));
 }
 
@@ -842,6 +917,9 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   /* And run ios-appearance-changed-hook if dark / light just
      flipped under us.  */
   ios_apply_pending_appearance ();
+  /* And turn any open-this-file request from another app into a
+     drag-n-drop event.  */
+  ios_apply_pending_open (hold_quit);
   int n = 0;
   /* Drain the rich event queue first -- mouse clicks should
      get to Emacs before whatever keystrokes piled up next.  */
