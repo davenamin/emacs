@@ -672,19 +672,51 @@ static unsigned ios_sticky_mods = 0;
     = [[UIBarButtonItem alloc]
         initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
                              target:nil action:nil];
-  bar.items = @[mk (@"Ctrl", @selector (accStickyCtrl)),
+  bar.items = @[mk (@"Esc",  @selector (accEsc)),
+                mk (@"Ctrl", @selector (accStickyCtrl)),
                 mk (@"Meta", @selector (accStickyMeta)),
-                flex,
-                mk (@"Esc",  @selector (accEsc)),
                 mk (@"Tab",  @selector (accTab)),
+                mk (@"C-g",  @selector (accCg)),
+                flex,
+                mk (@"←", @selector (accLeft)),
+                mk (@"↓", @selector (accDown)),
+                mk (@"↑", @selector (accUp)),
+                mk (@"→", @selector (accRight)),
                 mk (@"M-x",  @selector (accMx))];
   return bar;
+}
+
+/* Push an X11-keysym function key (arrows etc.) through the rich
+   event queue; frame attachment happens on the Emacs thread in the
+   drain, same as every other UIKit-thread emitter.  */
+static void
+ios_emit_keysym (unsigned xk)
+{
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = NON_ASCII_KEYSTROKE_EVENT;
+  ie.code = xk;
+  ie.modifiers = (int) ios_sticky_mods;
+  ie.frame_or_window = Qnil;
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+  ios_sticky_mods = 0;
 }
 
 - (void) accStickyCtrl { ios_sticky_mods ^= CHAR_CTL; }
 - (void) accStickyMeta { ios_sticky_mods ^= CHAR_META; }
 - (void) accEsc        { ios_enqueue_key (0x1b); }
 - (void) accTab        { ios_enqueue_key (0x09); }
+/* C-g: the quit character.  read_socket's store path recognizes
+   it and sets Vquit_flag immediately, and the polling atimer
+   drains our queue even while Lisp is busy, so this gives
+   touch-only users a working quit -- without it a stuck
+   minibuffer prompt is inescapable.  */
+- (void) accCg         { ios_enqueue_key (0x07); }
+- (void) accLeft       { ios_emit_keysym (0xff51); }
+- (void) accUp         { ios_emit_keysym (0xff52); }
+- (void) accRight      { ios_emit_keysym (0xff53); }
+- (void) accDown       { ios_emit_keysym (0xff54); }
 - (void) accMx
 {
   /* M-x runs execute-extended-command in the standard global map.  */
