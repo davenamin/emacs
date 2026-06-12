@@ -243,6 +243,8 @@ extern void ios_publish_canvas_size (double width, double height);
 extern void ios_publish_mouse_motion (double x, double y);
 extern void ios_publish_appearance_change (void);
 extern void ios_publish_open_file (const char *path);
+extern void ios_publish_pinch (double x, double y, double dx, double dy,
+                               double scale, double angle);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -321,6 +323,66 @@ extern void ios_publish_open_file (const char *path);
   return self;
 }
 
+/* The frame gesture events should target: the display's
+   highlight frame if set, else the first live frame.  Safe to
+   call from the UIKit thread -- it only reads tagged pointers,
+   never allocates.  Returns NULL during early bring-up.  */
+static struct frame *
+ios_target_frame (void)
+{
+  if (!x_display_list)
+    return NULL;
+  struct frame *f = x_display_list->highlight_frame;
+  if (!f && CONSP (Vframe_list))
+    f = XFRAME (XCAR (Vframe_list));
+  if (f && !FRAME_LIVE_P (f))
+    f = NULL;
+  return f;
+}
+
+/* Enqueue one half of a synthesized mouse-button event.  BUTTON
+   is the Emacs button number (0 = mouse-1, 1 = mouse-2, ...);
+   UPDOWN is down_modifier or up_modifier.  No-op when no frame
+   exists yet.  */
+static void
+ios_emit_button_event (int button, int updown, CGPoint pt)
+{
+  struct frame *f = ios_target_frame ();
+  if (!f)
+    return;
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = MOUSE_CLICK_EVENT;
+  ie.code = button;
+  ie.modifiers = updown;
+  ie.x = make_fixnum ((int) pt.x);
+  ie.y = make_fixnum ((int) pt.y);
+  XSETFRAME (ie.frame_or_window, f);
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+}
+
+/* Enqueue a wheel event at PT.  FORWARD true = scroll content
+   forward (wheel-down in mwheel's terms).  */
+static void
+ios_emit_wheel_event (bool forward, CGPoint pt)
+{
+  struct frame *f = ios_target_frame ();
+  if (!f)
+    return;
+  struct input_event ie;
+  EVENT_INIT (ie);
+  ie.kind = WHEEL_EVENT;
+  ie.code = 0;
+  ie.modifiers = forward ? down_modifier : up_modifier;
+  ie.x = make_fixnum ((int) pt.x);
+  ie.y = make_fixnum ((int) pt.y);
+  XSETFRAME (ie.frame_or_window, f);
+  ie.arg = Qnil;
+  ie.timestamp = 0;
+  ios_enqueue_event (&ie);
+}
+
 - (void) handleTap:(UITapGestureRecognizer *)gr
 {
   /* Become first-responder so hardware presses route through
@@ -328,32 +390,10 @@ extern void ios_publish_open_file (const char *path);
      up.  Also emit a synthesized mouse-1 click at the tap
      location so Emacs can move point / select / follow links.  */
   [self becomeFirstResponder];
-
   CGPoint pt = [gr locationInView:self];
-  if (!x_display_list)
-    return;
-  struct frame *f = x_display_list->highlight_frame;
-  if (!f)
-    {
-      Lisp_Object frames = Vframe_list;
-      if (CONSP (frames))
-        f = XFRAME (XCAR (frames));
-    }
-  if (!f)
-    return;
   /* Mouse-1 down then up (Emacs synthesizes the click).  */
-  struct input_event ie;
-  EVENT_INIT (ie);
-  ie.kind = MOUSE_CLICK_EVENT;
-  ie.code = 0;                /* button 0 == left */
-  ie.modifiers = down_modifier;
-  ie.x = make_fixnum ((int) pt.x);
-  ie.y = make_fixnum ((int) pt.y);
-  XSETFRAME (ie.frame_or_window, f);
-  ie.timestamp = 0;
-  ios_enqueue_event (&ie);
-  ie.modifiers = up_modifier;
-  ios_enqueue_event (&ie);
+  ios_emit_button_event (0, down_modifier, pt);
+  ios_emit_button_event (0, up_modifier, pt);
 }
 
 /* Long-press: synthesize a mouse-2 click at the press location.
@@ -365,35 +405,15 @@ extern void ios_publish_open_file (const char *path);
     return;
   [self becomeFirstResponder];
   CGPoint pt = [gr locationInView:self];
-  if (!x_display_list)
-    return;
-  struct frame *f = x_display_list->highlight_frame;
-  if (!f)
-    {
-      Lisp_Object frames = Vframe_list;
-      if (CONSP (frames))
-        f = XFRAME (XCAR (frames));
-    }
-  if (!f)
-    return;
-  struct input_event ie;
-  EVENT_INIT (ie);
-  ie.kind = MOUSE_CLICK_EVENT;
-  ie.code = 1;                 /* button 1 == mouse-2 */
-  ie.modifiers = down_modifier;
-  ie.x = make_fixnum ((int) pt.x);
-  ie.y = make_fixnum ((int) pt.y);
-  XSETFRAME (ie.frame_or_window, f);
-  ie.timestamp = 0;
-  ios_enqueue_event (&ie);
-  ie.modifiers = up_modifier;
-  ios_enqueue_event (&ie);
+  ios_emit_button_event (1, down_modifier, pt);
+  ios_emit_button_event (1, up_modifier, pt);
 }
 
-/* Two-finger drag: throw C-v (scroll-up-command) or M-v
-   (scroll-down-command) into the key queue every time the cumulative
-   translation crosses a one-line threshold.  Reset the accumulator
-   at gesture begin so cross-gesture deltas don't leak.  */
+/* Two-finger drag: emit WHEEL_EVENTs, the same thing a mouse
+   wheel or trackpad produces, so mwheel.el's bindings (and any
+   user rebinding of wheel-up / wheel-down) apply.  Direction
+   follows the iOS convention: content tracks the finger, so a
+   drag up scrolls forward.  */
 - (void) handlePan:(UIPanGestureRecognizer *)gr
 {
   static CGFloat accum_y = 0;
@@ -407,50 +427,51 @@ extern void ios_publish_open_file (const char *path);
   CGPoint t = [gr translationInView:self];
   accum_y += t.y;
   [gr setTranslation:CGPointZero inView:self];
+  CGPoint pt = [gr locationInView:self];
 
-  /* One screenful per ~200 pt of drag.  Negative t.y = drag up =
-     scroll forward (C-v); positive = drag down = M-v.  */
-  const CGFloat threshold = 200.0;
+  /* One wheel click per ~20pt of drag; mwheel scrolls a few
+     lines per click, so this tracks the finger closely without
+     flooding the queue.  */
+  const CGFloat threshold = 20.0;
   while (accum_y <= -threshold)
     {
-      ios_enqueue_key (CHAR_CTL | 'v');
+      ios_emit_wheel_event (true, pt);   /* drag up = scroll forward */
       accum_y += threshold;
     }
   while (accum_y >= threshold)
     {
-      ios_enqueue_key (CHAR_META | 'v');
+      ios_emit_wheel_event (false, pt);
       accum_y -= threshold;
     }
 }
 
-/* Pinch: each multiplicative step crosses a scale-doubling
-   threshold and emits text-scale-adjust via C-x C-+ / C-x C--.  */
+/* Pinch: publish cumulative scale updates; the Emacs thread
+   turns them into PINCH_EVENTs which the global map binds to
+   text-scale-pinch.  The dx=dy=angle=0 marker at gesture begin
+   tells text-scale-pinch to snapshot the starting scale.  */
 - (void) handlePinch:(UIPinchGestureRecognizer *)gr
 {
-  static CGFloat accum_scale = 1.0;
+  static CGPoint last_centroid;
+  CGPoint pt = [gr locationInView:self];
   if (gr.state == UIGestureRecognizerStateBegan)
     {
-      accum_scale = 1.0;
+      last_centroid = pt;
+      ios_publish_pinch (pt.x, pt.y, 0.0, 0.0, 1.0, 0.0);
       return;
     }
   if (gr.state != UIGestureRecognizerStateChanged)
     return;
-  accum_scale *= gr.scale;
-  gr.scale = 1.0;
-
-  const CGFloat step = 1.15;
-  while (accum_scale >= step)
-    {
-      ios_enqueue_key (CHAR_CTL | 'x');
-      ios_enqueue_key (CHAR_CTL | '+');
-      accum_scale /= step;
-    }
-  while (accum_scale <= 1.0 / step)
-    {
-      ios_enqueue_key (CHAR_CTL | 'x');
-      ios_enqueue_key (CHAR_CTL | '-');
-      accum_scale *= step;
-    }
+  double dx = pt.x - last_centroid.x;
+  double dy = pt.y - last_centroid.y;
+  last_centroid = pt;
+  /* dx = dy = angle = 0 is the sequence-start marker; nudge dx
+     so an update with a stationary centroid isn't mistaken for
+     one.  */
+  if (dx == 0.0 && dy == 0.0)
+    dx = 0.001;
+  /* gr.scale is cumulative since gesture start (we never reset
+     it), exactly the SCALE term text-scale-pinch expects.  */
+  ios_publish_pinch (pt.x, pt.y, dx, dy, (double) gr.scale, 0.0);
 }
 
 /* When UIKit rotates the device, the multitasking split view
@@ -483,35 +504,17 @@ extern void ios_publish_open_file (const char *path);
 
 /* Single-finger drag: emit mouse-1 down at gesture begin and
    mouse-1 up at gesture end, leaving Emacs's existing click vs
-   drag promotion to do the rest.  Intermediate motion events
-   need a mouse_position_hook to be useful; a future pass adds
-   that and the live highlight follows the finger.  */
+   drag promotion to do the rest.  Intermediate updates publish
+   the finger position so the region highlight tracks live.  */
 - (void) handleDrag:(UIPanGestureRecognizer *)gr
 {
-  if (!x_display_list)
-    return;
-  struct frame *f = x_display_list->highlight_frame;
-  if (!f && CONSP (Vframe_list))
-    f = XFRAME (XCAR (Vframe_list));
-  if (!f)
-    return;
   CGPoint pt = [gr locationInView:self];
-  int x = (int) pt.x, y = (int) pt.y;
 
   if (gr.state == UIGestureRecognizerStateBegan)
     {
       [self becomeFirstResponder];
-      ios_publish_mouse_motion ((double) x, (double) y);
-      struct input_event ie;
-      EVENT_INIT (ie);
-      ie.kind = MOUSE_CLICK_EVENT;
-      ie.code = 0;
-      ie.modifiers = down_modifier;
-      ie.x = make_fixnum (x);
-      ie.y = make_fixnum (y);
-      XSETFRAME (ie.frame_or_window, f);
-      ie.timestamp = 0;
-      ios_enqueue_event (&ie);
+      ios_publish_mouse_motion (pt.x, pt.y);
+      ios_emit_button_event (0, down_modifier, pt);
       return;
     }
   if (gr.state == UIGestureRecognizerStateChanged)
@@ -520,23 +523,12 @@ extern void ios_publish_open_file (const char *path);
          drain calls note_mouse_highlight and the region
          highlight follows the finger.  No input_event is
          emitted; only the position dirty bit.  */
-      ios_publish_mouse_motion ((double) x, (double) y);
+      ios_publish_mouse_motion (pt.x, pt.y);
       return;
     }
   if (gr.state == UIGestureRecognizerStateEnded
       || gr.state == UIGestureRecognizerStateCancelled)
-    {
-      struct input_event ie;
-      EVENT_INIT (ie);
-      ie.kind = MOUSE_CLICK_EVENT;
-      ie.code = 0;
-      ie.modifiers = up_modifier;
-      ie.x = make_fixnum (x);
-      ie.y = make_fixnum (y);
-      XSETFRAME (ie.frame_or_window, f);
-      ie.timestamp = 0;
-      ios_enqueue_event (&ie);
-    }
+    ios_emit_button_event (0, up_modifier, pt);
 }
 
 - (BOOL) canBecomeFirstResponder { return YES; }
@@ -637,23 +629,33 @@ static unsigned ios_sticky_mods = 0;
 /* Translate a UIKey into the packed codepoint+modifiers our queue
    expects.  Returns -1 if the key has no codepoint we know how to
    handle (raw modifier presses, dead keys, etc).  */
+/* Translate UIKey modifier flags into Emacs CHAR_* bits.
+   Option maps to Meta and Command to Super, matching the macOS
+   port's default conventions.  Shift is only included when
+   INCLUDE_SHIFT: for printable characters the shift is already
+   reflected in the character itself, but for function keys
+   (arrows, F-keys) Emacs expects an explicit shift bit.  */
+static int
+ios_mods_from_flags (UIKeyModifierFlags m, bool include_shift)
+{
+  int mods = 0;
+  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
+  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
+  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
+  if (include_shift && (m & UIKeyModifierShift))
+    mods |= CHAR_SHIFT;
+  return mods;
+}
+
 static int
 ios_pack_uikey (UIKey *key)
 {
   if (key == nil)
     return -1;
 
-  UIKeyModifierFlags m = key.modifierFlags;
-  /* iOS UIKeyModifierAlternate is the Option key, which Emacs
-     conventionally treats as Meta.  Command maps to Super; Shift
-     is encoded in the character itself for printables but we
-     still record it for non-printable bindings.  */
-  int mods = 0;
-  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
-  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
-  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
-  /* Shift only matters when the character itself doesn't already
-     reflect the shift (i.e. non-printable keys).  */
+  /* Shift is not requested: for printables the character itself
+     already reflects it.  */
+  int mods = ios_mods_from_flags (key.modifierFlags, false);
 
   /* Prefer the unmodified character so Control / Meta combinations
      produce the lowercase base letter, mirroring how X / macOS
@@ -740,22 +742,15 @@ ios_emit_function_key (UIKey *key)
   unsigned xk = ios_hid_to_xkeysym ((long) key.keyCode);
   if (xk == 0)
     return NO;
-  UIKeyModifierFlags m = key.modifierFlags;
-  int mods = 0;
-  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
-  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
-  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
-  if (m & UIKeyModifierShift)     mods |= CHAR_SHIFT;
+  int mods = ios_mods_from_flags (key.modifierFlags, true);
+  struct frame *f = ios_target_frame ();
   struct input_event ie;
   EVENT_INIT (ie);
   ie.kind = NON_ASCII_KEYSTROKE_EVENT;
   ie.code = xk;
   ie.modifiers = mods;
-  if (x_display_list && CONSP (Vframe_list))
-    {
-      struct frame *f = XFRAME (XCAR (Vframe_list));
-      XSETFRAME (ie.frame_or_window, f);
-    }
+  if (f)
+    XSETFRAME (ie.frame_or_window, f);
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
   return YES;
@@ -1414,16 +1409,15 @@ ios_setenv_bundle_paths (void)
      Also create an Emacs/ subfolder there for user-init-file and
      stash that as XDG_CONFIG_HOME so site-start.el's lookup
      points inside it.  */
-  NSArray<NSString *> *docs = NSSearchPathForDirectoriesInDomains
-    (NSDocumentDirectory, NSUserDomainMask, YES);
-  if (docs.count > 0)
+  const char *docs = ios_sandbox_directory (1 /* IOS_SBX_DOCUMENTS */);
+  if (docs != NULL)
     {
-      NSString *home = docs[0];
+      NSString *home = [NSString stringWithUTF8String:docs];
       [[NSFileManager defaultManager] createDirectoryAtPath:home
                                 withIntermediateDirectories:YES
                                                  attributes:nil
                                                       error:nil];
-      setenv ("HOME", home.UTF8String, 1);
+      setenv ("HOME", docs, 1);
       NSString *cfg = [home stringByAppendingPathComponent:@".emacs.d"];
       [[NSFileManager defaultManager] createDirectoryAtPath:cfg
                                 withIntermediateDirectories:YES

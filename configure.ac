@@ -2902,6 +2902,8 @@ AS_IF([test "$IOS" = "yes"],[
   IOS_C_OBJ="iosvfs.o"
   IOS_LIBS="-framework UIKit -framework Foundation"
   IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
+  # UTType constants used by the document picker in iosfns.m.
+  IOS_LIBS="$IOS_LIBS -framework UniformTypeIdentifiers"
   # Embed the bundle's Info.plist into the Mach-O's __TEXT,__info_plist
   # section.  Real Xcode-built iOS apps always carry this; the modern
   # iOS toolchain's IXPlaceholder (the install-coordination component

@@ -634,6 +634,21 @@ ios_term_init (void)
 /* The queue + wake pipe storage is hoisted above ios_term_init;
    only the producer / drainer code lives here.  */
 
+/* Poke the wake pipe so wait_reading_process_input returns and
+   read_socket_hook runs.  Shared by every publish/enqueue path;
+   best-effort (EAGAIN on a full pipe is fine -- the reader is
+   already scheduled to wake).  */
+static void
+ios_wake (void)
+{
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
 /* Queue for "rich" events (mouse clicks) alongside the keystroke
    queue.  Producer (UI thread) appends; consumer (ios_read_socket)
    drains and hands each to kbd_buffer_store_event_hold.  Capacity
@@ -656,12 +671,7 @@ ios_enqueue_event (struct input_event *ie)
       ios_event_tail = next;
     }
   pthread_mutex_unlock (&ios_input_lock);
-  if (ios_wake_pipe[1] >= 0)
-    {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;
-    }
+  ios_wake ();
 }
 
 /* Pending canvas resize, published from EmacsUIView's
@@ -684,11 +694,82 @@ ios_publish_mouse_motion (double x, double y)
   ios_motion_y = (int) y;
   ios_motion_dirty = true;
   pthread_mutex_unlock (&ios_motion_lock);
-  if (ios_wake_pipe[1] >= 0)
+  ios_wake ();
+}
+
+/* Pinch updates.  PINCH_EVENT's arg is a Lisp list, which can
+   only be consed on the Emacs thread, so the UIKit gesture
+   handler publishes raw floats into this ring and the drain
+   below builds the events.  A ring (not a single slot) because
+   the sequence-start marker (dx = dy = angle = 0) must not be
+   overwritten by the first update before the Emacs thread gets
+   a chance to drain -- text-scale-pinch uses that marker to
+   snapshot the starting text scale.  */
+struct ios_pinch_update
+{
+  int x, y;
+  double dx, dy, scale, angle;
+};
+#define IOS_PINCH_QUEUE_CAP 16
+static struct ios_pinch_update ios_pinch_queue[IOS_PINCH_QUEUE_CAP];
+static int ios_pinch_head = 0, ios_pinch_tail = 0;
+
+void
+ios_publish_pinch (double x, double y, double dx, double dy,
+                   double scale, double angle)
+{
+  pthread_mutex_lock (&ios_motion_lock);
+  int next = (ios_pinch_tail + 1) % IOS_PINCH_QUEUE_CAP;
+  if (next != ios_pinch_head)
     {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;
+      struct ios_pinch_update *u = &ios_pinch_queue[ios_pinch_tail];
+      u->x = (int) x;
+      u->y = (int) y;
+      u->dx = dx;
+      u->dy = dy;
+      u->scale = scale;
+      u->angle = angle;
+      ios_pinch_tail = next;
+    }
+  pthread_mutex_unlock (&ios_motion_lock);
+  ios_wake ();
+}
+
+/* Drain pinch updates into PINCH_EVENTs.  Emacs thread only.  */
+static void
+ios_apply_pending_pinch (struct input_event *hold_quit)
+{
+  if (!x_display_list || !CONSP (Vframe_list))
+    return;
+  struct frame *f = XFRAME (XCAR (Vframe_list));
+  if (!f || !FRAME_LIVE_P (f))
+    return;
+  for (;;)
+    {
+      struct ios_pinch_update u;
+      bool have = false;
+      pthread_mutex_lock (&ios_motion_lock);
+      if (ios_pinch_head != ios_pinch_tail)
+        {
+          u = ios_pinch_queue[ios_pinch_head];
+          ios_pinch_head = (ios_pinch_head + 1) % IOS_PINCH_QUEUE_CAP;
+          have = true;
+        }
+      pthread_mutex_unlock (&ios_motion_lock);
+      if (!have)
+        break;
+      struct input_event ie;
+      EVENT_INIT (ie);
+      ie.kind = PINCH_EVENT;
+      ie.code = 0;
+      ie.modifiers = 0;
+      ie.x = make_fixnum (u.x);
+      ie.y = make_fixnum (u.y);
+      XSETFRAME (ie.frame_or_window, f);
+      ie.arg = list4 (make_float (u.dx), make_float (u.dy),
+                      make_float (u.scale), make_float (u.angle));
+      ie.timestamp = 0;
+      kbd_buffer_store_event_hold (&ie, hold_quit);
     }
 }
 
@@ -713,12 +794,7 @@ ios_publish_open_file (const char *path)
   free (ios_pending_open_path);
   ios_pending_open_path = copy;
   pthread_mutex_unlock (&ios_motion_lock);
-  if (ios_wake_pipe[1] >= 0)
-    {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;
-    }
+  ios_wake ();
 }
 
 /* Turn a pending open-file request into a DRAG_N_DROP_EVENT.
@@ -764,12 +840,7 @@ ios_publish_appearance_change (void)
   pthread_mutex_lock (&ios_motion_lock);
   ios_appearance_dirty = true;
   pthread_mutex_unlock (&ios_motion_lock);
-  if (ios_wake_pipe[1] >= 0)
-    {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;
-    }
+  ios_wake ();
 }
 
 /* Run ios-appearance-changed-hook if the UI side flipped the
@@ -827,12 +898,7 @@ ios_publish_canvas_size (double width, double height)
       ios_pending_canvas_valid = true;
     }
   pthread_mutex_unlock (&ios_resize_lock);
-  if (ios_wake_pipe[1] >= 0)
-    {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;
-    }
+  ios_wake ();
 }
 
 /* Called from the Emacs thread at the top of read_socket.  If a
@@ -888,12 +954,7 @@ ios_enqueue_key (int codepoint)
       ios_input_tail = next;
     }
   pthread_mutex_unlock (&ios_input_lock);
-  if (ios_wake_pipe[1] >= 0)
-    {
-      char b = 1;
-      ssize_t r = write (ios_wake_pipe[1], &b, 1);
-      (void) r;  /* best-effort; ignore EAGAIN if pipe is full */
-    }
+  ios_wake ();
 }
 
 int
@@ -920,6 +981,8 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   /* And turn any open-this-file request from another app into a
      drag-n-drop event.  */
   ios_apply_pending_open (hold_quit);
+  /* And pinch-gesture updates into PINCH_EVENTs.  */
+  ios_apply_pending_pinch (hold_quit);
   int n = 0;
   /* Drain the rich event queue first -- mouse clicks should
      get to Emacs before whatever keystrokes piled up next.  */

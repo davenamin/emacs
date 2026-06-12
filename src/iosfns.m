@@ -28,6 +28,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #ifdef HAVE_IOS
 
 #import <UIKit/UIKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include "lisp.h"
 #include "coding.h"
@@ -465,17 +466,26 @@ already opened for reading and writing.  */)
   dispatch_async (dispatch_get_main_queue (), ^{
     UIDocumentPickerViewController *picker
       = [[UIDocumentPickerViewController alloc]
-          initWithDocumentTypes:@[@"public.item"]
-                         inMode:UIDocumentPickerModeOpen];
+          initForOpeningContentTypes:@[UTTypeItem]];
     ios_pick_delegate_keepalive = [[IOSPickerDelegate alloc] init];
     picker.delegate = ios_pick_delegate_keepalive;
     picker.allowsMultipleSelection = NO;
+    /* UIApplication.windows is deprecated; walk the connected
+       scenes instead (UIWindowScene.keyWindow needs iOS 15,
+       which is the port's deployment floor).  */
     UIWindow *window = nil;
-    for (UIWindow *w in UIApplication.sharedApplication.windows)
-      if (w.isKeyWindow) { window = w; break; }
-    if (window == nil
-        && UIApplication.sharedApplication.windows.count > 0)
-      window = UIApplication.sharedApplication.windows.firstObject;
+    for (UIScene *scene in
+           UIApplication.sharedApplication.connectedScenes)
+      {
+        if (![scene isKindOfClass:[UIWindowScene class]])
+          continue;
+        UIWindowScene *ws = (UIWindowScene *) scene;
+        window = ws.keyWindow;
+        if (window == nil && ws.windows.count > 0)
+          window = ws.windows.firstObject;
+        if (window != nil)
+          break;
+      }
     UIViewController *root = window.rootViewController;
     while (root.presentedViewController != nil)
       root = root.presentedViewController;

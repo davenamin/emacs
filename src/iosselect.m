@@ -57,16 +57,28 @@ Value is a multibyte string, or nil if the pasteboard holds no
 plain-text item.  */)
   (void)
 {
+  /* current-kill consults interprogram-paste-function on every
+     yank and many kill-ring accesses, and each .string read both
+     round-trips to the main thread and (on iOS 14+) can pop the
+     system "pasted from ..." banner.  changeCount is a cheap
+     monotonic counter bumped whenever any app writes the
+     pasteboard; only re-read the text when it moved.  */
+  static NSInteger cached_change = -1;
+  static NSString *cached_string = nil;
   __block NSString *captured = nil;
-  /* Pasteboard access must hit the main thread or UIKit logs a
-     hostile warning; do it synchronously since the caller (Emacs's
-     paste machinery) expects an immediate value.  */
+  void (^fetch) (void) = ^{
+    NSInteger change = UIPasteboard.generalPasteboard.changeCount;
+    if (change != cached_change)
+      {
+        cached_string = UIPasteboard.generalPasteboard.string;
+        cached_change = change;
+      }
+    captured = cached_string;
+  };
   if ([NSThread isMainThread])
-    captured = UIPasteboard.generalPasteboard.string;
+    fetch ();
   else
-    dispatch_sync (dispatch_get_main_queue (), ^{
-      captured = UIPasteboard.generalPasteboard.string;
-    });
+    dispatch_sync (dispatch_get_main_queue (), fetch);
   if (captured == nil || captured.length == 0)
     return Qnil;
   const char *utf8 = [captured UTF8String];
