@@ -51,6 +51,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <sys/stat.h>
 
 #include "lisp.h"
@@ -1588,6 +1589,14 @@ ios_setenv_bundle_paths (void)
                                                  attributes:nil
                                                       error:nil];
       setenv ("HOME", docs, 1);
+      /* Also make it the working directory: iOS launches apps with
+         cwd "/", which Emacs would adopt as
+         command-line-default-directory, so every relative file
+         operation (C-x C-f at startup, autosaves before any
+         buffer-local default-directory exists) would aim at the
+         read-only root.  */
+      if (chdir (docs) != 0)
+        ios_launch_log (@"ios_setenv_bundle_paths: chdir(HOME) failed");
       NSString *cfg = [home stringByAppendingPathComponent:@".emacs.d"];
       [[NSFileManager defaultManager] createDirectoryAtPath:cfg
                                 withIntermediateDirectories:YES
