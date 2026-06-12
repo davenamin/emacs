@@ -641,12 +641,20 @@ ios_pack_uikey (UIKey *key)
      already reflects it.  */
   int mods = ios_mods_from_flags (key.modifierFlags, false);
 
-  /* Prefer the unmodified character so Control / Meta combinations
-     produce the lowercase base letter, mirroring how X / macOS
-     route them to Emacs.  */
-  NSString *chars = key.charactersIgnoringModifiers;
+  /* For Control combos prefer charactersIgnoringModifiers so
+     C-Shift-a still produces 'a' (which the canonicalization
+     below turns into 0x01).  For everything else use characters,
+     which already applies Shift / AltGr layout-correctly: Shift+a
+     is "A", Shift+1 on US is "!", and on non-US layouts Option-e
+     etc. produce the right composed glyphs.  */
+  NSString *chars =
+    (key.modifierFlags & UIKeyModifierControl)
+    ? key.charactersIgnoringModifiers
+    : key.characters;
   if (chars.length == 0)
     chars = key.characters;
+  if (chars.length == 0)
+    chars = key.charactersIgnoringModifiers;
   if (chars.length == 0)
     {
       /* Map common non-character keys by keyCode.  Only the most
