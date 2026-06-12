@@ -303,5 +303,13 @@ extern void ios_publish_open_file (const char *path);
 extern void ios_save_bookmark (NSURL *url);
 #endif
 
+/* Image-loading bridge (iosimage.m) -- the HAVE_NATIVE_IMAGE_API
+   path in image.c routes here.  */
+extern bool ios_can_use_native_image_api (Lisp_Object type);
+extern bool ios_load_image (struct frame *f, struct image *img,
+                            Lisp_Object spec_file,
+                            Lisp_Object spec_data);
+extern void ios_free_pixmap (struct frame *f, Emacs_Pixmap pixmap);
+
 #endif /* HAVE_IOS */
 #endif /* IOSTERM_H */

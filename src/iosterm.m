@@ -169,10 +169,32 @@ ios_glyph_string_to_utf8 (struct glyph_string *s)
    driver passes Unicode codepoints through as "glyph ids", so we
    reassemble them as UTF-8 and let the canvas render via Core Text.
    The geometry comes straight from struct glyph_string.  */
+/* The canvas-side image sink lives in ios.m where UIKit is in
+   scope; declared here so the IMAGE_GLYPH branch can call it.  */
+extern void ios_canvas_draw_image (double x, double y,
+                                   double width, double height,
+                                   void *cgimage);
+
 static void
 ios_noop_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
+  if (s->first_glyph && s->first_glyph->type == IMAGE_GLYPH)
+    {
+      /* Image glyph: paint the image at the glyph string's
+         rectangle.  CGImageRef ownership stays with img->pixmap;
+         the canvas draw command CFBridgingRetains it for the
+         queue's lifetime so a redisplay in flight survives
+         image.c clearing the pixmap.  */
+      if (s->img != NULL && s->img->pixmap != NULL)
+        ios_canvas_draw_image ((double) s->x, (double) s->y,
+                               (double) (s->slice.width > 0
+                                         ? s->slice.width : s->width),
+                               (double) (s->slice.height > 0
+                                         ? s->slice.height : s->height),
+                               (void *) s->img->pixmap);
+      return;
+    }
   char *utf8 = ios_glyph_string_to_utf8 (s);
   if (utf8 == NULL || *utf8 == '\0')
     {
@@ -602,6 +624,7 @@ ios_term_init (void)
   terminal->menu_show_hook = ios_menu_show;
   terminal->popup_dialog_hook = ios_popup_dialog;
   terminal->set_new_font_hook = ios_new_font;
+  terminal->free_pixmap = ios_free_pixmap;
 
   /* Create the input wake pipe and register the read end with
      Emacs so wait_reading_process_input wakes on writes.  */

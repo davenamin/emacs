@@ -7900,6 +7900,8 @@ image_can_use_native_api (Lisp_Object type)
   return ns_can_use_native_image_api (type);
 # elif defined HAVE_HAIKU
   return haiku_can_use_native_image_api (type);
+# elif defined HAVE_IOS
+  return ios_can_use_native_image_api (type);
 # else
   return false;
 # endif
@@ -7976,6 +7978,9 @@ native_image_load (struct frame *f, struct image *img)
 # elif defined HAVE_HAIKU
   return haiku_load_image (f, img, image_file,
 			   image_spec_value (img->spec, QCdata, NULL));
+# elif defined HAVE_IOS
+  return ios_load_image (f, img, image_file,
+                         image_spec_value (img->spec, QCdata, NULL));
 # else
   return 0;
 # endif

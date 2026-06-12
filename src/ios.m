@@ -289,6 +289,7 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
   EmacsDrawKindCursorHollow,
   EmacsDrawKindCursorBar,
   EmacsDrawKindCursorHBar,
+  EmacsDrawKindImage,
 };
 
 /* Bit flags for EmacsDrawCommand.deco.  Kept in sync with the
@@ -314,8 +315,26 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) CGFloat fontSize;
 @property (nonatomic) EmacsDrawDeco deco;
+/* For EmacsDrawKindImage: a manually-CGImageRetained image.  CGImage
+   is not toll-free-bridged to NSObject, so an ARC strong id would
+   leak: the setter manages the retain explicitly, and dealloc
+   releases.  */
+@property (nonatomic, assign) CGImageRef cgImage;
 @end
 @implementation EmacsDrawCommand
+- (void) setCgImage:(CGImageRef)image
+{
+  if (_cgImage == image)
+    return;
+  if (_cgImage)
+    CGImageRelease (_cgImage);
+  _cgImage = image ? CGImageRetain (image) : NULL;
+}
+- (void) dealloc
+{
+  if (_cgImage)
+    CGImageRelease (_cgImage);
+}
 @end
 
 /* Implemented in iosterm.m; enqueues a code point into the
@@ -957,6 +976,22 @@ ios_emit_function_key (UIKey *key)
 
       CGFloat by = self.bounds.size.height - cmd.y - cmd.height;
 
+      if (cmd.kind == EmacsDrawKindImage)
+        {
+          CGImageRef ref = cmd.cgImage;
+          if (ref != NULL)
+            {
+              /* Image y is given top-down (Emacs coords); CG draws
+                 with origin at bottom-left, hence the flip via by.
+                 CGContextDrawImage handles aspect ratio itself when
+                 the dst rect's aspect differs.  */
+              CGContextDrawImage (cg, CGRectMake (cmd.x, by,
+                                                  cmd.width,
+                                                  cmd.height), ref);
+            }
+          continue;
+        }
+
       if (cmd.kind != EmacsDrawKindText)
         {
           /* Cursor commands: just paint the rectangle.  */
@@ -1280,6 +1315,30 @@ ios_canvas_clear_rect (double x, double y, double width, double height,
   cmd.width = width; cmd.height = height;
   cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
   cmd.text = @"";
+  [v appendCommand:cmd];
+}
+
+/* Image draw: enqueue an EmacsDrawKindImage command holding a
+   bridged-retained CGImageRef.  The caller's CGImageRef remains
+   owned by img->pixmap; the command keeps its own +1 retain (via
+   CFBridgingRetain) so a redisplay still in flight when image.c
+   clears the pixmap stays safe.  */
+void
+ios_canvas_draw_image (double x, double y, double width, double height,
+                       void *cgimage)
+{
+  if (ios_is_backgrounded ())
+    return;
+  EmacsUIView *v = ios_canvas;
+  if (v == nil || cgimage == NULL)
+    return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindImage;
+  cmd.x = x;
+  cmd.y = y;
+  cmd.width = width;
+  cmd.height = height;
+  cmd.cgImage = (CGImageRef) cgimage;   /* setter retains */
   [v appendCommand:cmd];
 }
 

@@ -2898,10 +2898,13 @@ AC_SUBST([CROSS_SUFFIX])
 AS_IF([test "$IOS" = "yes"],[
   window_system=ios
   no_x=yes
-  IOS_OBJC_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosfont.o ios.o"
+  IOS_OBJC_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosfont.o iosimage.o ios.o"
   IOS_C_OBJ="iosvfs.o"
   IOS_LIBS="-framework UIKit -framework Foundation"
   IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
+  # ImageIO + MobileCoreServices for CGImageSource format identification
+  # used by iosimage.m.
+  IOS_LIBS="$IOS_LIBS -framework ImageIO -framework MobileCoreServices"
   # UTType constants used by the document picker in iosfns.m.
   IOS_LIBS="$IOS_LIBS -framework UniformTypeIdentifiers"
   # Embed the bundle's Info.plist into the Mach-O's __TEXT,__info_plist
@@ -2923,6 +2926,9 @@ AS_IF([test "$IOS" = "yes"],[
 
   AC_DEFINE([HAVE_IOS], [1], [Define to 1 if Emacs is being built
 with iOS support])
+  AC_DEFINE([HAVE_NATIVE_IMAGE_API], [1],
+    [Define to use ImageIO/CoreGraphics for image decoding on iOS.])
+  NATIVE_IMAGE_API="yes (iOS)"
   AC_DEFINE([NS_IMPL_IOS], [1], [Define to 1 to compile the NS-shared
 font and image code (nsfont.m, nsimage.m) in iOS mode])])
 
