@@ -107,10 +107,6 @@ Works:
     ios-auto-show-keyboard).
 
 Known issues / deferred:
-  * A face-realization path requests a 1px font once per session;
-    ios_font_open clamps it to the frame's size and logs the
-    requesting entity ("degenerate request" in the launch log).
-    Cosmetically invisible; root cause under investigation.
   * Images are not implemented (nsimage.m's NS_IMPL_IOS arm and
     the image glyph drawing path).
   * Rendering uses an overpaint command list (correct, simple);

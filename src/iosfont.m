@@ -151,17 +151,20 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
      integer.  Fall back to the frame's current size.  */
   if (pixel_size < 6)
     {
-      /* Log the entity verbatim once per startup so we can name
-         the upstream caller without spamming every redisplay
-         (face realization re-opens lazily on demand).  */
+      /* Size 0 is the normal "scalable entity, use the default
+         size" request from face realization with an unspecified
+         height -- every scalable-font driver substitutes a
+         default here.  Sizes 1..5 are anomalous (historically
+         produced by a dpi mismatch distorting the benign 0) and
+         worth a one-time log if they ever reappear.  */
       static bool logged = false;
-      if (!logged)
+      if (requested > 0 && !logged)
         {
           logged = true;
           Lisp_Object entity_str
             = Fprin1_to_string (font_entity, Qnil, Qnil);
           ios_launch_log ([NSString stringWithFormat:
-            @"ios_font_open: degenerate request size=%d entity=%s",
+            @"ios_font_open: anomalous size=%d entity=%s",
             requested,
             STRINGP (entity_str) ? SSDATA (entity_str) : "(?)"]);
         }
@@ -172,9 +175,6 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
       if (pixel_size < 6)
         pixel_size = 14;
     }
-  ios_launch_log ([NSString stringWithFormat:
-                   @"ios_font_open: requested=%d using=%d",
-                   requested, pixel_size]);
 
   Lisp_Object font_object
     = font_make_object (VECSIZE (struct ios_font_info),
