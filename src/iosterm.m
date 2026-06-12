@@ -59,11 +59,10 @@ struct ios_display_info *x_display_list = NULL;
 
 /* Per-port frame parameter handler table.  gui_set_frame_parameters_1
    indexes this by `x-frame-parameter' symbol index; without a non-
-   NULL pointer here the indexing dereferences NULL.  Every slot is
-   left NULL for now; the iOS port doesn't yet implement any
-   parameter-specific frame attribute setters.  Size of 64 covers all
-   currently-known indices in src/frame.c's `frame_parms' table.  */
-static frame_parm_handler ios_frame_parm_handlers[64];
+   NULL pointer here the indexing dereferences NULL.  The size and
+   slot ordering are fixed by frame.c's frame_parms[] table; gaps
+   are left NULL.  */
+static frame_parm_handler ios_frame_parm_handlers[];
 
 /* Forward declarations for terminal hooks defined further down in
    this file but installed inside ios_term_init.  */
@@ -1209,5 +1208,131 @@ syms_of_iosterm (void)
   x_underline_at_descent_line = false;
 
 }
+
+/* ---- Frame parameter setters --------------------------------- */
+
+/* Resolve a color spec to an RGB pixel.  Falls back to FALLBACK on
+   parse failure.  ios_defined_color is the canonical decoder
+   (named colors + #rrggbb literals).  */
+static unsigned long
+ios_decode_color (struct frame *f, Lisp_Object arg, unsigned long fallback)
+{
+  if (!STRINGP (arg))
+    return fallback;
+  Emacs_Color c;
+  if (ios_defined_color (f, SSDATA (arg), &c, true, false))
+    return c.pixel;
+  return fallback;
+}
+
+static void
+ios_set_background_color (struct frame *f, Lisp_Object arg,
+                          Lisp_Object oldval)
+{
+  (void) oldval;
+  unsigned long bg = ios_decode_color (f, arg, 0xffffff);
+  FRAME_BACKGROUND_PIXEL (f) = bg;
+  update_face_from_frame_parameter (f, Qbackground_color, arg);
+  if (FRAME_VISIBLE_P (f))
+    SET_FRAME_GARBAGED (f);
+}
+
+static void
+ios_set_foreground_color (struct frame *f, Lisp_Object arg,
+                          Lisp_Object oldval)
+{
+  (void) oldval;
+  unsigned long fg = ios_decode_color (f, arg, 0x000000);
+  FRAME_FOREGROUND_PIXEL (f) = fg;
+  update_face_from_frame_parameter (f, Qforeground_color, arg);
+  if (FRAME_VISIBLE_P (f))
+    SET_FRAME_GARBAGED (f);
+}
+
+static void
+ios_set_cursor_color (struct frame *f, Lisp_Object arg,
+                      Lisp_Object oldval)
+{
+  (void) oldval;
+  unsigned long pixel = ios_decode_color (f, arg, 0x000000);
+  /* Make sure the cursor stays distinguishable from the
+     background -- if equal, flip to the foreground color, same
+     fallback chain androidterm.c uses.  */
+  if (pixel == FRAME_BACKGROUND_PIXEL (f))
+    pixel = FRAME_FOREGROUND_PIXEL (f);
+  f->output_data.ios->cursor_pixel = pixel;
+  f->output_data.ios->cursor_foreground_pixel
+    = FRAME_BACKGROUND_PIXEL (f);
+  update_face_from_frame_parameter (f, Qcursor_color, arg);
+  if (FRAME_VISIBLE_P (f))
+    SET_FRAME_GARBAGED (f);
+}
+
+static void
+ios_set_cursor_type (struct frame *f, Lisp_Object arg,
+                     Lisp_Object oldval)
+{
+  set_frame_cursor_types (f, arg);
+  (void) oldval;
+}
+
+/* Indexing must match frame.c's frame_parms[].  Setters we don't
+   yet implement (scroll bars, fringes, etc.) stay NULL; the few
+   shared GUI handlers (gui_set_font, gui_set_alpha, ...) take
+   their place where they apply portably.  */
+static frame_parm_handler ios_frame_parm_handlers[] =
+{
+  gui_set_autoraise,                         /* auto-raise */
+  gui_set_autolower,                         /* auto-lower */
+  ios_set_background_color,                  /* background-color */
+  NULL,                                      /* border-color */
+  gui_set_border_width,                      /* border-width */
+  ios_set_cursor_color,                      /* cursor-color */
+  ios_set_cursor_type,                       /* cursor-type */
+  gui_set_font,                              /* font */
+  ios_set_foreground_color,                  /* foreground-color */
+  NULL,                                      /* icon-name */
+  NULL,                                      /* icon-type */
+  NULL,                                      /* child-frame-border-width */
+  NULL,                                      /* internal-border-width */
+  gui_set_right_divider_width,               /* right-divider-width */
+  gui_set_bottom_divider_width,              /* bottom-divider-width */
+  NULL,                                      /* menu-bar-lines */
+  NULL,                                      /* mouse-color */
+  NULL,                                      /* name */
+  gui_set_scroll_bar_width,                  /* scroll-bar-width */
+  gui_set_scroll_bar_height,                 /* scroll-bar-height */
+  NULL,                                      /* title */
+  gui_set_unsplittable,                      /* unsplittable */
+  gui_set_vertical_scroll_bars,              /* vertical-scroll-bars */
+  gui_set_horizontal_scroll_bars,            /* horizontal-scroll-bars */
+  gui_set_visibility,                        /* visibility */
+  NULL,                                      /* tab-bar-lines */
+  NULL,                                      /* tool-bar-lines */
+  NULL,                                      /* scroll-bar-foreground */
+  NULL,                                      /* scroll-bar-background */
+  gui_set_screen_gamma,                      /* screen-gamma */
+  gui_set_line_spacing,                      /* line-spacing */
+  gui_set_left_fringe,                       /* left-fringe */
+  gui_set_right_fringe,                      /* right-fringe */
+  NULL,                                      /* wait-for-wm */
+  gui_set_fullscreen,                        /* fullscreen */
+  gui_set_font_backend,                      /* font-backend */
+  NULL,                                      /* alpha */
+  NULL,                                      /* sticky */
+  NULL,                                      /* tool-bar-position */
+  NULL,                                      /* inhibit-double-buffering */
+  NULL,                                      /* undecorated */
+  NULL,                                      /* parent-frame */
+  NULL,                                      /* skip-taskbar */
+  NULL,                                      /* no-focus-on-map */
+  NULL,                                      /* no-accept-focus */
+  NULL,                                      /* z-group */
+  NULL,                                      /* override-redirect */
+  gui_set_no_special_glyphs,                 /* no-special-glyphs */
+  NULL,                                      /* alpha-background */
+  gui_set_borders_respect_alpha_background,  /* borders-respect-alpha-background */
+  NULL,                                      /* use-frame-synchronization */
+};
 
 #endif /* HAVE_IOS */

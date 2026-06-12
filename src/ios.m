@@ -47,6 +47,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #import <CoreText/CoreText.h>
 
 #include <pthread.h>
+#include <stdatomic.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -982,6 +983,27 @@ ios_emit_function_key (UIKey *key)
    Lisp side.  Weak so it auto-clears at app shutdown.  */
 __weak static EmacsUIView *ios_canvas = nil;
 
+/* Background lifecycle flag.  Set by applicationDidEnterBackground,
+   cleared by applicationDidBecomeActive.  Atomic so the Emacs
+   thread can poll it without locking.  When set, all the
+   ios_canvas_* entry points return early -- redisplay still runs
+   on the Emacs side but produces no UIKit work, so a sleeping app
+   doesn't keep draining the wake pipe to no purpose and doesn't
+   trip iOS's background-CPU watchdog.  */
+static _Atomic bool ios_backgrounded = false;
+
+void
+ios_set_backgrounded (bool flag)
+{
+  atomic_store (&ios_backgrounded, flag);
+}
+
+static inline bool
+ios_is_backgrounded (void)
+{
+  return atomic_load (&ios_backgrounded);
+}
+
 /* Show or hide the software keyboard from Lisp (via the
    ios-show-keyboard / ios-hide-keyboard primitives in iosfns.m).
    Called on the Emacs thread; hops to the main queue because
@@ -1006,6 +1028,8 @@ ios_canvas_draw_text (double x, double y, double width, double height,
                       const char *utf8, double font_size,
                       unsigned deco)
 {
+  if (ios_is_backgrounded ())
+    return;
   EmacsUIView *v = ios_canvas;
   if (v == nil || utf8 == NULL)
     return;
@@ -1031,6 +1055,8 @@ void
 ios_canvas_clear_rect (double x, double y, double width, double height,
                        unsigned long bg_pixel)
 {
+  if (ios_is_backgrounded ())
+    return;
   EmacsUIView *v = ios_canvas;
   if (v == nil) return;
   EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
@@ -1049,6 +1075,8 @@ void
 ios_canvas_draw_cursor (double x, double y, double width, double height,
                         unsigned long pixel, int style /* enum text_cursor_kinds */)
 {
+  if (ios_is_backgrounded ())
+    return;
   EmacsUIView *v = ios_canvas;
   if (v == nil) return;
   EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
@@ -1071,6 +1099,8 @@ ios_canvas_draw_cursor (double x, double y, double width, double height,
 void
 ios_canvas_begin_frame (void)
 {
+  if (ios_is_backgrounded ())
+    return;
   EmacsUIView *v = ios_canvas;
   if (v) [v beginFrame];
 }
@@ -1078,6 +1108,8 @@ ios_canvas_begin_frame (void)
 void
 ios_canvas_end_frame (void)
 {
+  if (ios_is_backgrounded ())
+    return;
   EmacsUIView *v = ios_canvas;
   if (v) [v endFrame];
 }
@@ -1284,6 +1316,7 @@ ios_emacs_bg_thread (void *unused)
 - (void)applicationDidBecomeActive:(UIApplication *)application
 {
   ios_launch_log (@"AppDelegate applicationDidBecomeActive");
+  ios_set_backgrounded (false);
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application
@@ -1294,6 +1327,12 @@ ios_emacs_bg_thread (void *unused)
 - (void)applicationDidEnterBackground:(UIApplication *)application
 {
   ios_launch_log (@"AppDelegate applicationDidEnterBackground");
+  /* Suspend redisplay output: the canvas isn't visible, and iOS
+     terminates backgrounded apps that keep doing work.  The Emacs
+     thread keeps running so timers stay accurate, but
+     ios_canvas_draw_text et al. become no-ops until the app
+     returns to the foreground.  */
+  ios_set_backgrounded (true);
 }
 
 - (void)applicationWillTerminate:(UIApplication *)application

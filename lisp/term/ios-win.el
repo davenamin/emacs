@@ -131,6 +131,33 @@ Emacs a file (Files.app share sheet, Mail attachment, etc.)."
 
 (global-set-key [drag-n-drop] #'ios-handle-drag-n-drop)
 
+(defcustom ios-auto-show-keyboard t
+  "If non-nil, automatically show the soft keyboard when entering the minibuffer.
+Hardware-keyboard users may prefer to disable this so the on-screen
+keyboard never covers the canvas during M-x.  Auto-hide on
+minibuffer exit is unconditional once shown by this hook."
+  :group 'ios
+  :type 'boolean)
+
+(declare-function ios-show-keyboard "iosfns.m" ())
+(declare-function ios-hide-keyboard "iosfns.m" ())
+
+(defvar ios--keyboard-shown-by-minibuffer nil
+  "Non-nil when the current minibuffer session brought up the keyboard.")
+
+(defun ios--minibuffer-setup ()
+  (when ios-auto-show-keyboard
+    (setq ios--keyboard-shown-by-minibuffer t)
+    (ios-show-keyboard)))
+
+(defun ios--minibuffer-exit ()
+  (when ios--keyboard-shown-by-minibuffer
+    (setq ios--keyboard-shown-by-minibuffer nil)
+    (ios-hide-keyboard)))
+
+(add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
+(add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
+
 (provide 'ios-win)
 
 ;;; ios-win.el ends here
