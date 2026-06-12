@@ -3,12 +3,9 @@ iOS port of GNU Emacs
 
 This directory contains the iOS-specific scaffolding for building
 Emacs as an iOS application bundle distributable through the App
-Store.  The port is being landed incrementally; see the
-"Suggested implementation order" in the design document for the
-sequence of follow-up commits.
-
-The C-side terminal driver, font and pasteboard bridges live under
-src/ios*.{m,h,c} and src/iosvfs.c.  This directory holds only:
+Store.  The C-side terminal driver, font and pasteboard bridges
+live under src/ios*.{m,h,c} and src/iosvfs.c, with Lisp-side
+initialization in lisp/term/ios-win.el.  This directory holds:
 
   Emacs.base/                Bundle template (Info.plist, entitlements,
                              launch screen, icons), assembled into the
@@ -26,49 +23,123 @@ src/ios*.{m,h,c} and src/iosvfs.c.  This directory holds only:
 Building
 --------
 
-Building the iOS port requires:
-
-  * A macOS host with Xcode installed.
-  * The iOS SDK (use `xcrun --sdk iphoneos --show-sdk-path').
-  * For on-device installation, an Apple Developer account and a
-    valid provisioning profile.
-
-The current scaffolding is not yet complete:
-
-  * The recursive XCONFIGURE=ios cross-configure path (analogous to
-    the XCONFIGURE=android path at configure.ac:29) is not yet
-    wired up.  Until it lands, ./configure --with-ios is a
-    documented placeholder and `make -C ios all' will report a
-    clear error explaining that the cross-compiled emacs binary is
-    missing.
-  * cross/xcode-build/ -- the Xcode/clang cross-compile rules that
-    produce the libemacs.a + emacs binary for iOS -- has not yet
-    been added.
-
-When both are in place the eventual build sequence will be:
+On a macOS host with Xcode:
 
   ./autogen.sh
-  ./configure --with-ios --with-ios-deployment-target=15.0
-  make ios-bundle           # or: make && make -C ios all
+  ./configure --with-ios
+  make ios
 
-producing ios/Emacs.app, which can be installed in the Simulator with
+produces the simulator Emacs.app; install and launch with
 
-  xcrun simctl install booted ios/Emacs.app
+  xcrun simctl install booted build-ios-sim/ios/Emacs.app
   xcrun simctl launch booted org.gnu.emacs
+
+See .github/workflows/ios-cross.yml and ios-sim-diag.yml for the
+exact CI invocations, including the install / launch / screenshot
+smoke test that runs on every push.  On-device installation
+additionally needs an Apple Developer account and provisioning
+profile.
 
 On first launch Emacs writes its pdumper image into
 
   <sandbox>/Library/Application Support/Emacs/emacs.pdmp
 
-(roughly 10-30 seconds depending on hardware), and subsequent
+(seconds to tens of seconds depending on hardware); subsequent
 launches mmap it sub-second.
+
+Runtime / threading model
+-------------------------
+
+Emacs runs on a dedicated pthread with a 16 MB stack; UIKit owns
+the main thread.  The two sides communicate exclusively through:
+
+  * lock-protected queues (keystrokes, rich input events, pinch
+    updates) drained by ios_read_socket on the Emacs thread;
+  * publish/drain channels for resize, mouse motion, appearance
+    changes, and open-file requests: the UIKit side writes plain C
+    data under a mutex and pokes a wake pipe; the Emacs thread
+    builds any Lisp data on its own side;
+  * dispatch_async / dispatch_sync onto the main queue for UIKit
+    work initiated from Lisp (clipboard, tooltips, keyboard
+    show/hide, pickers, menus).
+
+Invariants: the UIKit thread never allocates Lisp data and never
+reads frame state (input events carry a nil frame; the drain
+attaches one); the Emacs thread never sleeps on UIKit -- modal UI
+(menus, dialogs) runs a nested input pump so C-g and type-ahead
+keep working.
+
+HOME and the working directory are the sandboxed Documents/
+folder (the one visible in the Files app); .emacs.d is created
+there.  All geometry is in logical points (Core Graphics applies
+the Retina scale underneath), and the display reports 163 ppi so
+the face engine's point<->pixel conversions agree with the
+drawing coordinate space.
+
+Feature status (each verified by the CI smoke test when landed)
+----------------------------------------------------------------
+
+Works:
+  * Text rendering with face attributes: colors, bold, italic,
+    underline (single and wave), overline, strike-through, cursor
+    styles; per-(size, weight, slant) font caching.
+  * Input: hardware keyboards including modifiers, arrows and
+    F-keys; the software keyboard with an accessory bar (Esc,
+    sticky Ctrl/Meta, Tab, C-g, arrow keys, M-x); tap as mouse-1,
+    long-press as mouse-2, single-finger drag as selection with
+    live highlight, two-finger pan as wheel events, pinch as
+    pinch events (text-scale-pinch).
+  * Popup menus (x-popup-menu, mouse-3) as chained action sheets
+    with submenu hierarchy, separators, and toggle/radio state;
+    dialogs (x-popup-dialog, use-dialog-box) as modal alerts.
+  * Tooltips (x-show-tip / x-hide-tip) as an auto-hiding overlay.
+  * Clipboard via UIPasteboard (changeCount-cached), wired to
+    interprogram-cut/paste-function.
+  * Files: open-in-place from other apps via drag-n-drop events;
+    ios-pick-file presents the Files picker asynchronously;
+    security-scoped bookmarks persist access across launches; the
+    save round-trip into Documents is exercised by CI end to end.
+  * Frame parameters (colors, cursor, font via
+    set_new_font_hook); rotation / split-view / soft-keyboard
+    resizes; live dark/light appearance tracking; haptic bell;
+    background lifecycle quiesces drawing; the minibuffer
+    auto-shows the soft keyboard (defcustom
+    ios-auto-show-keyboard).
+
+Known issues / deferred:
+  * A face-realization path requests a 1px font once per session;
+    ios_font_open clamps it to the frame's size and logs the
+    requesting entity ("degenerate request" in the launch log).
+    Cosmetically invisible; root cause under investigation.
+  * Images are not implemented (nsimage.m's NS_IMPL_IOS arm and
+    the image glyph drawing path).
+  * Rendering uses an overpaint command list (correct, simple);
+    per-row damage tracking is the planned optimization.
+  * Pane headers inside submenus are dropped -- action sheets
+    have no section concept.
+  * Subprocesses (make-process / call-process) work in the
+    simulator but signal a Lisp error on device: the iOS sandbox
+    forbids posix_spawn.  Inherent to the platform.
+  * Device signing / TestFlight packaging needs Apple credentials
+    and is not exercised by CI.
 
 App Store compliance notes
 --------------------------
 
 * No JIT (no native compilation, no dynamic module loading).
-* No fork/exec; Emacs subprocess primitives error out.
+* No fork/exec; Emacs subprocess primitives error out on device.
 * Sandboxed filesystem; user files live in the per-app Documents
-  directory and Files-app picked URLs.
+  directory and Files-app picked URLs (security-scoped, bookmark
+  persistence across launches).
 * pdumper image is data, not executable code, and is generated on
   first launch into the writable Application Support directory.
+
+Debug facilities
+----------------
+
+Set these in the app's environment (SIMCTL_CHILD_* under simctl):
+
+  EMACS_IOS_DEBUG_LOG=1   show the launch-log strip above the canvas
+  EMACS_IOS_AUTO_INPUT=1  run the CI keystroke driver after launch
+
+Logs land in Documents/emacs-launch.log and emacs-stdout.log.
