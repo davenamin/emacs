@@ -176,6 +176,14 @@ ios_build_menu_tree (IOSMenuNode *root)
    it programmatically on C-g.  Main-thread access only.  */
 static UIAlertController *ios_menu_top_sheet;
 
+/* Serial of a menu invocation the pump abandoned (C-g).  Checked
+   by ios_present_node before presenting, so a submenu chained
+   through a dismiss-completion block cannot appear after its menu
+   was quit -- during the dismiss animation ios_menu_top_sheet is
+   nil and the quit path would otherwise have nothing to tear
+   down.  Main-thread access only, so no lock.  */
+static int ios_menu_cancelled_serial;
+
 /* Walk up the connected-scene tree to find a presenter.  Returns
    nil if no window is on screen yet.  */
 static UIViewController *
@@ -208,17 +216,26 @@ ios_root_presenter (void)
    ordering correct; presenting on top of a dismissing controller
    is unreliable on iOS).  */
 static void ios_present_node (IOSMenuNode *node, int serial,
-                              int x, int y);
+                              int x, int y, BOOL as_dialog);
 
 static void
-ios_present_node (IOSMenuNode *node, int serial, int x, int y)
+ios_present_node (IOSMenuNode *node, int serial, int x, int y,
+                  BOOL as_dialog)
 {
+  /* The pump may have abandoned this menu (C-g) while a submenu
+     transition's dismiss animation was in flight.  Don't present
+     an orphan.  */
+  if (serial == ios_menu_cancelled_serial)
+    return;
+
   UIAlertController *sheet =
     [UIAlertController alertControllerWithTitle:
                          (node.title.length ? node.title : nil)
                                         message:nil
                                  preferredStyle:
-                                   UIAlertControllerStyleActionSheet];
+                                   (as_dialog
+                                    ? UIAlertControllerStyleAlert
+                                    : UIAlertControllerStyleActionSheet)];
 
   for (IOSMenuNode *child in node.children)
     {
@@ -240,7 +257,7 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y)
             ios_menu_top_sheet = nil;
             [presenter dismissViewControllerAnimated:NO
                                           completion:^{
-              ios_present_node (captured, serial, x, y);
+              ios_present_node (captured, serial, x, y, as_dialog);
             }];
           }];
           act.enabled = child.enabled;
@@ -266,13 +283,14 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y)
       [sheet addAction:act];
     }
 
-  [sheet addAction:
-     [UIAlertAction actionWithTitle:@"Cancel"
-                              style:UIAlertActionStyleCancel
-                            handler:^(UIAlertAction *a) {
-       ios_menu_top_sheet = nil;
-       ios_publish_menu_selection (serial, -1);
-     }]];
+  if (!as_dialog)
+    [sheet addAction:
+       [UIAlertAction actionWithTitle:@"Cancel"
+                                style:UIAlertActionStyleCancel
+                              handler:^(UIAlertAction *a) {
+         ios_menu_top_sheet = nil;
+         ios_publish_menu_selection (serial, -1);
+       }]];
 
   UIViewController *root = ios_root_presenter ();
   if (root == nil)
@@ -294,9 +312,10 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y)
   [root presentViewController:sheet animated:YES completion:nil];
 }
 
-Lisp_Object
-ios_menu_show (struct frame *f, int x, int y, int menuflags,
-               Lisp_Object title, const char **error_name)
+static Lisp_Object
+ios_menu_show_1 (struct frame *f, int x, int y, int menuflags,
+                 Lisp_Object title, const char **error_name,
+                 BOOL as_dialog)
 {
   *error_name = NULL;
 
@@ -314,7 +333,7 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
 
   int serial = ios_menu_next_serial ();
   dispatch_async (dispatch_get_main_queue (), ^{
-    ios_present_node (root, serial, x, y);
+    ios_present_node (root, serial, x, y, as_dialog);
   });
 
   /* Nested input pump, the same shape as every other port's modal
@@ -329,7 +348,12 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
         break;
       if (!NILP (Vquit_flag))
         {
+          int quit_serial = serial;
           dispatch_async (dispatch_get_main_queue (), ^{
+            /* Mark the serial cancelled FIRST so a submenu
+               transition completing after this block cannot
+               re-present; then tear down whatever is up.  */
+            ios_menu_cancelled_serial = quit_serial;
             UIAlertController *sheet = ios_menu_top_sheet;
             ios_menu_top_sheet = nil;
             [sheet.presentingViewController
@@ -351,6 +375,52 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
   if (menuflags & MENU_KEYMAPS)
     entry = list1 (entry);
   return entry;
+}
+
+Lisp_Object
+ios_menu_show (struct frame *f, int x, int y, int menuflags,
+               Lisp_Object title, const char **error_name)
+{
+  return ios_menu_show_1 (f, x, y, menuflags, title, error_name, NO);
+}
+
+/* terminal->popup_dialog_hook.  CONTENTS is (TITLE (BUTTON .
+   VALUE)...); HEADER selects question vs information styling,
+   which UIAlertController does not distinguish, so it is ignored.
+   Mirrors android_popup_dialog: populate menu_items via
+   list_of_panes, then drive the shared presenter in alert style.
+   Dialogs get no injected Cancel action -- the caller's buttons
+   are the only choices, and C-g through the pump remains the
+   escape hatch, quitting like the X dialog path does.  */
+Lisp_Object
+ios_popup_dialog (struct frame *f, Lisp_Object header,
+                  Lisp_Object contents)
+{
+  (void) header;
+  Lisp_Object title;
+  const char *error_name = NULL;
+  Lisp_Object selection;
+  specpdl_ref count = SPECPDL_INDEX ();
+
+  check_window_system (f);
+
+  title = Fcar (contents);
+  CHECK_STRING (title);
+  record_unwind_protect_void (unuse_menu_items);
+
+  /* No buttons specified: add an "Ok" so the dialog can pop
+     down.  */
+  if (NILP (Fcar (Fcdr (contents))))
+    contents = list2 (title, Fcons (build_string ("Ok"), Qt));
+
+  list_of_panes (list1 (contents));
+  selection = ios_menu_show_1 (f, 0, 0, 0, title, &error_name, YES);
+  unbind_to (count, Qnil);
+  discard_menu_items ();
+
+  if (error_name)
+    error ("%s", error_name);
+  return selection;
 }
 
 void

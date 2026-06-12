@@ -587,6 +587,7 @@ ios_term_init (void)
   terminal->mouse_position_hook = ios_mouse_position;
   terminal->ring_bell_hook = ios_ring_bell;
   terminal->menu_show_hook = ios_menu_show;
+  terminal->popup_dialog_hook = ios_popup_dialog;
   terminal->set_new_font_hook = ios_new_font;
 
   /* Create the input wake pipe and register the read end with

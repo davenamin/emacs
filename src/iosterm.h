@@ -279,6 +279,8 @@ extern void syms_of_iosvfs (void);
 extern Lisp_Object ios_menu_show (struct frame *f, int x, int y,
                                   int menuflags, Lisp_Object title,
                                   const char **error_name);
+extern Lisp_Object ios_popup_dialog (struct frame *f, Lisp_Object header,
+                                     Lisp_Object contents);
 
 /* Nested input pump + serial-tagged menu-selection channel
    (iosterm.m).  The pump runs one normal input drain so the menu
