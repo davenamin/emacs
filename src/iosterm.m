@@ -479,10 +479,23 @@ ios_new_font (struct frame *f, Lisp_Object font_object, int fontset)
   if (FRAME_FONT (f) == font)
     return font_object;
 
+  get_font_ascent_descent (font, &font_ascent, &font_descent);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"ios_new_font: pixel_size=%d avg_width=%d"
+                   @" height=%d (asc %d desc %d)",
+                   font->pixel_size, font->average_width,
+                   font->height, font_ascent, font_descent]);
+  /* Refuse to install a font with degenerate cell metrics --
+     adjust_frame_size below would compute cols == pixels and the
+     frame collapses to unreadable 1px cells.  The font object is
+     still returned so the face layer can use it for glyphs, but
+     the frame keeps its current grid.  */
+  if (font->average_width < 3 || font_ascent + font_descent < 6)
+    return font_object;
+
   FRAME_FONT (f) = font;
   FRAME_BASELINE_OFFSET (f) = font->baseline_offset;
   FRAME_COLUMN_WIDTH (f) = font->average_width;
-  get_font_ascent_descent (font, &font_ascent, &font_descent);
   FRAME_LINE_HEIGHT (f) = font_ascent + font_descent;
   FRAME_TAB_BAR_HEIGHT (f)
     = FRAME_TAB_BAR_LINES (f) * FRAME_LINE_HEIGHT (f);

@@ -39,6 +39,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 /* Forward declaration so open_font can store its address into
    font->driver before the driver itself is defined below.  */
 extern struct font_driver ios_font_driver;
+extern void ios_launch_log (NSString *msg);
 
 /* Per-open-font extra data: the UIFont retained reference (needed
    later to ask Core Text for glyph runs).  Lives after struct font
@@ -141,13 +142,25 @@ ios_font_list_family (struct frame *f)
 static Lisp_Object
 ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
 {
-  if (pixel_size <= 0)
+  int requested = pixel_size;
+  /* Degenerate sizes produce 1px-wide cells that collapse the whole
+     frame layout (a 1pt Menlo measures M at width 1, height 2, and
+     adjust_frame_size then computes cols == pixels).  Sizes this
+     small are never intentional on a 326+ dpi display -- they come
+     from size-less specs whose pixel field decodes as a tiny
+     integer.  Fall back to the frame's current size.  */
+  if (pixel_size < 6)
     {
       if (FRAME_FONT (f))
         pixel_size = FRAME_FONT (f)->pixel_size;
       else
         pixel_size = 14;
+      if (pixel_size < 6)
+        pixel_size = 14;
     }
+  ios_launch_log ([NSString stringWithFormat:
+                   @"ios_font_open: requested=%d using=%d",
+                   requested, pixel_size]);
 
   Lisp_Object font_object
     = font_make_object (VECSIZE (struct ios_font_info),
