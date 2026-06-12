@@ -188,8 +188,8 @@ jobs:
           run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
                   SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
             xcrun simctl launch booted org.gnu.emacs
-          log "--- sleeping 20s for Emacs init to do something ---"
-          sleep 25
+          log "--- sleeping 30s for Emacs init + self-tests to do something ---"
+          sleep 35
           log "--- capturing simulator screenshot ---"
           mkdir -p ci-diag
           run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
@@ -202,7 +202,7 @@ jobs:
           if [ -n "$DATA_CONTAINER" ] && [ -d "$DATA_CONTAINER" ]; then
             log "--- Documents/ listing ---"
             ls -la "$DATA_CONTAINER/Documents/" >> "$OUT" 2>&1
-            for f in ci-roundtrip.txt emacs-launch.log emacs-stdout.log; do
+            for f in ci-roundtrip.txt ios-test-results.txt emacs-launch.log emacs-stdout.log; do
               log ""
               log "--- $f ---"
               if [ -f "$DATA_CONTAINER/Documents/$f" ]; then
@@ -213,6 +213,24 @@ jobs:
             done
           else
             log "(data container not present -- app may have failed before main)"
+          fi
+
+          # Self-test gate: any FAIL line in ios-test-results.txt
+          # fails the workflow.  Absent file is acceptable for older
+          # commits but flagged as a soft warning here so the
+          # diagnostic still shows.
+          RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
+          if [ -f "$RESULTS" ]; then
+            log ""
+            log "--- self-test summary ---"
+            grep -c '^PASS ' "$RESULTS" >> "$OUT" || true
+            if grep -q '^FAIL ' "$RESULTS"; then
+              log "self-tests failed:"
+              grep '^FAIL ' "$RESULTS" >> "$OUT" || true
+              FAILED_SELFTESTS=1
+            fi
+          else
+            log "(self-test results file absent)"
           fi
 
           # Fall back to the unified log for NSLog output -- captures
@@ -254,6 +272,13 @@ jobs:
 
           echo "" >> "$OUT"
           echo "===== END =====" >> "$OUT"
+          # Diagnostics are committed even on failure (next step is
+          # if: always()), but FAILED_SELFTESTS still surfaces the
+          # red X so the cycle is visibly broken.
+          if [ -n "$FAILED_SELFTESTS" ]; then
+            echo "::error::iOS self-tests reported FAIL lines; see ci-diag/sim-install.txt"
+            exit 1
+          fi
           true
 
       - name: Commit diagnostics back to branch

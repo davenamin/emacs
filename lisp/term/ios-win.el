@@ -158,6 +158,11 @@ minibuffer exit is unconditional once shown by this hook."
 (add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
 (add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
 
+;; Self-test entry point: autoloaded so the CI auto-input driver can
+;; invoke (ios-run-self-tests) without an explicit (require).
+(autoload 'ios-run-self-tests "ios-tests"
+  "Run the iOS port's functional self-tests." t)
+
 (provide 'ios-win)
 
 ;;; ios-win.el ends here

@@ -1430,6 +1430,16 @@ ios_auto_input_thread (void *unused)
   ios_launch_log (@"auto-input(thread): C-x C-s (save)");
   ios_enqueue_key (0x18);   /* C-x */
   ios_enqueue_key (0x13);   /* C-s */
+
+  /* Self-test battery: M-x ios-run-self-tests RET.  Writes
+     ~/ios-test-results.txt with one line per probe.  The workflow's
+     post-launch step cats the file and fails the run on any
+     FAIL line.  */
+  sleep (3);
+  ios_launch_log (@"auto-input(thread): M-x ios-run-self-tests RET");
+  const char *cmd = "\x1bxios-run-self-tests\r";
+  for (const char *p = cmd; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
   return NULL;
 }
 
