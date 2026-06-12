@@ -453,6 +453,28 @@ the OS-wide setting at launch.  */)
          : intern_c_string ("light");
 }
 
+extern void ios_set_keyboard_visible (bool visible);
+
+DEFUN ("ios-show-keyboard", Fios_show_keyboard, Sios_show_keyboard,
+       0, 0, 0,
+       doc: /* Bring up the software keyboard.  */)
+  (void)
+{
+  ios_set_keyboard_visible (true);
+  return Qnil;
+}
+
+DEFUN ("ios-hide-keyboard", Fios_hide_keyboard, Sios_hide_keyboard,
+       0, 0, 0,
+       doc: /* Dismiss the software keyboard.
+The hardware keyboard, if any, keeps working; this only slides the
+on-screen keyboard away to reclaim canvas space.  */)
+  (void)
+{
+  ios_set_keyboard_visible (false);
+  return Qnil;
+}
+
 DEFUN ("ios-pick-file", Fios_pick_file, Sios_pick_file, 0, 0, 0,
        doc: /* Present the iOS Files picker; return the picked path.
 Blocks until the user picks a document or cancels.  Returns nil
@@ -550,6 +572,8 @@ syms_of_iosfns (void)
   defsubr (&Sx_display_list);
   defsubr (&Sios_pick_file);
   defsubr (&Sios_system_appearance);
+  defsubr (&Sios_show_keyboard);
+  defsubr (&Sios_hide_keyboard);
 }
 
 #endif /* HAVE_IOS */

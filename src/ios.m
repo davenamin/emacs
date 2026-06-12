@@ -1000,6 +1000,24 @@ ios_emit_function_key (UIKey *key)
    Lisp side.  Weak so it auto-clears at app shutdown.  */
 __weak static EmacsUIView *ios_canvas = nil;
 
+/* Show or hide the software keyboard from Lisp (via the
+   ios-show-keyboard / ios-hide-keyboard primitives in iosfns.m).
+   Called on the Emacs thread; hops to the main queue because
+   first-responder changes are UI-thread-only.  */
+void
+ios_set_keyboard_visible (bool visible)
+{
+  dispatch_async (dispatch_get_main_queue (), ^{
+    EmacsUIView *v = ios_canvas;
+    if (v == nil)
+      return;
+    if (visible)
+      [v becomeFirstResponder];
+    else
+      [v resignFirstResponder];
+  });
+}
+
 void
 ios_canvas_draw_text (double x, double y, double width, double height,
                       unsigned long fg_pixel, unsigned long bg_pixel,
