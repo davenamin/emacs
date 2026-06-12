@@ -549,8 +549,19 @@ extern void ios_publish_appearance_change (void);
   for (NSUInteger i = 0; i < text.length; i++)
     {
       unichar c = [text characterAtIndex:i];
-      ios_enqueue_key ((int) c);
+      int packed = (int) c | (int) ios_sticky_mods;
+      /* Map control-letter combos to the canonical 0x01..0x1A
+         (same convention as ios_pack_uikey) so existing keymaps
+         match.  */
+      if ((ios_sticky_mods & CHAR_CTL) && c >= 'a' && c <= 'z')
+        packed = (c - 'a' + 1) | (ios_sticky_mods & ~CHAR_CTL);
+      else if ((ios_sticky_mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
+        packed = (c - 'A' + 1) | (ios_sticky_mods & ~CHAR_CTL);
+      ios_enqueue_key (packed);
     }
+  /* Sticky modifiers apply to one character then clear, matching
+     the iOS sticky-key convention.  */
+  ios_sticky_mods = 0;
 }
 
 - (void) deleteBackward
@@ -574,6 +585,53 @@ extern void ios_publish_appearance_change (void);
 }
 - (BOOL) enablesReturnKeyAutomatically { return NO; }
 - (UIReturnKeyType) returnKeyType { return UIReturnKeyDefault; }
+
+/* Accessory bar sitting above the soft keyboard with the
+   Emacs-specific chord keys (Ctrl, Meta, Esc, Tab, M-x) that
+   iOS doesn't expose elsewhere.  Tapping a modifier toggles a
+   sticky bit; the next typed character is packed with the
+   accumulated modifiers and then the sticky state resets.  */
+static unsigned ios_sticky_mods = 0;
+
+- (UIView *) inputAccessoryView
+{
+  static UIToolbar *bar = nil;
+  if (bar)
+    return bar;
+  bar = [[UIToolbar alloc] initWithFrame:CGRectMake (0, 0, 320, 40)];
+  bar.translucent = NO;
+  UIBarButtonItem *(^mk)(NSString *, SEL) =
+    ^UIBarButtonItem *(NSString *t, SEL s) {
+      UIBarButtonItem *b
+        = [[UIBarButtonItem alloc] initWithTitle:t
+                                           style:UIBarButtonItemStylePlain
+                                          target:self
+                                          action:s];
+      return b;
+    };
+  UIBarButtonItem *flex
+    = [[UIBarButtonItem alloc]
+        initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
+                             target:nil action:nil];
+  bar.items = @[mk (@"Ctrl", @selector (accStickyCtrl)),
+                mk (@"Meta", @selector (accStickyMeta)),
+                flex,
+                mk (@"Esc",  @selector (accEsc)),
+                mk (@"Tab",  @selector (accTab)),
+                mk (@"M-x",  @selector (accMx))];
+  return bar;
+}
+
+- (void) accStickyCtrl { ios_sticky_mods ^= CHAR_CTL; }
+- (void) accStickyMeta { ios_sticky_mods ^= CHAR_META; }
+- (void) accEsc        { ios_enqueue_key (0x1b); }
+- (void) accTab        { ios_enqueue_key (0x09); }
+- (void) accMx
+{
+  /* M-x runs execute-extended-command in the standard global map.  */
+  ios_enqueue_key (CHAR_META | 'x');
+}
+
 
 /* Translate a UIKey into the packed codepoint+modifiers our queue
    expects.  Returns -1 if the key has no codepoint we know how to
