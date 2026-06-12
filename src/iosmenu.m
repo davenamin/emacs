@@ -18,11 +18,14 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 /* iOS has no menu bar; this file maps Emacs popup-menu requests
    (x-popup-menu, mouse-3 context menus, tmm fallbacks) onto a
-   UIAlertController action sheet.
+   tree of UIAlertController action sheets.
 
-   V1 limitations relative to androidmenu.c: panes and submenus are
-   flattened into one list (pane names become disabled separator
-   rows), and help-echo strings are not shown.  */
+   On the Emacs thread we walk menu_items into an IOSMenuNode tree
+   (the same data shape every port produces, just structured rather
+   than flat-walked); on the UIKit thread we render the root sheet
+   and chain into child sheets when the user picks a submenu.
+   Selection feeds the serial-tagged channel in iosterm.m that the
+   nested pump waits on.  */
 
 #include <config.h>
 
@@ -37,145 +40,287 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "coding.h"
 #include "menu.h"
 
-/* Serial of the menu invocation currently (or most recently) on
-   screen.  Handlers capture their own invocation's serial and
-   publish through ios_publish_menu_selection, which discards
-   anything whose serial does not match what the pump is waiting
-   for -- a tap on a stale sheet cannot leak into a newer menu.  */
-static int ios_menu_serial_counter;
+@interface IOSMenuNode : NSObject
+@property (nonatomic, copy) NSString *title;
+/* For leaves, the menu_items vector index of MENU_ITEMS_ITEM_NAME
+   for this item (so MENU_ITEMS_ITEM_VALUE sits at item_index +
+   MENU_ITEMS_ITEM_VALUE).  For branches and separators, -1.  */
+@property (nonatomic) int item_index;
+@property (nonatomic) BOOL enabled;
+@property (nonatomic) BOOL separator;
+@property (nonatomic) NSMutableArray<IOSMenuNode *> *children;
+@end
+@implementation IOSMenuNode
+@end
 
-/* Strong reference to the on-screen sheet so the pump can dismiss
-   it programmatically on C-g.  Main-thread access only.  */
-static UIAlertController *ios_menu_sheet;
-
-/* terminal->menu_show_hook.  Walks the shared menu_items vector
-   (already populated by menu.c), presents an action sheet, blocks
-   until selection, and returns the chosen item's value.  */
-Lisp_Object
-ios_menu_show (struct frame *f, int x, int y, int menuflags,
-               Lisp_Object title, const char **error_name)
+/* Build an NSString from a Lisp string via UTF-8.  Caller is on
+   the Emacs thread (where Lisp allocation is legal).  */
+static NSString *
+ios_nsstring_from_lisp (Lisp_Object s)
 {
-  *error_name = NULL;
+  if (!STRINGP (s) || SBYTES (s) == 0)
+    return @"";
+  return [NSString stringWithUTF8String:
+                     SSDATA (ENCODE_UTF_8 (s))];
+}
 
-  /* Collect item titles + enabled bits + menu_items indices on the
-     Emacs thread; only ObjC containers cross to the UI thread.  */
-  NSMutableArray<NSString *> *titles = [NSMutableArray array];
-  NSMutableArray<NSNumber *> *indices = [NSMutableArray array];
-  NSMutableArray<NSNumber *> *enabled = [NSMutableArray array];
+/* Walk menu_items into a tree rooted at ROOT.  Mirrors the
+   structure androidmenu.c walks at lookup time: nil/Qlambda
+   bracket submenus, Qt is a pane marker, Qquote is filler, and
+   anything else is an MENU_ITEMS_ITEM_LENGTH-wide item.  An item
+   whose slot immediately past its fields is nil heads a submenu
+   -- that's the lookahead that distinguishes branches from
+   leaves at construction time.  */
+static void
+ios_build_menu_tree (IOSMenuNode *root)
+{
+  NSMutableArray<IOSMenuNode *> *stack = [NSMutableArray array];
+  [stack addObject:root];
+  IOSMenuNode *(^top)(void) = ^{ return stack.lastObject; };
+
+  /* The most recent item appended to the current top-of-stack.
+     A nil marker promotes it into a branch.  */
+  IOSMenuNode *last_item = nil;
 
   int i = 0;
   while (i < menu_items_used)
     {
       Lisp_Object head = AREF (menu_items, i);
-      if (NILP (head) || EQ (head, Qlambda) || EQ (head, Qquote))
-        i += 1;
+
+      if (NILP (head))
+        {
+          /* Start of submenu.  Promote last_item to a branch and
+             push it as the new parent.  */
+          if (last_item == nil)
+            {
+              /* Unbalanced -- a submenu open with no preceding
+                 item to attach to.  Synthesize an anonymous
+                 branch so the structure stays valid.  */
+              IOSMenuNode *anon = [IOSMenuNode new];
+              anon.title = @"";
+              anon.item_index = -1;
+              anon.children = [NSMutableArray array];
+              [top ().children addObject:anon];
+              last_item = anon;
+            }
+          last_item.children = [NSMutableArray array];
+          last_item.item_index = -1;
+          [stack addObject:last_item];
+          last_item = nil;
+          i += 1;
+        }
+      else if (EQ (head, Qlambda))
+        {
+          /* End of submenu.  Pop.  */
+          if (stack.count > 1)
+            [stack removeLastObject];
+          last_item = nil;
+          i += 1;
+        }
+      else if (EQ (head, Qquote))
+        {
+          i += 1;
+        }
       else if (EQ (head, Qt))
         {
-          /* Pane: show its name as a disabled separator row.  */
-          Lisp_Object pane = AREF (menu_items, i + MENU_ITEMS_PANE_NAME);
-          if (STRINGP (pane) && SBYTES (pane) > 0)
+          /* Pane marker.  Inside a submenu it's redundant; at
+             top level with multiple panes, surface the pane name
+             as a disabled separator row -- iOS action sheets
+             have no section concept, so a disabled row is the
+             closest visual match.  */
+          if (stack.count == 1 && menu_items_n_panes >= 2)
             {
-              [titles addObject:
-                 [NSString stringWithUTF8String:SSDATA (ENCODE_UTF_8 (pane))]];
-              [indices addObject:@(-1)];
-              [enabled addObject:@NO];
+              Lisp_Object pane = AREF (menu_items, i + MENU_ITEMS_PANE_NAME);
+              if (STRINGP (pane) && SBYTES (pane) > 0)
+                {
+                  IOSMenuNode *header = [IOSMenuNode new];
+                  header.title = ios_nsstring_from_lisp (pane);
+                  header.item_index = -1;
+                  header.enabled = NO;
+                  header.separator = YES;
+                  [top ().children addObject:header];
+                }
             }
           i += MENU_ITEMS_PANE_LENGTH;
         }
       else
         {
           Lisp_Object name = AREF (menu_items, i + MENU_ITEMS_ITEM_NAME);
-          Lisp_Object en = AREF (menu_items, i + MENU_ITEMS_ITEM_ENABLE);
-          if (STRINGP (name))
+          Lisp_Object en   = AREF (menu_items, i + MENU_ITEMS_ITEM_ENABLE);
+          Lisp_Object def  = AREF (menu_items, i + MENU_ITEMS_ITEM_DEFINITION);
+
+          IOSMenuNode *node = [IOSMenuNode new];
+          node.title = ios_nsstring_from_lisp (name);
+          node.item_index = i;
+          node.enabled = !NILP (en);
+
+          /* Emacs encodes separators as items whose definition is
+             nil and whose name matches the separator pattern
+             ("--", "---", etc.).  */
+          if (NILP (def) && STRINGP (name)
+              && menu_separator_name_p (SSDATA (name)))
             {
-              [titles addObject:
-                 [NSString stringWithUTF8String:SSDATA (ENCODE_UTF_8 (name))]];
-              [indices addObject:@(i)];
-              [enabled addObject:(NILP (en) ? @NO : @YES)];
+              node.separator = YES;
+              node.enabled = NO;
+              node.item_index = -1;
             }
+
+          [top ().children addObject:node];
+          last_item = node;
           i += MENU_ITEMS_ITEM_LENGTH;
         }
     }
+}
 
-  if (titles.count == 0)
+/* Strong reference to the on-screen sheet so the pump can dismiss
+   it programmatically on C-g.  Main-thread access only.  */
+static UIAlertController *ios_menu_top_sheet;
+
+/* Walk up the connected-scene tree to find a presenter.  Returns
+   nil if no window is on screen yet.  */
+static UIViewController *
+ios_root_presenter (void)
+{
+  UIWindow *window = nil;
+  for (UIScene *scene in
+         UIApplication.sharedApplication.connectedScenes)
+    {
+      if (![scene isKindOfClass:[UIWindowScene class]])
+        continue;
+      UIWindowScene *ws = (UIWindowScene *) scene;
+      window = ws.keyWindow;
+      if (window == nil && ws.windows.count > 0)
+        window = ws.windows.firstObject;
+      if (window != nil)
+        break;
+    }
+  UIViewController *root = window.rootViewController;
+  while (root.presentedViewController != nil)
+    root = root.presentedViewController;
+  return root;
+}
+
+/* Present a sheet for NODE's children from CTX.  SERIAL is the
+   show-invocation tag the action handlers stamp into the
+   selection channel.  On submenu navigation, the current sheet
+   dismisses first, then presents the child sheet from the
+   restored presenter (the dismiss completion block keeps the
+   ordering correct; presenting on top of a dismissing controller
+   is unreliable on iOS).  */
+static void ios_present_node (IOSMenuNode *node, int serial,
+                              int x, int y);
+
+static void
+ios_present_node (IOSMenuNode *node, int serial, int x, int y)
+{
+  UIAlertController *sheet =
+    [UIAlertController alertControllerWithTitle:
+                         (node.title.length ? node.title : nil)
+                                        message:nil
+                                 preferredStyle:
+                                   UIAlertControllerStyleActionSheet];
+
+  for (IOSMenuNode *child in node.children)
+    {
+      NSString *title = child.title.length ? child.title : @" ";
+      if (child.children.count > 0)
+        /* Disclosure marker so the user sees the chain.  */
+        title = [title stringByAppendingString:@" ▸"];
+
+      UIAlertAction *act;
+      if (child.children.count > 0)
+        {
+          IOSMenuNode *captured = child;
+          act = [UIAlertAction actionWithTitle:title
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction *a) {
+            /* Dismiss this sheet first, then chain into the
+               submenu from the freshly-uncovered presenter.  */
+            UIViewController *presenter = sheet.presentingViewController;
+            ios_menu_top_sheet = nil;
+            [presenter dismissViewControllerAnimated:NO
+                                          completion:^{
+              ios_present_node (captured, serial, x, y);
+            }];
+          }];
+          act.enabled = child.enabled;
+        }
+      else if (child.separator || child.item_index < 0)
+        {
+          act = [UIAlertAction actionWithTitle:title
+                                         style:UIAlertActionStyleDefault
+                                       handler:nil];
+          act.enabled = NO;
+        }
+      else
+        {
+          int item = child.item_index;
+          act = [UIAlertAction actionWithTitle:title
+                                         style:UIAlertActionStyleDefault
+                                       handler:^(UIAlertAction *a) {
+            ios_menu_top_sheet = nil;
+            ios_publish_menu_selection (serial, item);
+          }];
+          act.enabled = child.enabled;
+        }
+      [sheet addAction:act];
+    }
+
+  [sheet addAction:
+     [UIAlertAction actionWithTitle:@"Cancel"
+                              style:UIAlertActionStyleCancel
+                            handler:^(UIAlertAction *a) {
+       ios_menu_top_sheet = nil;
+       ios_publish_menu_selection (serial, -1);
+     }]];
+
+  UIViewController *root = ios_root_presenter ();
+  if (root == nil)
+    {
+      ios_publish_menu_selection (serial, -1);
+      return;
+    }
+  /* iPad: action sheets present as popovers; anchor at (x, y) so
+     they appear near the touch point.  */
+  UIPopoverPresentationController *pop
+    = sheet.popoverPresentationController;
+  if (pop != nil)
+    {
+      pop.sourceView = root.view;
+      pop.sourceRect = CGRectMake (x, y, 1, 1);
+      pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
+    }
+  ios_menu_top_sheet = sheet;
+  [root presentViewController:sheet animated:YES completion:nil];
+}
+
+Lisp_Object
+ios_menu_show (struct frame *f, int x, int y, int menuflags,
+               Lisp_Object title, const char **error_name)
+{
+  *error_name = NULL;
+
+  IOSMenuNode *root = [IOSMenuNode new];
+  root.title = STRINGP (title) ? ios_nsstring_from_lisp (title) : @"";
+  root.item_index = -1;
+  root.children = [NSMutableArray array];
+  ios_build_menu_tree (root);
+
+  if (root.children.count == 0)
     {
       *error_name = "Empty menu";
       return Qnil;
     }
 
-  NSString *sheet_title = nil;
-  if (STRINGP (title))
-    sheet_title =
-      [NSString stringWithUTF8String:SSDATA (ENCODE_UTF_8 (title))];
-
-  int serial = ++ios_menu_serial_counter;
-
+  int serial = ios_menu_next_serial ();
   dispatch_async (dispatch_get_main_queue (), ^{
-    UIAlertController *sheet =
-      [UIAlertController alertControllerWithTitle:sheet_title
-                                          message:nil
-                                   preferredStyle:
-                                     UIAlertControllerStyleActionSheet];
-    for (NSUInteger k = 0; k < titles.count; k++)
-      {
-        int item_index = indices[k].intValue;
-        UIAlertAction *act =
-          [UIAlertAction actionWithTitle:titles[k]
-                                   style:UIAlertActionStyleDefault
-                                 handler:^(UIAlertAction *a) {
-            ios_menu_sheet = nil;
-            ios_publish_menu_selection (serial, item_index);
-          }];
-        act.enabled = enabled[k].boolValue && item_index >= 0;
-        [sheet addAction:act];
-      }
-    [sheet addAction:
-       [UIAlertAction actionWithTitle:@"Cancel"
-                                style:UIAlertActionStyleCancel
-                              handler:^(UIAlertAction *a) {
-         ios_menu_sheet = nil;
-         ios_publish_menu_selection (serial, -1);
-       }]];
-
-    UIWindow *window = nil;
-    for (UIScene *scene in
-           UIApplication.sharedApplication.connectedScenes)
-      {
-        if (![scene isKindOfClass:[UIWindowScene class]])
-          continue;
-        UIWindowScene *ws = (UIWindowScene *) scene;
-        window = ws.keyWindow;
-        if (window == nil && ws.windows.count > 0)
-          window = ws.windows.firstObject;
-        if (window != nil)
-          break;
-      }
-    UIViewController *root = window.rootViewController;
-    while (root.presentedViewController != nil)
-      root = root.presentedViewController;
-    if (root == nil)
-      {
-        ios_publish_menu_selection (serial, -1);
-        return;
-      }
-    /* iPad: action sheets present as popovers and need an anchor;
-       anchor at the requested (x, y) in the root view.  */
-    UIPopoverPresentationController *pop
-      = sheet.popoverPresentationController;
-    if (pop != nil)
-      {
-        pop.sourceView = root.view;
-        pop.sourceRect = CGRectMake (x, y, 1, 1);
-      }
-    ios_menu_sheet = sheet;
-    [root presentViewController:sheet animated:YES completion:nil];
+    ios_present_node (root, serial, x, y);
   });
 
   /* Nested input pump, the same shape as every other port's modal
      menu loop: keep draining input so type-ahead lands in the kbd
-     buffer and a typed C-g sets Vquit_flag (the drain path detects
-     the quit character in kbd_buffer_store_event).  Exits on
-     selection, cancellation, or quit -- all events, so there is no
+     buffer and a typed C-g sets Vquit_flag.  Exits on selection,
+     cancellation, or quit -- all events -- so there is no
      wall-clock timeout to guess at.  */
   int sel = -1;
   for (;;)
@@ -184,11 +329,9 @@ ios_menu_show (struct frame *f, int x, int y, int menuflags,
         break;
       if (!NILP (Vquit_flag))
         {
-          /* User quit from the keyboard: tear the sheet down and
-             let the pending quit propagate.  */
           dispatch_async (dispatch_get_main_queue (), ^{
-            UIAlertController *sheet = ios_menu_sheet;
-            ios_menu_sheet = nil;
+            UIAlertController *sheet = ios_menu_top_sheet;
+            ios_menu_top_sheet = nil;
             [sheet.presentingViewController
               dismissViewControllerAnimated:YES completion:nil];
           });

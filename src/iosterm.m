@@ -1083,6 +1083,17 @@ ios_pump_input (int timeout_ms)
 static pthread_mutex_t ios_menu_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_menu_done_serial = 0;   /* 0 = nothing published */
 static int ios_menu_done_index = -1;
+static int ios_menu_serial_counter = 0;
+
+int
+ios_menu_next_serial (void)
+{
+  int s;
+  pthread_mutex_lock (&ios_menu_lock);
+  s = ++ios_menu_serial_counter;
+  pthread_mutex_unlock (&ios_menu_lock);
+  return s;
+}
 
 void
 ios_publish_menu_selection (int serial, int index)

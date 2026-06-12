@@ -285,6 +285,7 @@ extern Lisp_Object ios_menu_show (struct frame *f, int x, int y,
    loop stays responsive to C-g; the channel carries the action
    sheet's chosen menu_items index back to the pump.  */
 extern void ios_pump_input (int timeout_ms);
+extern int  ios_menu_next_serial (void);
 extern void ios_publish_menu_selection (int serial, int index);
 extern bool ios_take_menu_selection (int serial, int *index);
 
