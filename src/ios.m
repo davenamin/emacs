@@ -1049,11 +1049,32 @@ ios_show_tooltip (const char *utf8, int x, int y, double font_size)
        near it, biased away from the screen edge.  */
     CGFloat px = MAX (8, MIN (host.bounds.size.width - fit.width - 8,
                               (CGFloat) x));
-    CGFloat py = MIN (host.bounds.size.height - fit.height - 8,
-                      host.bounds.size.height - fit.height - 8 - y);
+    /* Anchor at the bottom of the canvas, offset upward by y --
+       mirrors the help-echo convention of showing the tip beneath
+       the cursor without occluding it.  */
+    CGFloat py = host.bounds.size.height - fit.height - 8 - y;
     if (py < 8) py = 8;
     label.frame = CGRectMake (px, py, fit.width, fit.height);
     [host addSubview:label];
+
+    /* Auto-hide after 6 seconds.  Mirrors the standard tooltip
+       behaviour on every other port; users who want a longer or
+       shorter dwell can rebind tooltip-delay / tooltip-hide-delay.
+       Cancel a previously-pending hide by tagging the label with
+       a generation counter -- the same label being shown rapidly
+       (e.g. mouse-over a long line) shouldn't compound timers.  */
+    static int gen = 0;
+    int my_gen = ++gen;
+    dispatch_after (dispatch_time (DISPATCH_TIME_NOW,
+                                   6 * NSEC_PER_SEC),
+                    dispatch_get_main_queue (), ^{
+      if (gen == my_gen)
+        {
+          UILabel *l = ios_tooltip_label;
+          if (l != nil && l.superview != nil)
+            [l removeFromSuperview];
+        }
+    });
   });
 }
 
