@@ -319,7 +319,9 @@ DEFUN ("x-display-mm-width", Fx_display_mm_width,
 {
   struct ios_display_info *d = check_x_display_info (terminal);
   if (d->resx <= 0) return make_fixnum (0);
-  return make_fixnum ((int) (d->pixel_width / d->resx * 25.4));
+  /* resx is in logical ppi; pair it with the logical width so the
+     physical size stays correct.  */
+  return make_fixnum ((int) (d->logical_width / d->resx * 25.4));
 }
 
 DEFUN ("x-display-mm-height", Fx_display_mm_height,
@@ -329,7 +331,7 @@ DEFUN ("x-display-mm-height", Fx_display_mm_height,
 {
   struct ios_display_info *d = check_x_display_info (terminal);
   if (d->resy <= 0) return make_fixnum (0);
-  return make_fixnum ((int) (d->pixel_height / d->resy * 25.4));
+  return make_fixnum ((int) (d->logical_height / d->resy * 25.4));
 }
 
 DEFUN ("x-display-planes", Fx_display_planes, Sx_display_planes,

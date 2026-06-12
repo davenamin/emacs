@@ -633,10 +633,19 @@ ios_term_init (void)
         dpyinfo->scale_factor = (double) s;
         dpyinfo->pixel_width = (int) (b.size.width * s);
         dpyinfo->pixel_height = (int) (b.size.height * s);
-        /* iPhones run roughly 163 PPI base * scale.  This is the
-           same heuristic the Android port uses for its DPI.  */
-        dpyinfo->resx = 163.0 * (double) s;
-        dpyinfo->resy = 163.0 * (double) s;
+        /* Resolution must describe the coordinate space the port
+           actually draws in, which for us is LOGICAL POINTS (the
+           canvas bounds, frame pixel_width/height, and font
+           pixel_size are all point-valued; Core Graphics applies
+           the Retina scale underneath).  iPhone logical space is
+           ~163 ppi regardless of scale.  Multiplying by scale here
+           (physical ppi) made the face engine's point<->pixel
+           conversions disagree with the geometry by 2-3x: a
+           14px-at-489dpi font is 2.1pt, and any code that
+           round-trips a face height through points came back with
+           a collapsed, near-zero pixel size.  */
+        dpyinfo->resx = 163.0;
+        dpyinfo->resy = 163.0;
       }
     else
       {
