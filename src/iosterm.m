@@ -473,6 +473,11 @@ static int  ios_motion_x = 0;
 static int  ios_motion_y = 0;
 static bool ios_motion_dirty = false;
 
+/* User toggled system appearance.  Set from
+   traitCollectionDidChange on the UI thread; consumed inside
+   ios_read_socket which runs ios-appearance-changed-hook.  */
+static bool ios_appearance_dirty = false;
+
 static void
 ios_ring_bell (struct frame *f)
 {
@@ -682,6 +687,32 @@ ios_publish_mouse_motion (double x, double y)
     }
 }
 
+/* Publish appearance change.  Cheap on the UI thread; the
+   Emacs thread picks it up on its next read_socket tick.  */
+void
+ios_publish_appearance_change (void)
+{
+  ios_appearance_dirty = true;
+  if (ios_wake_pipe[1] >= 0)
+    {
+      char b = 1;
+      ssize_t r = write (ios_wake_pipe[1], &b, 1);
+      (void) r;
+    }
+}
+
+/* Run ios-appearance-changed-hook if the UI side flipped the
+   dirty bit.  Wrapped in safe_run_hooks so a malformed user
+   binding can't crash the read-socket path.  */
+static void
+ios_apply_pending_appearance (void)
+{
+  if (!ios_appearance_dirty)
+    return;
+  ios_appearance_dirty = false;
+  safe_run_hooks (intern_c_string ("ios-appearance-changed-hook"));
+}
+
 /* Consume the dirty bit and call note_mouse_highlight on the
    selected frame so the region highlight follows the finger
    during drag-select.  No-op if no motion has been published
@@ -808,6 +839,9 @@ ios_read_socket (struct terminal *terminal, struct input_event *hold_quit)
   /* And any pending finger-motion so the highlight stays under
      the user's finger while a drag-select is in progress.  */
   ios_apply_pending_motion ();
+  /* And run ios-appearance-changed-hook if dark / light just
+     flipped under us.  */
+  ios_apply_pending_appearance ();
   int n = 0;
   /* Drain the rich event queue first -- mouse clicks should
      get to Emacs before whatever keystrokes piled up next.  */

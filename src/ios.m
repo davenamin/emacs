@@ -241,6 +241,7 @@ extern void ios_enqueue_key (int codepoint);
 extern void ios_enqueue_event (struct input_event *ie);
 extern void ios_publish_canvas_size (double width, double height);
 extern void ios_publish_mouse_motion (double x, double y);
+extern void ios_publish_appearance_change (void);
 
 @interface EmacsUIView : UIView <UIKeyInput>
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
@@ -462,6 +463,21 @@ extern void ios_publish_mouse_motion (double x, double y);
   CGSize sz = self.bounds.size;
   if (sz.width > 0 && sz.height > 0)
     ios_publish_canvas_size (sz.width, sz.height);
+}
+
+/* User toggled dark / light in Settings while Emacs is running.
+   Push the new appearance into Lisp by running
+   ios-appearance-changed-hook (defined in ios-win.el) -- the
+   binding edits frame-background-mode and re-realizes faces so
+   the buffer colors flip live.  */
+- (void) traitCollectionDidChange:(UITraitCollection *)previous
+{
+  [super traitCollectionDidChange:previous];
+  if (previous != nil
+      && previous.userInterfaceStyle
+         == self.traitCollection.userInterfaceStyle)
+    return;
+  ios_publish_appearance_change ();
 }
 
 /* Single-finger drag: emit mouse-1 down at gesture begin and

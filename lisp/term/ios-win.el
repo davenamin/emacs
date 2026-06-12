@@ -51,6 +51,21 @@
 
 (declare-function ios-system-appearance "iosfns.m" ())
 
+(defvar ios-appearance-changed-hook
+  '(ios--reapply-appearance)
+  "Hook run when the iOS system appearance toggles dark / light.
+The iOS terminal calls this from `ios_read_socket' shortly after
+UIKit's `traitCollectionDidChange:'.  Default binding refreshes
+`frame-background-mode' and re-realizes faces on every live frame.")
+
+(defun ios--reapply-appearance ()
+  "Sync `frame-background-mode' to the current iOS appearance."
+  (when (fboundp 'ios-system-appearance)
+    (let ((mode (ios-system-appearance)))
+      (when (memq mode '(dark light))
+        (setq frame-background-mode mode)
+        (mapc #'frame-set-background-mode (frame-list))))))
+
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
