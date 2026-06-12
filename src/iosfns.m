@@ -425,6 +425,29 @@ On iOS there is exactly one display, returned as a single-element list.  */)
 
 static IOSPickerDelegate *ios_picker_delegate;
 
+DEFUN ("ios-system-appearance", Fios_system_appearance,
+       Sios_system_appearance, 0, 0, 0,
+       doc: /* Return the system-wide appearance, `dark' or `light'.
+Reads UIScreen.mainScreen.traitCollection.userInterfaceStyle on
+the main thread.  Lisp init code in ios-win.el calls this to
+seed frame-background-mode so the user's default theme matches
+the OS-wide setting at launch.  */)
+  (void)
+{
+  __block UIUserInterfaceStyle style = UIUserInterfaceStyleUnspecified;
+  if ([NSThread isMainThread])
+    style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+  else
+    dispatch_sync (dispatch_get_main_queue (), ^{
+      style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+    });
+  return style == UIUserInterfaceStyleDark
+         ? intern_c_string ("dark")
+         : intern_c_string ("light");
+}
+
+extern void ios_set_keyboard_visible (bool visible);
+
 DEFUN ("ios-show-keyboard", Fios_show_keyboard, Sios_show_keyboard,
        0, 0, 0,
        doc: /* Bring up the software keyboard.  */)
