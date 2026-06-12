@@ -1238,6 +1238,25 @@ ios_auto_input_thread (void *unused)
   const char *msg = "hello from Emacs on iOS!";
   for (const char *p = msg; *p; p++)
     ios_enqueue_key ((int) (unsigned char) *p);
+
+  /* File round-trip: visit a file under HOME (the sandboxed
+     Documents directory), insert text, save.  The modeline /
+     echo area showing "Wrote .../ci-roundtrip.txt" in the
+     screenshot, plus the file appearing in the data-container
+     listing the workflow captures afterwards, verify the full
+     find-file -> save-buffer -> POSIX write path end to end.  */
+  sleep (2);
+  ios_launch_log (@"auto-input(thread): C-x C-f ci-roundtrip.txt");
+  const char *findf = "\x18\x06" "ci-roundtrip.txt\r";
+  for (const char *p = findf; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
+  sleep (2);
+  const char *body = "saved on iOS";
+  for (const char *p = body; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
+  ios_launch_log (@"auto-input(thread): C-x C-s (save)");
+  ios_enqueue_key (0x18);   /* C-x */
+  ios_enqueue_key (0x13);   /* C-s */
   return NULL;
 }
 

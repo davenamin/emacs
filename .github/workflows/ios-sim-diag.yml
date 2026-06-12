@@ -202,7 +202,7 @@ jobs:
           if [ -n "$DATA_CONTAINER" ] && [ -d "$DATA_CONTAINER" ]; then
             log "--- Documents/ listing ---"
             ls -la "$DATA_CONTAINER/Documents/" >> "$OUT" 2>&1
-            for f in emacs-launch.log emacs-stdout.log; do
+            for f in ci-roundtrip.txt emacs-launch.log emacs-stdout.log; do
               log ""
               log "--- $f ---"
               if [ -f "$DATA_CONTAINER/Documents/$f" ]; then
