@@ -1004,6 +1004,78 @@ ios_is_backgrounded (void)
   return atomic_load (&ios_backgrounded);
 }
 
+/* Tooltip overlay.  Main-thread-only access; the Lisp primitives
+   in iosfns.m hop here via dispatch_async so the Emacs thread
+   never touches UIKit directly.  We reuse the canvas's own
+   superview as the host instead of allocating a new UIWindow
+   (which the deployment target supports but which adds chrome
+   that's hard to suppress on iPad).  */
+static __weak UILabel *ios_tooltip_label = nil;
+
+void
+ios_show_tooltip (const char *utf8, int x, int y, double font_size)
+{
+  if (utf8 == NULL || ios_is_backgrounded ())
+    return;
+  NSString *text = [NSString stringWithUTF8String:utf8];
+  if (text == nil)
+    return;
+  dispatch_async (dispatch_get_main_queue (), ^{
+    EmacsUIView *canvas = ios_canvas;
+    UIView *host = canvas.superview;
+    if (host == nil)
+      return;
+    UILabel *label = ios_tooltip_label;
+    if (label == nil)
+      {
+        label = [[UILabel alloc] initWithFrame:CGRectZero];
+        label.numberOfLines = 0;
+        label.layer.cornerRadius = 6;
+        label.layer.masksToBounds = YES;
+        label.backgroundColor =
+          [UIColor colorWithWhite:0.0 alpha:0.85];
+        label.textColor = UIColor.whiteColor;
+        label.textAlignment = NSTextAlignmentLeft;
+        label.userInteractionEnabled = NO;
+        ios_tooltip_label = label;
+      }
+    label.text = [NSString stringWithFormat:@"  %@  ", text];
+    label.font = [UIFont systemFontOfSize:font_size];
+    CGSize fit = [label sizeThatFits:
+                   CGSizeMake (host.bounds.size.width - 32, 1e6)];
+    /* Position near the lower-left of the canvas; help-echo
+       readers expect the tip not to overlap point.  A future
+       improvement: track the latest mouse position and anchor
+       near it, biased away from the screen edge.  */
+    CGFloat px = MAX (8, MIN (host.bounds.size.width - fit.width - 8,
+                              (CGFloat) x));
+    CGFloat py = MIN (host.bounds.size.height - fit.height - 8,
+                      host.bounds.size.height - fit.height - 8 - y);
+    if (py < 8) py = 8;
+    label.frame = CGRectMake (px, py, fit.width, fit.height);
+    [host addSubview:label];
+  });
+}
+
+bool
+ios_hide_tooltip (void)
+{
+  __block bool was_open = false;
+  void (^hide) (void) = ^{
+    UILabel *label = ios_tooltip_label;
+    if (label != nil && label.superview != nil)
+      {
+        was_open = true;
+        [label removeFromSuperview];
+      }
+  };
+  if ([NSThread isMainThread])
+    hide ();
+  else
+    dispatch_sync (dispatch_get_main_queue (), hide);
+  return was_open;
+}
+
 /* Show or hide the software keyboard from Lisp (via the
    ios-show-keyboard / ios-hide-keyboard primitives in iosfns.m).
    Called on the Emacs thread; hops to the main queue because

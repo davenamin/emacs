@@ -461,6 +461,39 @@ get_keysym_name (int keysym)
    (output_initial); a real output_ios frame will be created when
    Fx_create_frame is implemented.  */
 
+/* terminal->set_new_font_hook.  Called by gui_set_font and
+   x-create-frame to install FONT_OBJECT as the frame's primary
+   font and resize the laid-out cell grid to match.  Mirrors the
+   shape of android_new_font; the bare minimum that adjust_frame_size
+   needs to know is FRAME_FONT, FRAME_BASELINE_OFFSET,
+   FRAME_COLUMN_WIDTH, FRAME_LINE_HEIGHT.  */
+static Lisp_Object
+ios_new_font (struct frame *f, Lisp_Object font_object, int fontset)
+{
+  struct font *font = XFONT_OBJECT (font_object);
+  int font_ascent, font_descent;
+
+  if (fontset < 0)
+    fontset = fontset_from_font (font_object);
+  FRAME_FONTSET (f) = fontset;
+  if (FRAME_FONT (f) == font)
+    return font_object;
+
+  FRAME_FONT (f) = font;
+  FRAME_BASELINE_OFFSET (f) = font->baseline_offset;
+  FRAME_COLUMN_WIDTH (f) = font->average_width;
+  get_font_ascent_descent (font, &font_ascent, &font_descent);
+  FRAME_LINE_HEIGHT (f) = font_ascent + font_descent;
+  FRAME_TAB_BAR_HEIGHT (f)
+    = FRAME_TAB_BAR_LINES (f) * FRAME_LINE_HEIGHT (f);
+
+  if (FRAME_LIVE_P (f) && !FRAME_TOOLTIP_P (f))
+    adjust_frame_size (f, FRAME_COLS (f) * FRAME_COLUMN_WIDTH (f),
+                       FRAME_LINES (f) * FRAME_LINE_HEIGHT (f), 3,
+                       false, Qfont);
+  return font_object;
+}
+
 /* terminal->ring_bell_hook.  iOS has no audible bell; the
    user-facing convention is a single haptic tap (matches
    what other apps do when they want a discreet "no" beep).
@@ -554,6 +587,7 @@ ios_term_init (void)
   terminal->mouse_position_hook = ios_mouse_position;
   terminal->ring_bell_hook = ios_ring_bell;
   terminal->menu_show_hook = ios_menu_show;
+  terminal->set_new_font_hook = ios_new_font;
 
   /* Create the input wake pipe and register the read end with
      Emacs so wait_reading_process_input wakes on writes.  */

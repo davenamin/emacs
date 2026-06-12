@@ -56,15 +56,35 @@ check_x_display_info (Lisp_Object object)
   return x_display_list;
 }
 
+extern void ios_show_tooltip (const char *utf8, int x, int y,
+                              double font_size);
+extern bool ios_hide_tooltip (void);
+
+DEFUN ("x-show-tip", Fx_show_tip, Sx_show_tip, 1, 6, 0,
+       doc: /* Show STRING in a tooltip overlay near the cursor.
+The full xfns.c signature is honored for source compatibility but
+the iOS overlay only consults STRING, the foreground/background
+faces (via current frame default), and an internal positioning
+heuristic.  */)
+  (Lisp_Object string, Lisp_Object frame, Lisp_Object parms,
+   Lisp_Object timeout, Lisp_Object dx, Lisp_Object dy)
+{
+  (void) frame; (void) parms; (void) timeout;
+  CHECK_STRING (string);
+  Lisp_Object encoded
+    = code_convert_string_norecord (string, Qutf_8, true);
+  int x_off = FIXNUMP (dx) ? XFIXNUM (dx) : 8;
+  int y_off = FIXNUMP (dy) ? XFIXNUM (dy) : 8;
+  ios_show_tooltip (SSDATA (encoded), x_off, y_off, 13.0);
+  return Qnil;
+}
+
 DEFUN ("x-hide-tip", Fx_hide_tip, Sx_hide_tip, 0, 0, 0,
        doc: /* Hide the current tooltip window, if there is any.
-Value is t if tooltip was open, nil otherwise.
-
-iOS stub: returns nil unconditionally.  A real tooltip implementation
-backed by a UILabel-on-UIWindow overlay is a follow-up.  */)
+Value is t if tooltip was open, nil otherwise.  */)
   (void)
 {
-  return Qnil;
+  return ios_hide_tooltip () ? Qt : Qnil;
 }
 
 DEFUN ("xw-display-color-p", Fxw_display_color_p, Sxw_display_color_p,
@@ -515,6 +535,7 @@ syms_of_iosfns (void)
   DEFSYM (Qstatic_gray, "static-gray");
   DEFSYM (Qwhen_mapped, "when-mapped");
 
+  defsubr (&Sx_show_tip);
   defsubr (&Sx_hide_tip);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
