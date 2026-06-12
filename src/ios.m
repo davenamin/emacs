@@ -1274,57 +1274,68 @@ ios_emacs_bg_thread (void *unused)
   UIViewController *vc = [[UIViewController alloc] init];
   vc.view.backgroundColor = UIColor.blackColor;
 
-  /* Title strip across the top, so the launch image is unambiguously
-     "Emacs is starting" rather than "the simulator is broken".  */
-  UILabel *title = [[UILabel alloc] init];
-  title.text = @"GNU Emacs (iOS bring-up)";
-  title.textColor = UIColor.whiteColor;
-  title.font = [UIFont boldSystemFontOfSize:20];
-  title.textAlignment = NSTextAlignmentCenter;
-  title.translatesAutoresizingMaskIntoConstraints = NO;
-  [vc.view addSubview:title];
-
-  /* Split layout: log at the top third, EmacsUIView at the bottom
-     two thirds.  The log keeps the bring-up visibly progressing
-     while the canvas surfaces whatever the iOS redisplay engine
-     pushes through draw_glyph_string.  */
-  UITextView *logView = [[UITextView alloc] init];
-  logView.backgroundColor = UIColor.blackColor;
-  logView.textColor = UIColor.greenColor;
-  logView.font = [UIFont fontWithName:@"Menlo" size:10];
-  logView.editable = NO;
-  logView.text = @"";
-  logView.translatesAutoresizingMaskIntoConstraints = NO;
-  [vc.view addSubview:logView];
+  /* Debug build (EMACS_IOS_DEBUG_LOG set) puts the bring-up title
+     and log strip across the top; production builds give the
+     canvas the entire safe area.  CI sets the env var via
+     SIMCTL_CHILD_* so screenshots still capture the launch
+     trail.  */
+  BOOL debug_ui = (getenv ("EMACS_IOS_DEBUG_LOG") != NULL);
 
   EmacsUIView *canvas = [[EmacsUIView alloc] initWithFrame:CGRectZero];
   canvas.translatesAutoresizingMaskIntoConstraints = NO;
   [vc.view addSubview:canvas];
 
   UILayoutGuide *safe = vc.view.safeAreaLayoutGuide;
-  [NSLayoutConstraint activateConstraints:@[
-      [title.topAnchor      constraintEqualToAnchor:safe.topAnchor
-                                           constant:8],
-      [title.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor
-                                           constant:8],
-      [title.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor
-                                           constant:-8],
-      [logView.topAnchor      constraintEqualToAnchor:title.bottomAnchor
-                                              constant:8],
-      [logView.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor],
-      [logView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
-      /* Log strip stays ~one notebook-tab tall.  Was 30% of the
-         safe area, which left the canvas with barely more than
-         half the screen on iPhone; users want most of the screen
-         for actual Emacs.  Diagnostics fit comfortably in 120pt
-         and a long tail scrolls inside the UITextView.  */
-      [logView.heightAnchor   constraintEqualToConstant:120],
-      [canvas.topAnchor       constraintEqualToAnchor:logView.bottomAnchor
-                                              constant:8],
-      [canvas.leadingAnchor   constraintEqualToAnchor:safe.leadingAnchor],
-      [canvas.trailingAnchor  constraintEqualToAnchor:safe.trailingAnchor],
-      [canvas.bottomAnchor    constraintEqualToAnchor:safe.bottomAnchor],
-  ]];
+  NSMutableArray<NSLayoutConstraint *> *cs = [NSMutableArray array];
+  [cs addObject:[canvas.leadingAnchor
+                  constraintEqualToAnchor:safe.leadingAnchor]];
+  [cs addObject:[canvas.trailingAnchor
+                  constraintEqualToAnchor:safe.trailingAnchor]];
+  [cs addObject:[canvas.bottomAnchor
+                  constraintEqualToAnchor:safe.bottomAnchor]];
+
+  UITextView *logView = nil;
+  if (debug_ui)
+    {
+      UILabel *title = [[UILabel alloc] init];
+      title.text = @"GNU Emacs (iOS bring-up)";
+      title.textColor = UIColor.whiteColor;
+      title.font = [UIFont boldSystemFontOfSize:20];
+      title.textAlignment = NSTextAlignmentCenter;
+      title.translatesAutoresizingMaskIntoConstraints = NO;
+      [vc.view addSubview:title];
+
+      logView = [[UITextView alloc] init];
+      logView.backgroundColor = UIColor.blackColor;
+      logView.textColor = UIColor.greenColor;
+      logView.font = [UIFont fontWithName:@"Menlo" size:10];
+      logView.editable = NO;
+      logView.text = @"";
+      logView.translatesAutoresizingMaskIntoConstraints = NO;
+      [vc.view addSubview:logView];
+
+      [cs addObjectsFromArray:@[
+        [title.topAnchor      constraintEqualToAnchor:safe.topAnchor
+                                             constant:8],
+        [title.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor
+                                             constant:8],
+        [title.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor
+                                             constant:-8],
+        [logView.topAnchor      constraintEqualToAnchor:title.bottomAnchor
+                                                constant:8],
+        [logView.leadingAnchor  constraintEqualToAnchor:safe.leadingAnchor],
+        [logView.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+        [logView.heightAnchor   constraintEqualToConstant:120],
+        [canvas.topAnchor       constraintEqualToAnchor:logView.bottomAnchor
+                                                constant:8],
+      ]];
+    }
+  else
+    {
+      [cs addObject:[canvas.topAnchor
+                      constraintEqualToAnchor:safe.topAnchor]];
+    }
+  [NSLayoutConstraint activateConstraints:cs];
 
   ios_log_view = logView;
   ios_canvas   = canvas;

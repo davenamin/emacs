@@ -182,7 +182,11 @@ jobs:
           # environment; EMACS_IOS_AUTO_INPUT enables the demo
           # keystroke driver that is compiled in but inert for
           # normal user launches.
+          # The bring-up screenshot is far more useful when the
+          # launch log and title strip are visible, so flip
+          # EMACS_IOS_DEBUG_LOG alongside the auto-input driver.
           run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
+                  SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
             xcrun simctl launch booted org.gnu.emacs
           log "--- sleeping 20s for Emacs init to do something ---"
           sleep 25
