@@ -105,6 +105,17 @@ Works:
     background lifecycle quiesces drawing; the minibuffer
     auto-shows the soft keyboard (defcustom
     ios-auto-show-keyboard).
+  * Image loading via ImageIO and Core Graphics
+    (iosimage.m); PNG, JPEG, GIF, TIFF, HEIC, BMP without
+    third-party dependencies, decoded on the Emacs thread and
+    cached through the standard image-cache.
+  * Self-test battery (lisp/term/ios-tests.el, M-x
+    ios-run-self-tests): thirteen probes covering sandbox
+    identity, file round-trip, clipboard, geometry, appearance,
+    image load, face attributes, frame-background-mode, and the
+    pinch / wheel / drag-n-drop event bindings.  CI fails the
+    run on any FAIL line and writes the per-probe results back
+    in ci-diag/sim-install.txt.
 
 Known issues / deferred:
   * Images are not implemented (nsimage.m's NS_IMPL_IOS arm and
