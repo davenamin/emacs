@@ -36,9 +36,87 @@ produces the simulator Emacs.app; install and launch with
 
 See .github/workflows/ios-cross.yml and ios-sim-diag.yml for the
 exact CI invocations, including the install / launch / screenshot
-smoke test that runs on every push.  On-device installation
-additionally needs an Apple Developer account and provisioning
-profile.
+smoke test that runs on every push.
+
+Installing on a physical device
+-------------------------------
+
+The simulator install path is `xcrun simctl install booted ...`;
+that tool is simulator-only and has been since Xcode 6.  For a
+real device you cross-configure against the iphoneos SDK, sign
+manually, and install with `xcrun devicectl` (Xcode 15+):
+
+  IOS_SDK=iphoneos ./configure --with-ios \
+    --with-ios-deployment-target=15.0
+  make ios CODESIGN_IDENTITY="Apple Development: NAME (TEAMID)"
+  xcrun devicectl device install app --device <UDID> \
+    build-ios/ios/Emacs.app
+  xcrun devicectl device process launch --console --device <UDID> \
+    org.gnu.emacs
+
+`IOS_SDK=iphoneos` makes configure.ac substitute iPhoneOS into
+`CFBundleSupportedPlatforms` / `DTPlatformName`; the device
+rejects bundles with simulator-platform Info.plist values.
+
+Three things on the device side, all required and easy to miss:
+
+  * Settings -> Privacy & Security -> Developer Mode toggled on
+    (introduced in iOS 16; without it, devicectl install fails
+    with "Developer Mode disabled").  Restart and passcode
+    confirm.
+  * Settings -> General -> VPN & Device Management -> tap the
+    team -> Trust.  Required once per signing certificate the
+    device has never seen, regardless of whether the cert came
+    from a free Personal Team or a paid Developer Program
+    account; the device keys off the signing identity, not the
+    profile.
+  * The device's UDID must be in the provisioning profile's
+    `ProvisionedDevices` list (development profiles), and the
+    signing certificate must be in its `DeveloperCertificates`
+    list.
+
+Code signing details that bit us during research:
+
+  * `codesign` embeds *exactly* the entitlements plist passed
+    via `--entitlements` into the signature.  It does not derive
+    `application-identifier`, `com.apple.developer.team-identifier`,
+    or `get-task-allow` from the embedded profile -- that merging
+    is Xcode's job and you reproduce it by hand for a manual
+    build.  Extract the profile's authoritative entitlements with
+    `security cms -D -i Profile.mobileprovision` and merge
+    `application-identifier` and `com.apple.developer.team-identifier`
+    into the entitlements file before signing.
+  * The provisioning profile is an *allowlist* (Apple TN3125):
+    every entitlement the binary claims must exist in the
+    profile's `Entitlements` dict.  The device's installd /
+    amfid enforce this at install / launch.
+  * `get-task-allow=true` is for *debugger attach only*, not for
+    plain install/launch.  Skip it unless you intend to lldb
+    onto the running app -- Distribution profiles cannot
+    authorize it anyway, and Xcode injects it for Debug builds
+    only via CODE_SIGN_INJECT_BASE_ENTITLEMENTS.
+  * The repo's `ios/Emacs.base/Emacs.entitlements` only declares
+    `com.apple.security.files.user-selected.read-write`; for a
+    device build, write a merged file that adds at minimum
+    `application-identifier` (= TEAMID.bundle.id) and
+    `com.apple.developer.team-identifier` (= TEAMID), and pass it
+    via the `entitlements` Makefile variable.  Copy the .mobile
+    provision into the bundle root as `embedded.mobileprovision`
+    *before* signing.
+
+If devicectl install fails, `com.apple.dt.CoreDeviceError
+Code=3002` wraps a MobileInstallationService code (0xe800801x)
+in its underlyingError -- 0xe8008015 means UDID not in profile /
+profile expired / application-identifier mismatch, 0xe8008016
+means a claimed entitlement isn't in the profile's allowlist.
+`codesign -d --entitlements :- App.app` and `security cms -D -i
+App.app/embedded.mobileprovision` are the diagnostic pair.
+
+devicectl requires Xcode 15+ and iOS 17+ devices.  Older targets
+need ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
+`--console` flag for streaming the app's stdout/stderr requires
+Xcode 16; with Xcode 15 use `log stream --device <UDID>` or
+Console.app instead.
 
 On first launch Emacs writes its pdumper image into
 
