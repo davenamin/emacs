@@ -41,84 +41,107 @@ smoke test that runs on every push.
 Installing on a physical device
 -------------------------------
 
-The simulator install path is `xcrun simctl install booted ...`;
-that tool is simulator-only and has been since Xcode 6.  For a
-real device you cross-configure against the iphoneos SDK, sign
-manually, and install with `xcrun devicectl` (Xcode 15+):
+`xcrun simctl install booted ...` is simulator-only.  For a real
+device you cross-configure against the iphoneos SDK, sign with a
+provisioning-profile-matched entitlements plist, and install with
+`xcrun devicectl` (Xcode 15+).  The Makefile has three optional
+variables that together drive this:
 
+  CODESIGN_IDENTITY    name of the signing identity in the keychain
+  PROVISIONING_PROFILE path to a .mobileprovision file
+  DEVICE_ENTITLEMENTS  path to the entitlements plist for codesign
+
+End-to-end recipe:
+
+  # 1. Cross-configure for the iphoneos SDK (not iphonesimulator).
   IOS_SDK=iphoneos ./configure --with-ios \
     --with-ios-deployment-target=15.0
-  make ios CODESIGN_IDENTITY="Apple Development: NAME (TEAMID)"
+
+  # 2. Extract the profile's Entitlements dict as your starting
+  #    entitlements file.  The Makefile target shells out to
+  #    `security cms -D -i` (QA1798) and PlistBuddy.
+  make -C ios device-entitlements-template \
+    PROVISIONING_PROFILE=~/Library/MobileDevice/Provisioning\ Profiles/UUID.mobileprovision \
+    > device.entitlements
+
+  # 3. Build, embed the profile, sign in one shot.
+  make ios \
+    CODESIGN_IDENTITY="Apple Development: NAME (TEAMID)" \
+    PROVISIONING_PROFILE=~/Library/MobileDevice/Provisioning\ Profiles/UUID.mobileprovision \
+    DEVICE_ENTITLEMENTS=$PWD/device.entitlements
+
+  # 4. Install and launch on the device.
   xcrun devicectl device install app --device <UDID> \
     build-ios/ios/Emacs.app
   xcrun devicectl device process launch --console --device <UDID> \
     org.gnu.emacs
 
 `IOS_SDK=iphoneos` makes configure.ac substitute iPhoneOS into
-`CFBundleSupportedPlatforms` / `DTPlatformName`; the device
-rejects bundles with simulator-platform Info.plist values.
+Info.plist's `CFBundleSupportedPlatforms` / `DTPlatformName`;
+the device rejects bundles whose Info.plist still says
+iPhoneSimulator.
 
-Three things on the device side, all required and easy to miss:
+Three on-device prerequisites that are easy to miss:
 
-  * Settings -> Privacy & Security -> Developer Mode toggled on
-    (introduced in iOS 16; without it, devicectl install fails
-    with "Developer Mode disabled").  Restart and passcode
-    confirm.
-  * Settings -> General -> VPN & Device Management -> tap the
-    team -> Trust.  Required once per signing certificate the
-    device has never seen, regardless of whether the cert came
-    from a free Personal Team or a paid Developer Program
-    account; the device keys off the signing identity, not the
-    profile.
-  * The device's UDID must be in the provisioning profile's
-    `ProvisionedDevices` list (development profiles), and the
-    signing certificate must be in its `DeveloperCertificates`
-    list.
+  * Settings -> Privacy & Security -> Developer Mode must be
+    toggled on (iOS 16+; restart and passcode confirm).  Without
+    it, devicectl install fails with "Developer Mode disabled".
+  * Settings -> General -> VPN & Device Management -> Trust your
+    team.  Required once per signing certificate the device has
+    never seen, for both free Personal Team and paid Developer
+    Program certs.
+  * The device's UDID must be in the profile's
+    `ProvisionedDevices` and the signing cert must be in its
+    `DeveloperCertificates`.
 
-Code signing details that bit us during research:
+What the build system actually does, with citations:
 
-  * `codesign` embeds *exactly* the entitlements plist passed
-    via `--entitlements` into the signature.  It does not derive
-    `application-identifier`, `com.apple.developer.team-identifier`,
-    or `get-task-allow` from the embedded profile -- that merging
-    is Xcode's job and you reproduce it by hand for a manual
-    build.  Extract the profile's authoritative entitlements with
-    `security cms -D -i Profile.mobileprovision` and merge
-    `application-identifier` and `com.apple.developer.team-identifier`
-    into the entitlements file before signing.
-  * The provisioning profile is an *allowlist* (Apple TN3125):
-    every entitlement the binary claims must exist in the
-    profile's `Entitlements` dict.  The device's installd /
-    amfid enforce this at install / launch.
-  * `get-task-allow=true` is for *debugger attach only*, not for
-    plain install/launch.  Skip it unless you intend to lldb
-    onto the running app -- Distribution profiles cannot
-    authorize it anyway, and Xcode injects it for Debug builds
-    only via CODE_SIGN_INJECT_BASE_ENTITLEMENTS.
-  * For a device build, the entitlements file to pass via
-    codesign's `--entitlements` is constructed from the profile:
-    extract its `Entitlements` dict via `security cms -D -i
-    Profile.mobileprovision` and use that dict directly (it
-    already carries the `application-identifier` /
-    `team-identifier` / `keychain-access-groups` keys the device
-    needs).  Copy the .mobileprovision into the bundle root as
-    `embedded.mobileprovision` *before* invoking codesign --
-    Apple's published signing engine source
-    (apple-oss-distributions/Security: libsecurity_codesigning,
-    `bundlediskrep.cpp:defaultResourceRules`) seals every bundle
-    file under its V2 catch-all rule, so a profile added after
-    signing would invalidate the seal.
+  * Profile is copied to `$(ios_appdir)/embedded.mobileprovision`
+    BEFORE codesign runs.  Apple's published signing engine
+    (apple-oss-distributions/Security, libsecurity_codesigning,
+    bundlediskrep.cpp `defaultResourceRules`) seals every bundle
+    file under a V2 catch-all rule; modifying the profile after
+    signing invalidates the seal.
+  * codesign is invoked with `--entitlements $(DEVICE_ENTITLEMENTS)`
+    when set.  The same engine source (signer.cpp `prepare` /
+    `populate` / `cookEntitlements`) writes that plist verbatim
+    into slot 5 plus a DER copy in slot 7.  No merging with the
+    profile happens; the profile is never opened by codesign.
+  * The plist must be a subset of the profile's `Entitlements`
+    dict (Apple TN3125's allowlist rule).  The
+    device-entitlements-template target gives you the profile's
+    dict as a starting point; for a minimal app it is also the
+    final file.
 
-If devicectl install fails, `com.apple.dt.CoreDeviceError
-Code=3002` wraps a MobileInstallationService code (0xe800801x)
-in its underlyingError -- 0xe8008015 means UDID not in profile /
-profile expired / application-identifier mismatch, 0xe8008016
-means a claimed entitlement isn't in the profile's allowlist.
-`codesign -d --entitlements :- App.app` and `security cms -D -i
-App.app/embedded.mobileprovision` are the diagnostic pair.
+Support framing.  This is the same approach every off-Xcode iOS
+toolchain (Unity, Unreal, Flutter, Godot, Qt) uses, for the same
+reason -- the codesign + security + devicectl primitives are
+individually Apple-documented, but Apple does not publish an
+iOS-specific end-to-end recipe.  Apple's documented stance
+(Quinn DTS, forum thread 797751: "Investigating Third-Party IDE
+Code-Signing Problems") is that DTS does not support third-party
+toolchains for iOS signing; the supported path is to wrap the
+build in an Xcode project and use `xcodebuild archive` +
+`xcodebuild -exportArchive -exportOptionsPlist`.
 
-devicectl requires Xcode 15+ and iOS 17+ devices.  Older targets
-need ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
+Diagnostic recipe if devicectl install fails.  The error wraps
+`com.apple.dt.CoreDeviceError Code=3002` around a
+`MobileInstallationService` code in its underlyingError:
+
+  0xe8008015  UDID not in profile, profile expired, or
+              application-identifier mismatch
+  0xe8008016  entitlement claimed by binary is not in profile
+              allowlist
+  0xe800801a  profile signature invalid / untrusted
+  0xe800801c  no code signature found
+
+Inspect the signed entitlements with `codesign -d --entitlements
+:- App.app` and the profile with `security cms -D -i
+App.app/embedded.mobileprovision`; compare `application-identifier`,
+`TeamIdentifier`, `ProvisionedDevices`, and every entitlement key.
+
+devicectl needs Xcode 15+ and iOS 17+.  Older targets need
+ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
 `--console` flag for streaming the app's stdout/stderr requires
 Xcode 16; with Xcode 15 use `log stream --device <UDID>` or
 Console.app instead.

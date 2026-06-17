@@ -54,6 +54,24 @@ ios_emacs_binary = $(abs_top_builddir)/cross/src/emacs
 ## see "Installing on a physical device" in ios/README.
 CODESIGN_IDENTITY ?=
 
+## Device-build inputs.  Optional; both must be set together.  When
+## PROVISIONING_PROFILE is set, the file is copied into the bundle
+## root as embedded.mobileprovision BEFORE codesign runs -- Apple's
+## published signing engine
+## (apple-oss-distributions/Security: libsecurity_codesigning,
+## bundlediskrep.cpp defaultResourceRules) seals every bundle file
+## under its V2 catch-all rule, so the profile must be in place
+## before signing or the seal is invalid.
+##
+## When DEVICE_ENTITLEMENTS is set, codesign embeds that plist
+## verbatim into the signature's entitlement slot (slot 5 + DER
+## copy in slot 7) per the same engine source -- no merging with
+## any other source.  The plist is constructed from the profile's
+## Entitlements dict; use the device-entitlements-template target
+## to extract a starting point.
+PROVISIONING_PROFILE ?=
+DEVICE_ENTITLEMENTS  ?=
+
 .PHONY: all
 all: $(ios_appdir)/emacs
 
@@ -98,12 +116,44 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
                      $(ios_appdir)/lisp/loadup.el \
                      $(ios_appdir)/etc/charsets
 	cp -f $(ios_emacs_binary) $@
+	@if [ -n "$(PROVISIONING_PROFILE)" ]; then \
+	  cp -f "$(PROVISIONING_PROFILE)" \
+	    "$(ios_appdir)/embedded.mobileprovision"; \
+	fi
 	@if [ -n "$(CODESIGN_IDENTITY)" ]; then \
-	  codesign --force --sign $(CODESIGN_IDENTITY) $(ios_appdir); \
+	  if [ -n "$(DEVICE_ENTITLEMENTS)" ]; then \
+	    codesign --force --sign "$(CODESIGN_IDENTITY)" \
+	      --entitlements "$(DEVICE_ENTITLEMENTS)" \
+	      "$(ios_appdir)"; \
+	  else \
+	    codesign --force --sign "$(CODESIGN_IDENTITY)" \
+	      "$(ios_appdir)"; \
+	  fi; \
 	else \
 	  echo "ios/Makefile: CODESIGN_IDENTITY unset; producing"; \
 	  echo "  unsigned bundle suitable for the Simulator only."; \
 	fi
+
+## Extract the provisioning profile's Entitlements dict to stdout
+## as XML plist, ready to redirect into a file and pass back via
+## DEVICE_ENTITLEMENTS=.  The dict is the complete entitlements
+## file -- it already carries application-identifier,
+## com.apple.developer.team-identifier, keychain-access-groups, and
+## any capability entitlement provisioned for the App ID.  Apple's
+## signing engine (libsecurity_codesigning/lib/signer.cpp) does not
+## merge or augment whatever is passed via --entitlements, so this
+## extraction is the only input needed.
+##
+## Inspection commands (Apple-documented): security cms -D -i ...
+## is QA1798's documented way to decode a provisioning profile.
+.PHONY: device-entitlements-template
+device-entitlements-template:
+	@test -n "$(PROVISIONING_PROFILE)" || { \
+	  echo "Set PROVISIONING_PROFILE=path/to/Profile.mobileprovision"; \
+	  exit 2; }
+	@security cms -D -i "$(PROVISIONING_PROFILE)" \
+	  | /usr/libexec/PlistBuddy -x -c "Print :Entitlements" \
+	    /dev/stdin
 
 ## Fallback rule for $(ios_emacs_binary): make -C cross all is what
 ## produces this file from the *.ios artifacts.  If it's missing we
