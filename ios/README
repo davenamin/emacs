@@ -95,14 +95,19 @@ Code signing details that bit us during research:
     onto the running app -- Distribution profiles cannot
     authorize it anyway, and Xcode injects it for Debug builds
     only via CODE_SIGN_INJECT_BASE_ENTITLEMENTS.
-  * The repo's `ios/Emacs.base/Emacs.entitlements` only declares
-    `com.apple.security.files.user-selected.read-write`; for a
-    device build, write a merged file that adds at minimum
-    `application-identifier` (= TEAMID.bundle.id) and
-    `com.apple.developer.team-identifier` (= TEAMID), and pass it
-    via the `entitlements` Makefile variable.  Copy the .mobile
-    provision into the bundle root as `embedded.mobileprovision`
-    *before* signing.
+  * For a device build, the entitlements file to pass via
+    codesign's `--entitlements` is constructed from the profile:
+    extract its `Entitlements` dict via `security cms -D -i
+    Profile.mobileprovision` and use that dict directly (it
+    already carries the `application-identifier` /
+    `team-identifier` / `keychain-access-groups` keys the device
+    needs).  Copy the .mobileprovision into the bundle root as
+    `embedded.mobileprovision` *before* invoking codesign --
+    Apple's published signing engine source
+    (apple-oss-distributions/Security: libsecurity_codesigning,
+    `bundlediskrep.cpp:defaultResourceRules`) seals every bundle
+    file under its V2 catch-all rule, so a profile added after
+    signing would invalidate the seal.
 
 If devicectl install fails, `com.apple.dt.CoreDeviceError
 Code=3002` wraps a MobileInstallationService code (0xe800801x)
