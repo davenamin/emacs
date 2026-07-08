@@ -160,11 +160,63 @@ Packaging an .ipa for TestFlight / App Store upload
 
 writes build-ios/ios/Emacs.ipa -- a ditto-produced zip whose top
 level is Payload/Emacs.app, the container App Store Connect
-ingestion expects.  Upload with Apple's Transporter app.  For
-store submission the signing identity must be an Apple
-Distribution certificate and the profile an App Store profile
-(their Entitlements dicts carry no get-task-allow, and the
-device-entitlements-template target works on them the same way).
+ingestion expects.  For store submission the signing identity
+must be an Apple Distribution certificate and the profile an App
+Store profile (their Entitlements dicts carry no get-task-allow
+and do carry beta-reports-active, which is what enables
+TestFlight -- QA1830; the device-entitlements-template target
+works on them the same way).
+
+Apple's documented upload paths (App Store Connect Help, "Upload
+builds"): the Transporter app, xcrun altool --upload-app (still
+supported for uploads; only its notarization role was retired in
+favor of notarytool), xcodebuild -exportArchive with an upload
+destination (Xcode 15+), or the App Store Connect "Build
+uploads" REST API.
+
+App Store submission requirements this port already carries
+------------------------------------------------------------
+
+  * Privacy manifest.  PrivacyInfo.xcprivacy ships in the bundle
+    template and lands at the bundle root.  Mandatory since
+    May 1, 2024 for apps using Apple's "required reason" APIs
+    (developer.apple.com/documentation/bundleresources/
+    describing-use-of-required-reason-api); ingestion rejects
+    submissions with undeclared use.  Emacs declares three
+    categories: FileTimestamp (stat/fstat everywhere; reasons
+    C617.1 container files, 3B52.1 picker-granted files, DDA9.1
+    dired display), DiskSpace (statvfs via file-system-info;
+    85F4.1, dired's free-space header), UserDefaults (bookmark
+    persistence; CA92.1).  If you add code touching a new
+    required-reason API category, extend the manifest.
+  * Launch screen.  UILaunchStoryboardName + storyboard, required
+    for all submissions since mid-2020.
+  * App icon.  NOT shipped -- Apple requires original artwork.
+    Drop a 1024x1024 PNG at
+    ios/Emacs.base/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+    and the bundle step compiles it with actool (single-size
+    asset catalog, auto-scaled variants) and merges
+    CFBundleIconName / CFBundleIcons into Info.plist.  Store
+    validation rejects icon-less binaries (ITMS-90704 family);
+    Simulator / device development works fine without.
+  * Bundle identifier.  Pass --with-ios-bundle-id= at configure
+    time; the App Store re-signs on ingestion and the published
+    app carries no embedded provisioning profile (TN3125).
+
+Submission items that remain YOUR decision:
+
+  * Export compliance.  ITSAppUsesNonExemptEncryption is not set
+    in Info.plist, so App Store Connect will walk you through the
+    export-compliance questionnaire on each upload.  Emacs links
+    no TLS library on iOS and its hash primitives (secure-hash)
+    are the kind of exempt use Apple describes in "Complying with
+    Encryption Export Regulations", but the declaration is a
+    legal statement the submitter must make.
+  * Licensing.  GNU Emacs is GPLv3.  The FSF's position on App
+    Store terms led to the removal of GNU Go (2010) and VLC's
+    original takedown.  Nothing technical in this port changes
+    that calculus; TestFlight and personal-device installs are
+    unaffected.
 
 On first launch Emacs writes its pdumper image into
 

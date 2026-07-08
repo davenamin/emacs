@@ -42,6 +42,19 @@ MKDIR_P = @MKDIR_P@
 ios_appdir = @ios_appdir@
 ios_appsrc = Emacs.base
 
+## Platform inputs consumed by the actool app-icon step.
+ios_platform = @IOS_PLATFORM_SDK@
+ios_min_version = @IOS_DEPLOYMENT_TARGET@
+
+## App icon artwork.  Not shipped in the repository -- App Store
+## submissions need original artwork.  Drop a 1024x1024 PNG at this
+## path and the bundle step compiles the asset catalog with actool
+## and wires CFBundleIconName into the bundle's Info.plist.  When
+## absent, the step is skipped and the app shows the system's blank
+## placeholder icon (fine for Simulator / device development; App
+## Store validation rejects icon-less submissions).
+ios_icon_png = $(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+
 ## Provenance of the Emacs Mach-O for iOS.  Produced by the cross-
 ## build harness in cross/, which consumes the *.ios artifacts that
 ## the recursive XCONFIGURE=ios configure pass emitted into
@@ -83,7 +96,7 @@ $(ios_appdir): $(srcdir)/$(ios_appsrc) Emacs.base/Info.plist
 	rm -rf $(ios_appdir)
 	$(MKDIR_P) $(ios_appdir)
 	( cd $(srcdir)/$(ios_appsrc) ; tar cfh - \
-	    --exclude Info.plist.in . ) | \
+	    --exclude Info.plist.in --exclude Assets.xcassets . ) | \
 	  ( cd $(ios_appdir) ; umask 022; tar xf - )
 	cp Emacs.base/Info.plist $(ios_appdir)/Info.plist
 	touch $(ios_appdir)
@@ -116,6 +129,28 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
                      $(ios_appdir)/lisp/loadup.el \
                      $(ios_appdir)/etc/charsets
 	cp -f $(ios_emacs_binary) $@
+	@if [ -f "$(ios_icon_png)" ]; then \
+	  echo "ios/Makefile: compiling app icon asset catalog"; \
+	  xcrun actool --compile "$(ios_appdir)" \
+	    --output-partial-info-plist \
+	      "$(abs_builddir)/actool-partial.plist" \
+	    --app-icon AppIcon \
+	    --platform $(ios_platform) \
+	    --minimum-deployment-target $(ios_min_version) \
+	    "$(srcdir)/$(ios_appsrc)/Assets.xcassets" \
+	    > /dev/null; \
+	  for key in CFBundleIconName CFBundleIcons \
+	             'CFBundleIcons~ipad' CFBundlePrimaryIcon; do \
+	    /usr/libexec/PlistBuddy -c "Delete :$$key" \
+	      "$(ios_appdir)/Info.plist" 2>/dev/null || true; \
+	  done; \
+	  /usr/libexec/PlistBuddy -c \
+	    "Merge $(abs_builddir)/actool-partial.plist" \
+	    "$(ios_appdir)/Info.plist"; \
+	else \
+	  echo "ios/Makefile: no AppIcon.png; skipping asset catalog"; \
+	  echo "  (App Store submissions require one; see ios/README)"; \
+	fi
 	@if [ -n "$(PROVISIONING_PROFILE)" ]; then \
 	  cp -f "$(PROVISIONING_PROFILE)" \
 	    "$(ios_appdir)/embedded.mobileprovision"; \
