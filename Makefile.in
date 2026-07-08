@@ -382,10 +382,17 @@ actual-all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) src-depending-on-lis
 ## hands off to ios/Makefile to assemble and codesign Emacs.app.
 ## Mirrors how nextstep/Makefile is invoked indirectly via `make
 ## install' on macOS.
-.PHONY: ios ios-bundle
+.PHONY: ios ios-bundle ios-ipa
 ios ios-bundle:
 	$(MAKE) -C cross all
 	$(MAKE) -C ios all
+
+## Package the (signed) bundle as an .ipa for TestFlight / App
+## Store upload.  Signing variables are forwarded so a one-shot
+## `make ios-ipa CODESIGN_IDENTITY=... PROVISIONING_PROFILE=...
+## DEVICE_ENTITLEMENTS=...` builds, signs, and packages.
+ios-ipa: ios
+	$(MAKE) -C ios ipa
 
 # ADVICE-ON-FAILURE-BEGIN:all
 # You could try to:

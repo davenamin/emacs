@@ -155,6 +155,26 @@ device-entitlements-template:
 	  | /usr/libexec/PlistBuddy -x -c "Print :Entitlements" \
 	    /dev/stdin
 
+## Package the bundle as an .ipa: a zip archive whose top level is
+## Payload/Emacs.app.  This is the container format App Store
+## Connect ingestion and TestFlight expect; upload it with Apple's
+## Transporter.  ditto is Apple's archiver and preserves symlinks,
+## permissions and extended attributes that a bare zip can drop --
+## important because the codesign seal covers bundle contents.
+## The bundle should be signed with an Apple Distribution identity
+## + App Store provisioning profile before packaging for upload;
+## the target itself doesn't check that (an unsigned .ipa is still
+## useful for local inspection).
+.PHONY: ipa
+ipa: $(ios_appdir)/emacs
+	rm -rf "$(abs_builddir)/Payload" "$(abs_builddir)/Emacs.ipa"
+	$(MKDIR_P) "$(abs_builddir)/Payload"
+	cp -R "$(ios_appdir)" "$(abs_builddir)/Payload/"
+	( cd "$(abs_builddir)" && \
+	  ditto -c -k --keepParent Payload Emacs.ipa )
+	rm -rf "$(abs_builddir)/Payload"
+	@echo "ios/Makefile: wrote $(abs_builddir)/Emacs.ipa"
+
 ## Fallback rule for $(ios_emacs_binary): make -C cross all is what
 ## produces this file from the *.ios artifacts.  If it's missing we
 ## emit a diagnostic that points at the correct top-level entry point

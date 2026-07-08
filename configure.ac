@@ -1400,6 +1400,22 @@ dnl mirrors the Android block above; see commentary near
 dnl `IOS_OBJ' below for the architecture rationale.
 dnl ---------------------------------------------------------------
 
+dnl Value-taking iOS options.  Declared unconditionally (autoconf
+dnl option parsing must see them regardless of --with-ios) but only
+dnl consumed inside the iOS blocks.  Values may also arrive through
+dnl the environment (IOS_DEPLOYMENT_TARGET / IOS_BUNDLE_ID), which
+dnl the recursive XCONFIGURE=ios pass relies on.
+AC_ARG_WITH([ios-deployment-target],
+  [AS_HELP_STRING([--with-ios-deployment-target=VERSION],
+    [minimum iOS version the app supports (default 15.0)])],
+  [IOS_DEPLOYMENT_TARGET=$withval])
+AC_ARG_WITH([ios-bundle-id],
+  [AS_HELP_STRING([--with-ios-bundle-id=ID],
+    [CFBundleIdentifier for the iOS app (default org.gnu.emacs).
+     Device and App Store builds must use an identifier registered
+     to the signing team's Apple Developer account])],
+  [IOS_BUNDLE_ID=$withval])
+
 if test "$with_ios" = "yes"; then
   # Default the deployment target before the toolchain helper consumes
   # it.  The AC_SUBST happens later (near the other iOS substitutions)
@@ -1464,6 +1480,7 @@ by hand to see the underlying error.])])
      AS_IF([XCONFIGURE=ios \
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            IOS_BUNDLE_ID="$IOS_BUNDLE_ID" \
             ac_cv_func_pipe2=no \
             $CONFIG_SHELL $0 $ios_passthrough], [],
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
@@ -7457,6 +7474,14 @@ AC_SUBST([ios_appdir])
 ## XCONFIGURE=ios cross-compile).
 AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
 AC_SUBST([IOS_DEPLOYMENT_TARGET])
+
+## Bundle identifier for ios/Emacs.base/Info.plist.  org.gnu.emacs is
+## fine for the Simulator (no signing) but device / App Store builds
+## must use an App ID registered to the signing team, supplied via
+## --with-ios-bundle-id= (or the IOS_BUNDLE_ID environment variable,
+## which is how the recursive XCONFIGURE=ios pass receives it).
+AS_IF([test -z "$IOS_BUNDLE_ID"], [IOS_BUNDLE_ID=org.gnu.emacs])
+AC_SUBST([IOS_BUNDLE_ID])
 
 ## Platform identity for ios/Emacs.base/Info.plist.  CoreSimulator's
 ## install path (IXPlaceholder) and MobileInstallation on device both

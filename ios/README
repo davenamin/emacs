@@ -7,8 +7,8 @@ Store.  The C-side terminal driver, font and pasteboard bridges
 live under src/ios*.{m,h,c} and src/iosvfs.c, with Lisp-side
 initialization in lisp/term/ios-win.el.  This directory holds:
 
-  Emacs.base/                Bundle template (Info.plist, entitlements,
-                             launch screen, icons), assembled into the
+  Emacs.base/                Bundle template (Info.plist template and
+                             launch screen), assembled into the
                              output .app at build time.
   Emacs/                     Objective-C app shell (main.m,
                              AppDelegate, SceneDelegate).  These are
@@ -54,8 +54,12 @@ variables that together drive this:
 End-to-end recipe:
 
   # 1. Cross-configure for the iphoneos SDK (not iphonesimulator).
+  #    The bundle id MUST be one registered to your Apple Developer
+  #    team -- you cannot sign org.gnu.emacs with your own
+  #    certificates.
   IOS_SDK=iphoneos ./configure --with-ios \
-    --with-ios-deployment-target=15.0
+    --with-ios-deployment-target=15.0 \
+    --with-ios-bundle-id=com.yourteam.emacs
 
   # 2. Extract the profile's Entitlements dict as your starting
   #    entitlements file.  The Makefile target shells out to
@@ -145,6 +149,22 @@ ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
 `--console` flag for streaming the app's stdout/stderr requires
 Xcode 16; with Xcode 15 use `log stream --device <UDID>` or
 Console.app instead.
+
+Packaging an .ipa for TestFlight / App Store upload
+---------------------------------------------------
+
+  make ios-ipa \
+    CODESIGN_IDENTITY="Apple Distribution: NAME (TEAMID)" \
+    PROVISIONING_PROFILE=path/to/AppStoreProfile.mobileprovision \
+    DEVICE_ENTITLEMENTS=$PWD/dist.entitlements
+
+writes build-ios/ios/Emacs.ipa -- a ditto-produced zip whose top
+level is Payload/Emacs.app, the container App Store Connect
+ingestion expects.  Upload with Apple's Transporter app.  For
+store submission the signing identity must be an Apple
+Distribution certificate and the profile an App Store profile
+(their Entitlements dicts carry no get-task-allow, and the
+device-entitlements-template target works on them the same way).
 
 On first launch Emacs writes its pdumper image into
 
