@@ -384,6 +384,28 @@ actual-all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) src-depending-on-lis
 ## install' on macOS.
 .PHONY: ios ios-bundle ios-ipa
 ios ios-bundle:
+	@stale=""; \
+	for pair in \
+	  "$(srcdir)/src/Makefile.in:src/Makefile.ios" \
+	  "$(srcdir)/src/config.in:src/config.h.ios" \
+	  "$(srcdir)/lib/Makefile.in:lib/Makefile.ios" \
+	  "$(srcdir)/lib/gnulib.mk.in:lib/gnulib.mk.ios"; do \
+	  in=$${pair%%:*}; out=$${pair##*:}; \
+	  if test -f "$$out" && test "$$in" -nt "$$out"; then \
+	    stale="$$stale $$out"; \
+	  fi; \
+	done; \
+	if test -n "$$stale"; then \
+	  echo "*** Stale iOS cross-build artifacts:$$stale"; \
+	  echo "*** These are produced only by the recursive"; \
+	  echo "*** XCONFIGURE=ios pass, so pulling changes to the"; \
+	  echo "*** corresponding *.in files leaves them outdated and"; \
+	  echo "*** the cross build fails in confusing ways (e.g."; \
+	  echo "*** 'No rule to make target ...m, needed by gl-stamp')."; \
+	  echo "*** Fix: re-run configure --with-ios (same arguments),"; \
+	  echo "*** then make ios again."; \
+	  exit 1; \
+	fi
 	$(MAKE) -C cross all
 	$(MAKE) -C ios all
 
