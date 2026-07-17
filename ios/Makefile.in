@@ -96,9 +96,22 @@ $(ios_appdir): $(srcdir)/$(ios_appsrc) Emacs.base/Info.plist
 	rm -rf $(ios_appdir)
 	$(MKDIR_P) $(ios_appdir)
 	( cd $(srcdir)/$(ios_appsrc) ; tar cfh - \
-	    --exclude Info.plist.in --exclude Assets.xcassets . ) | \
+	    --exclude Info.plist.in --exclude Assets.xcassets \
+	    --exclude LaunchScreen.storyboard . ) | \
 	  ( cd $(ios_appdir) ; umask 022; tar xf - )
 	cp Emacs.base/Info.plist $(ios_appdir)/Info.plist
+	## iOS loads only COMPILED storyboards (.storyboardc).  Shipping
+	## the raw XML source leaves the app without a loadable launch
+	## screen, and devices then run it under legacy compatibility
+	## scaling: rendered at a small logical size and scaled up --
+	## oversized-looking fonts and a letterboxed, non-fullscreen
+	## window.  (The Simulator is forgiving here, which is why CI
+	## screenshots never showed it.)
+	xcrun ibtool --compile $(ios_appdir)/LaunchScreen.storyboardc \
+	  --module Emacs --auto-activate-custom-fonts \
+	  --target-device iphone --target-device ipad \
+	  --minimum-deployment-target $(ios_min_version) \
+	  $(srcdir)/$(ios_appsrc)/LaunchScreen.storyboard
 	touch $(ios_appdir)
 
 ## Step 1b: copy the Lisp tree and data files into the bundle.  iOS

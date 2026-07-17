@@ -107,6 +107,8 @@ extern void ios_canvas_clear_rect (double x, double y,
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
 extern void ios_canvas_set_background (unsigned long pixel);
+extern void ios_canvas_scroll (double x, double y,
+                               double width, double height, double dy);
 
 /* Diagnostic counters: how many begin/end/draw calls we've seen.
    Logged from update_end so a screenshot reveals whether the
@@ -461,10 +463,47 @@ ios_term_update_end (struct frame *f)
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }
+/* dispnew calls this AFTER deciding the run's rows moved on
+   screen; it will not redraw them.  An empty implementation
+   therefore leaves stale pixels behind on every scroll -- the
+   dominant "draws uncleanly" defect from on-device testing
+   (buffer scrolling, and the row shuffle when the minibuffer
+   grows and shrinks).  Geometry and mode-line clipping mirror
+   xterm's x_scroll_run.  */
 static void
-ios_noop_scroll_run (struct window *w, struct run *run)
+ios_scroll_run (struct window *w, struct run *run)
 {
-  (void) w; (void) run;
+  int x, y, width, height, from_y, to_y, bottom_y;
+
+  window_box (w, ANY_AREA, &x, &y, &width, &height);
+
+  from_y = WINDOW_TO_FRAME_PIXEL_Y (w, run->current_y);
+  to_y = WINDOW_TO_FRAME_PIXEL_Y (w, run->desired_y);
+  bottom_y = y + height;
+
+  if (to_y < from_y)
+    {
+      /* Scrolling up: don't copy part of the mode line.  */
+      if (from_y + run->height > bottom_y)
+        height = bottom_y - from_y;
+      else
+        height = run->height;
+    }
+  else
+    {
+      /* Scrolling down: don't copy over the mode line.  */
+      if (to_y + run->height > bottom_y)
+        height = bottom_y - to_y;
+      else
+        height = run->height;
+    }
+
+  /* Cursor off; switched back on in gui_update_window_end.  */
+  gui_clear_cursor (w);
+
+  ios_canvas_scroll ((double) x, (double) from_y,
+                     (double) width, (double) height,
+                     (double) (to_y - from_y));
 }
 
 /* Redisplay interface for iOS frames.  Wire up the shared gui_*
@@ -480,7 +519,7 @@ static struct redisplay_interface ios_redisplay_interface =
     gui_write_glyphs,
     gui_insert_glyphs,
     gui_clear_end_of_line,
-    ios_noop_scroll_run,
+    ios_scroll_run,
     ios_noop_after_update_window_line,
     ios_noop_update_window_begin,
     ios_noop_update_window_end,

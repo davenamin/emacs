@@ -290,6 +290,12 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
   EmacsDrawKindCursorBar,
   EmacsDrawKindCursorHBar,
   EmacsDrawKindImage,
+  /* Not a drawing op: transforms the pending command list in
+     place (band shift for scroll_run).  Consumed inside
+     appendCommand, never reaches drawRect.  x/width bound the
+     affected window horizontally, y/height the source band,
+     shiftDy the displacement.  */
+  EmacsDrawKindShift,
 };
 
 /* Bit flags for EmacsDrawCommand.deco.  Kept in sync with the
@@ -315,6 +321,7 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 @property (nonatomic, copy) NSString *text;
 @property (nonatomic) CGFloat fontSize;
 @property (nonatomic) EmacsDrawDeco deco;
+@property (nonatomic) CGFloat shiftDy;   /* EmacsDrawKindShift only */
 /* For EmacsDrawKindImage: a manually-CGImageRetained image.  CGImage
    is not toll-free-bridged to NSObject, so an ARC strong id would
    leak: the setter manages the retain explicitly, and dealloc
@@ -944,6 +951,45 @@ ios_emit_function_key (UIKey *key)
 - (void) appendCommand:(EmacsDrawCommand *)cmd
 {
   [_lock lock];
+  if (cmd.kind == EmacsDrawKindShift)
+    {
+      /* scroll_run: dispnew has decided the rows in the source
+         band [y, y+height) within window x-range [x, x+width)
+         moved by shiftDy, and will NOT redraw them.  Reproduce
+         the move by transforming the accumulated command list:
+         drop stale commands already at the destination band
+         (they would overpaint the moved rows depending on list
+         order), then translate the source-band commands.  Scroll
+         runs are whole-glyph-row moves, so band edges align with
+         command rects; the half-pixel slop tolerates FP noise.  */
+      CGFloat sy = cmd.y, sh = cmd.height, dyv = cmd.shiftDy;
+      CGFloat wx = cmd.x, ww = cmd.width;
+      CGFloat d0 = sy + dyv, d1 = sy + sh + dyv;
+      NSMutableArray<EmacsDrawCommand *> *keep =
+        [NSMutableArray arrayWithCapacity:_pending.count];
+      for (EmacsDrawCommand *c in _pending)
+        {
+          BOOL inWinX = (c.x + c.width > wx + 0.5)
+                        && (c.x < wx + ww - 0.5);
+          BOOL inSrc = inWinX
+                       && c.y >= sy - 0.5
+                       && c.y + c.height <= sy + sh + 0.5;
+          if (inSrc)
+            {
+              c.y += dyv;
+              [keep addObject:c];
+            }
+          else if (inWinX
+                   && c.y + c.height > d0 + 0.5
+                   && c.y < d1 - 0.5)
+            ;  /* stale content under the destination: drop */
+          else
+            [keep addObject:c];
+        }
+      [_pending setArray:keep];
+      [_lock unlock];
+      return;
+    }
   [_pending addObject:cmd];
   [_lock unlock];
 }
@@ -1405,6 +1451,28 @@ ios_canvas_draw_cursor (double x, double y, double width, double height,
   [v appendCommand:cmd];
 }
 
+/* scroll_run support: shift the accumulated command band
+   [y, y+height) within window x-range [x, x+width) by dy points.
+   The transform runs synchronously under the queue lock on the
+   calling (Emacs) thread, keeping ordering with surrounding
+   draw commands exact.  */
+void
+ios_canvas_scroll (double x, double y, double width, double height,
+                   double dy)
+{
+  EmacsUIView *v = ios_canvas;
+  if (v == nil)
+    return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindShift;
+  cmd.x = x;
+  cmd.y = y;
+  cmd.width = width;
+  cmd.height = height;
+  cmd.shiftDy = dy;
+  [v appendCommand:cmd];
+}
+
 /* Keep the view's own background in sync with the Emacs frame
    background so unpainted regions (sub-row slack at the bottom,
    margins during rotation) show the buffer's background instead
@@ -1589,8 +1657,19 @@ ios_emacs_bg_thread (void *unused)
                   constraintEqualToAnchor:safe.leadingAnchor]];
   [cs addObject:[canvas.trailingAnchor
                   constraintEqualToAnchor:safe.trailingAnchor]];
+  /* Bottom-pin to the KEYBOARD layout guide, not the safe area:
+     the soft keyboard overlays the safe area without changing it,
+     so a safe-area-pinned canvas keeps its full height and the
+     keyboard covers the bottom rows -- which is precisely the
+     minibuffer, reported unusable ("truncated") from on-device
+     testing.  UIKeyboardLayoutGuide (iOS 15+, our deployment
+     floor) tracks the keyboard's top edge and follows the
+     safe-area bottom when the keyboard is hidden, so this one
+     constraint gives us shrink-on-show / grow-on-dismiss through
+     the existing layoutSubviews -> resize channel.  */
   [cs addObject:[canvas.bottomAnchor
-                  constraintEqualToAnchor:safe.bottomAnchor]];
+                  constraintEqualToAnchor:
+                    vc.view.keyboardLayoutGuide.topAnchor]];
 
   UITextView *logView = nil;
   if (debug_ui)
