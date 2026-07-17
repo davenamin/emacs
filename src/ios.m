@@ -370,7 +370,12 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
 {
   if ((self = [super initWithFrame:frame]))
     {
-      self.backgroundColor = UIColor.whiteColor;
+      /* Match the system appearance until Emacs pushes its real
+         frame background (ios_canvas_set_background below): a
+         hardcoded white canvas showed white bars in dark mode
+         wherever sub-row slack or margins went unpainted, which
+         on-device testing read as broken layout.  */
+      self.backgroundColor = UIColor.systemBackgroundColor;
       self.opaque = YES;
       _pending = [NSMutableArray array];
       _displayed = @[];
@@ -673,35 +678,68 @@ static unsigned ios_sticky_mods = 0;
 
 - (UIView *) inputAccessoryView
 {
-  static UIToolbar *bar = nil;
+  /* Compact key strip above the soft keyboard.  The previous
+     UIToolbar of UIBarButtonItems sized every button to the
+     system's full-size bar metrics; ten items overflowed narrow
+     iPhones with buttons clipped off the right edge.  A
+     UIStackView with fillEqually distribution mathematically
+     cannot overflow: every key gets width/10, and the compact
+     font plus autoshrink keeps labels legible down to small
+     phones.  UIInputView with InputViewStyleKeyboard matches the
+     keyboard's own background/blur so the strip reads as part of
+     the keyboard rather than a floating toolbar.  */
+  static UIInputView *bar = nil;
   if (bar)
     return bar;
-  bar = [[UIToolbar alloc] initWithFrame:CGRectMake (0, 0, 320, 40)];
-  bar.translucent = NO;
-  UIBarButtonItem *(^mk)(NSString *, SEL) =
-    ^UIBarButtonItem *(NSString *t, SEL s) {
-      UIBarButtonItem *b
-        = [[UIBarButtonItem alloc] initWithTitle:t
-                                           style:UIBarButtonItemStylePlain
-                                          target:self
-                                          action:s];
-      return b;
-    };
-  UIBarButtonItem *flex
-    = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemFlexibleSpace
-                             target:nil action:nil];
-  bar.items = @[mk (@"Esc",  @selector (accEsc)),
-                mk (@"Ctrl", @selector (accStickyCtrl)),
-                mk (@"Meta", @selector (accStickyMeta)),
-                mk (@"Tab",  @selector (accTab)),
-                mk (@"C-g",  @selector (accCg)),
-                flex,
-                mk (@"←", @selector (accLeft)),
-                mk (@"↓", @selector (accDown)),
-                mk (@"↑", @selector (accUp)),
-                mk (@"→", @selector (accRight)),
-                mk (@"M-x",  @selector (accMx))];
+  bar = [[UIInputView alloc]
+          initWithFrame:CGRectMake (0, 0, 0, 40)
+          inputViewStyle:UIInputViewStyleKeyboard];
+  bar.allowsSelfSizing = YES;
+  bar.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+
+  UIStackView *row = [[UIStackView alloc] initWithFrame:CGRectZero];
+  row.axis = UILayoutConstraintAxisHorizontal;
+  row.distribution = UIStackViewDistributionFillEqually;
+  row.alignment = UIStackViewAlignmentFill;
+  row.spacing = 4;
+  row.translatesAutoresizingMaskIntoConstraints = NO;
+  [bar addSubview:row];
+  [NSLayoutConstraint activateConstraints:@[
+    [row.leadingAnchor constraintEqualToAnchor:bar.leadingAnchor
+                                      constant:4],
+    [row.trailingAnchor constraintEqualToAnchor:bar.trailingAnchor
+                                       constant:-4],
+    [row.topAnchor constraintEqualToAnchor:bar.topAnchor
+                                  constant:4],
+    [row.bottomAnchor constraintEqualToAnchor:bar.bottomAnchor
+                                     constant:-4],
+    [bar.heightAnchor constraintEqualToConstant:40],
+  ]];
+
+  UIButton *(^mk)(NSString *, SEL) = ^UIButton *(NSString *t, SEL s) {
+    UIButton *b = [UIButton buttonWithType:UIButtonTypeSystem];
+    [b setTitle:t forState:UIControlStateNormal];
+    b.titleLabel.font = [UIFont systemFontOfSize:13
+                                          weight:UIFontWeightMedium];
+    b.titleLabel.adjustsFontSizeToFitWidth = YES;
+    b.titleLabel.minimumScaleFactor = 0.6;
+    b.layer.cornerRadius = 5;
+    b.backgroundColor =
+      [UIColor.systemGrayColor colorWithAlphaComponent:0.25];
+    [b addTarget:self action:s
+        forControlEvents:UIControlEventTouchUpInside];
+    return b;
+  };
+  [row addArrangedSubview:mk (@"Esc",  @selector (accEsc))];
+  [row addArrangedSubview:mk (@"Ctrl", @selector (accStickyCtrl))];
+  [row addArrangedSubview:mk (@"Meta", @selector (accStickyMeta))];
+  [row addArrangedSubview:mk (@"Tab",  @selector (accTab))];
+  [row addArrangedSubview:mk (@"C-g",  @selector (accCg))];
+  [row addArrangedSubview:mk (@"←", @selector (accLeft))];
+  [row addArrangedSubview:mk (@"↓", @selector (accDown))];
+  [row addArrangedSubview:mk (@"↑", @selector (accUp))];
+  [row addArrangedSubview:mk (@"→", @selector (accRight))];
+  [row addArrangedSubview:mk (@"M-x",  @selector (accMx))];
   return bar;
 }
 
@@ -1365,6 +1403,31 @@ ios_canvas_draw_cursor (double x, double y, double width, double height,
   cmd.width = width; cmd.height = height;
   cmd.fg = (uint32_t) (pixel & 0xffffff);
   [v appendCommand:cmd];
+}
+
+/* Keep the view's own background in sync with the Emacs frame
+   background so unpainted regions (sub-row slack at the bottom,
+   margins during rotation) show the buffer's background instead
+   of a mismatched system color.  Called from the update_end hook
+   on every redisplay; the cached comparison makes the steady
+   state free and the main-queue hop only happens on an actual
+   color change (theme switch, appearance flip).  */
+void
+ios_canvas_set_background (unsigned long pixel)
+{
+  static unsigned long last = ~0UL;
+  if (pixel == last)
+    return;
+  last = pixel;
+  CGFloat r = ((pixel >> 16) & 0xff) / 255.0;
+  CGFloat g = ((pixel >>  8) & 0xff) / 255.0;
+  CGFloat b = ( pixel        & 0xff) / 255.0;
+  dispatch_async (dispatch_get_main_queue (), ^{
+    EmacsUIView *v = ios_canvas;
+    if (v != nil)
+      v.backgroundColor = [UIColor colorWithRed:r green:g blue:b
+                                          alpha:1.0];
+  });
 }
 
 /* C-callable hooks for the terminal-level update_begin / update_end

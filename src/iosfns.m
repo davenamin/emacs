@@ -197,27 +197,27 @@ parameters without crashing.  */)
   FRAME_FONTSET (f) = fontset_from_font (font_obj);
   store_frame_param (f, Qfont, font_obj);
 
-  /* Geometry: derive from the display.  Use logical width/height
-     (NOT pixel) since CoreGraphics + CTLine work in points.
-     UIScreen.bounds is in points already; pixel_* are points *
-     scale.  Falling back to 40x20 if the display reports zero.
-     The on-screen canvas is roughly 70% of the screen height
-     (the live log occupies the top 30%), so bias height by 0.65
-     to leave a margin for the safe-area insets.  Until the canvas
-     reports its actual laid-out size back to the C side via
-     change_frame_size, this static ratio is the best we can do.  */
-  /* The on-screen canvas in landscape mode is roughly 600x300 pts
-     on iPhone Pro Max; in portrait, 400x500.  Take the larger of
-     UIScreen's width vs height so we cover both orientations.  */
-  int logical_w = dpyinfo->logical_width;
-  int logical_h = dpyinfo->logical_height;
-  if (logical_w <= 0 || logical_h <= 0)
-    { logical_w = 320; logical_h = 480; }
-  if (logical_h > logical_w)
+  /* Geometry, in logical points (CoreGraphics + CTLine work in
+     points; Retina scaling happens underneath).
+
+     Preferred source: the canvas view's real laid-out bounds.
+     UIKit lays the canvas out during app launch, seconds before
+     loadup finishes and this function runs, so the published size
+     is essentially always available -- and sizing from it directly
+     means the first-ever redisplay already has the right cols and
+     rows, instead of a whole-screen guess that visibly snaps when
+     the first resize event lands (mis-sized frames were the
+     first thing reported from on-device testing).
+
+     Fallback (canvas not yet laid out): the display's logical
+     size, which at least has the right orientation.  */
+  int logical_w, logical_h;
+  if (!ios_get_canvas_size (&logical_w, &logical_h))
     {
-      int swap = logical_w;
-      logical_w = logical_h;
-      logical_h = swap;
+      logical_w = dpyinfo->logical_width;
+      logical_h = dpyinfo->logical_height;
+      if (logical_w <= 0 || logical_h <= 0)
+        { logical_w = 320; logical_h = 480; }
     }
   int cols  = logical_w / font->average_width;
   int lines = logical_h / font->height;

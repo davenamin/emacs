@@ -106,6 +106,7 @@ extern void ios_canvas_clear_rect (double x, double y,
                                    unsigned long bg_pixel);
 extern void ios_canvas_begin_frame (void);
 extern void ios_canvas_end_frame (void);
+extern void ios_canvas_set_background (unsigned long pixel);
 
 /* Diagnostic counters: how many begin/end/draw calls we've seen.
    Logged from update_end so a screenshot reveals whether the
@@ -217,6 +218,18 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
   unsigned long bg = (s->face && s->face->background != ~0UL)
                      ? s->face->background : 0xffffff;
 
+  /* Block cursor: draw_phys_cursor_glyph re-enters here with
+     hl == DRAW_CURSOR expecting cursor colors -- character in
+     the frame background color on a cursor-pixel block, the
+     same fg/bg swap every other port performs.  */
+  if (s->hl == DRAW_CURSOR)
+    {
+      struct frame *f = s->f;
+      unsigned long cursor = f->output_data.ios->cursor_pixel;
+      fg = bg;
+      bg = cursor;
+    }
+
   /* Translate face decorations into canvas flags.  Bold / italic
      come from the font weight & slant; underline/overline/strike-
      through come from the dedicated face bits.  */
@@ -307,11 +320,32 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                              int cursor_width, bool on_p, bool active_p)
 {
   (void) active_p;
-  if (!on_p || cursor_type == NO_CURSOR || w == NULL || glyph_row == NULL)
+  if (w == NULL || glyph_row == NULL)
     return;
   struct frame *f = XFRAME (WINDOW_FRAME (w));
   if (!FRAME_IOS_P (f))
     return;
+
+  if (!on_p)
+    /* Erasure is handled generically: erase_phys_cursor redraws
+       the underlying glyph through draw_glyph_string, which our
+       overpaint list renders on top of the stale cursor.  Nothing
+       port-specific to do here.  */
+    return;
+
+  /* CRITICAL bookkeeping: erase_phys_cursor consults
+     w->phys_cursor_on_p and returns without erasing when it is
+     false.  Without these assignments the generic machinery never
+     erases, and cursor motion without a text change (C-f, C-n,
+     blink) leaves a trail of stale cursor marks -- the port's
+     worst user-visible defect during on-device testing.  Mirrors
+     android_draw_window_cursor.  */
+  w->phys_cursor_type = cursor_type;
+  w->phys_cursor_on_p = true;
+
+  if (cursor_type == NO_CURSOR)
+    return;
+
   /* Translate window-relative (x,y) into frame-relative pixel
      coordinates so the canvas receives the same coordinate space
      as draw_glyph_string.  */
@@ -324,6 +358,18 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
               ? glyph_row->height
               : FRAME_LINE_HEIGHT (f);
   unsigned long pixel = f->output_data.ios->cursor_pixel;
+
+  if (cursor_type == FILLED_BOX_CURSOR)
+    {
+      /* Draw the character in cursor colors rather than hiding it
+         under an opaque rectangle: route through the generic
+         helper, which re-enters draw_glyph_string with
+         hl == DRAW_CURSOR (handled there by swapping to the
+         cursor face colors).  */
+      draw_phys_cursor_glyph (w, glyph_row, DRAW_CURSOR);
+      return;
+    }
+
   /* enum text_cursor_kinds: FILLED_BOX=0, HOLLOW_BOX=1, BAR=2, HBAR=3.  */
   ios_canvas_draw_cursor ((double) abs_x, (double) abs_y,
                           (double) w_px, (double) h_px,
@@ -395,6 +441,10 @@ static void
 ios_term_update_end (struct frame *f)
 {
   ios_dbg_end++;
+  /* Keep the view background aligned with the frame background
+     (no-op unless the color changed).  */
+  if (f && FRAME_IOS_P (f))
+    ios_canvas_set_background (FRAME_BACKGROUND_PIXEL (f));
   ios_canvas_end_frame ();
   /* Light heartbeat: first few ticks then every 100th, with the
      root window's live dims.  Cheap and has repeatedly proven its
@@ -660,15 +710,24 @@ ios_term_init (void)
            actually draws in, which for us is LOGICAL POINTS (the
            canvas bounds, frame pixel_width/height, and font
            pixel_size are all point-valued; Core Graphics applies
-           the Retina scale underneath).  iPhone logical space is
-           ~163 ppi regardless of scale.  Multiplying by scale here
+           the Retina scale underneath).  Multiplying by scale here
            (physical ppi) made the face engine's point<->pixel
            conversions disagree with the geometry by 2-3x: a
            14px-at-489dpi font is 2.1pt, and any code that
            round-trips a face height through points came back with
-           a collapsed, near-zero pixel size.  */
-        dpyinfo->resx = 163.0;
-        dpyinfo->resy = 163.0;
+           a collapsed, near-zero pixel size.
+
+           Logical density differs by device family: iPhone
+           logical space is ~163 ppi, iPad's is ~132 ppi.  Using
+           the iPhone value on an iPad skews every point-derived
+           font size by ~23%.  */
+        {
+          double logical_ppi =
+            (UIDevice.currentDevice.userInterfaceIdiom
+             == UIUserInterfaceIdiomPad) ? 132.0 : 163.0;
+          dpyinfo->resx = logical_ppi;
+          dpyinfo->resy = logical_ppi;
+        }
       }
     else
       {
@@ -980,6 +1039,28 @@ ios_publish_canvas_size (double width, double height)
     }
   pthread_mutex_unlock (&ios_resize_lock);
   ios_wake ();
+}
+
+/* Last published canvas size, for x-create-frame: UIKit lays the
+   canvas out during app launch, seconds before loadup finishes and
+   the first frame is created, so by frame-creation time the real
+   canvas bounds are known.  Sizing the frame from them directly
+   avoids the whole-screen guess (and its visible snap when the
+   first resize event lands).  Returns false if no layout pass has
+   published yet (headless early startup).  */
+bool
+ios_get_canvas_size (int *w, int *h)
+{
+  bool have = false;
+  pthread_mutex_lock (&ios_resize_lock);
+  if (ios_pending_canvas_w > 0 && ios_pending_canvas_h > 0)
+    {
+      *w = ios_pending_canvas_w;
+      *h = ios_pending_canvas_h;
+      have = true;
+    }
+  pthread_mutex_unlock (&ios_resize_lock);
+  return have;
 }
 
 /* Called from the Emacs thread at the top of read_socket.  If a

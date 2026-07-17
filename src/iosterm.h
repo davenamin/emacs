@@ -296,6 +296,11 @@ extern bool ios_take_menu_selection (int serial, int *index);
    the document-picker delegate.  */
 extern void ios_publish_open_file (const char *path);
 
+/* Last published canvas size in logical points (iosterm.m);
+   consumed by x-create-frame so the initial frame matches the
+   real canvas instead of a whole-screen guess.  */
+extern bool ios_get_canvas_size (int *w, int *h);
+
 #ifdef __OBJC__
 /* Persist a security-scoped bookmark for URL so a relaunch can
    restore access (ios.m).  Safe from any thread.  */
