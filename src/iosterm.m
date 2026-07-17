@@ -378,17 +378,37 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                           pixel, (int) cursor_type);
 }
 
+/* Separator between side-by-side windows (C-x 3).  Without it the
+   windows visually bleed into each other -- same defect family as
+   the other silently-empty drawing stubs found after on-device
+   testing.  A one-pixel line in the vertical-border face's
+   foreground (frame foreground when the face isn't realized),
+   painted through the same clear-rect command the erase path
+   uses.  */
 static void
-ios_noop_draw_vertical_window_border (struct window *w, int x, int y_0, int y_1)
+ios_draw_vertical_window_border (struct window *w, int x, int y_0, int y_1)
 {
-  (void) w; (void) x; (void) y_0; (void) y_1;
+  struct frame *f = XFRAME (WINDOW_FRAME (w));
+  struct face *face = FACE_FROM_ID_OR_NULL (f, VERTICAL_BORDER_FACE_ID);
+  unsigned long color = (face && face->foreground != ~0UL)
+                        ? face->foreground
+                        : FRAME_FOREGROUND_PIXEL (f);
+  ios_canvas_clear_rect ((double) x, (double) y_0,
+                         1.0, (double) (y_1 - y_0), color);
 }
 
 static void
-ios_noop_draw_window_divider (struct window *w, int x_0, int x_1,
-                              int y_0, int y_1)
+ios_draw_window_divider (struct window *w, int x_0, int x_1,
+                         int y_0, int y_1)
 {
-  (void) w; (void) x_0; (void) x_1; (void) y_0; (void) y_1;
+  struct frame *f = XFRAME (WINDOW_FRAME (w));
+  struct face *face = FACE_FROM_ID_OR_NULL (f, WINDOW_DIVIDER_FACE_ID);
+  unsigned long color = (face && face->foreground != ~0UL)
+                        ? face->foreground
+                        : FRAME_FOREGROUND_PIXEL (f);
+  ios_canvas_clear_rect ((double) x_0, (double) y_0,
+                         (double) (x_1 - x_0), (double) (y_1 - y_0),
+                         color);
 }
 
 static void
@@ -536,8 +556,8 @@ static struct redisplay_interface ios_redisplay_interface =
     ios_noop_clear_frame_area,
     ios_noop_clear_under_internal_border,
     ios_noop_draw_window_cursor,
-    ios_noop_draw_vertical_window_border,
-    ios_noop_draw_window_divider,
+    ios_draw_vertical_window_border,
+    ios_draw_window_divider,
     ios_noop_shift_glyphs_for_insert,
     ios_noop_show_hourglass,
     ios_noop_hide_hourglass,
