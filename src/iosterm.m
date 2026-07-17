@@ -271,10 +271,58 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
 }
 
 static void
-ios_noop_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
-                             struct draw_fringe_bitmap_params *p)
+ios_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
+                        struct draw_fringe_bitmap_params *p)
 {
-  (void) w; (void) row; (void) p;
+  (void) row;
+  struct frame *f = XFRAME (WINDOW_FRAME (w));
+  struct face *face = p->face;
+
+  /* Fringe background strip for this row (skipped for overlaid
+     bitmaps, matching the other ports).  */
+  if (p->bx >= 0 && !p->overlay_p)
+    ios_canvas_clear_rect ((double) p->bx, (double) p->by,
+                           (double) p->nx, (double) p->ny,
+                           (face && face->background != ~0UL)
+                           ? face->background
+                           : FRAME_BACKGROUND_PIXEL (f));
+
+  if (!p->which || p->bits == NULL || p->wd <= 0 || p->h <= 0)
+    return;
+
+  unsigned long fg = p->cursor_p
+    ? f->output_data.ios->cursor_pixel
+    : ((face && face->foreground != ~0UL)
+       ? face->foreground
+       : FRAME_FOREGROUND_PIXEL (f));
+
+  /* Rasterize the bitmap into horizontal runs of filled rects.
+     Bit order per fringe.c's own bitmap art (the question-mark
+     comment): within a wd-wide row, pixel column j (0 = left) is
+     bit (wd - 1 - j).  p->dh skips source rows, as in
+     x_draw_fringe_bitmap; the destination stays at p->y.
+     Coalescing runs keeps this to a couple of commands per row --
+     an arrow costs ~20 rects, not ~60 pixels.  */
+  unsigned short *bits = p->bits + p->dh;
+  for (int r = 0; r < p->h; r++)
+    {
+      unsigned short rowbits = bits[r];
+      int j = 0;
+      while (j < p->wd)
+        {
+          if (rowbits & (1 << (p->wd - 1 - j)))
+            {
+              int start = j;
+              while (j < p->wd && (rowbits & (1 << (p->wd - 1 - j))))
+                j++;
+              ios_canvas_clear_rect ((double) (p->x + start),
+                                     (double) (p->y + r),
+                                     (double) (j - start), 1.0, fg);
+            }
+          else
+            j++;
+        }
+    }
 }
 
 static void
@@ -547,7 +595,7 @@ static struct redisplay_interface ios_redisplay_interface =
     gui_clear_window_mouse_face,
     gui_get_glyph_overhangs,
     gui_fix_overlapping_area,
-    ios_noop_draw_fringe_bitmap,
+    ios_draw_fringe_bitmap,
     ios_noop_define_fringe_bitmap,
     ios_noop_destroy_fringe_bitmap,
     ios_noop_compute_glyph_string_overhangs,
