@@ -247,6 +247,15 @@ $(ios_emacs_binary):
 Makefile: $(srcdir)/Makefile.in $(abs_top_builddir)/config.status
 	cd $(abs_top_builddir) && $(SHELL) ./config.status ios/Makefile
 
+## Same staleness hazard as the Makefile itself: the generated
+## Info.plist is a config.status product, and pulls that change
+## Info.plist.in (UIDeviceFamily, bundle id, ...) must reach the
+## assembled bundle without requiring a manual reconfigure.
+Emacs.base/Info.plist: $(srcdir)/Emacs.base/Info.plist.in \
+                       $(abs_top_builddir)/config.status
+	cd $(abs_top_builddir) && \
+	  $(SHELL) ./config.status ios/Emacs.base/Info.plist
+
 .PHONY: clean distclean bootstrap-clean maintainer-clean
 clean:
 	rm -rf $(ios_appdir)
