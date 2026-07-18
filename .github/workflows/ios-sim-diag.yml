@@ -26,6 +26,15 @@ jobs:
         with:
           ref: claude/ios-port
 
+      # Cached cross-compiled TLS stack (gmp, nettle, gnutls) for
+      # the simulator SDK; the build step inside the diagnostics
+      # script is a fast no-op on a cache hit.
+      - name: Cache iOS TLS deps
+        uses: actions/cache@v4
+        with:
+          path: ios-deps
+          key: ios-deps-iphonesimulator-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
       - name: Run diagnostics
         if: always()
         run: |
@@ -58,13 +67,22 @@ jobs:
           run ./autogen.sh
 
           log ""
+          log "===== TLS DEPS (gmp, nettle, gnutls) ====="
+          run ios/build-deps.sh --sdk iphonesimulator \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphonesimulator"
+
+          log ""
           log "===== CONFIGURE (iphonesimulator) ====="
           mkdir -p build-ios-sim
           ( cd build-ios-sim && \
             IOS_SDK=iphonesimulator IOS_ARCH=arm64 IOS_DEPLOYMENT_TARGET=15.0 \
-              ../configure --with-ios > configure.out 2>&1 )
+              ../configure --with-ios \
+                --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphonesimulator" \
+                > configure.out 2>&1 )
           echo "[configure exit=$?]" >> "$OUT"
           tail -30 build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lgnutls?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
 
           log ""
           log "===== MAKE IOS ====="

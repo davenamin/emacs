@@ -158,6 +158,18 @@ minibuffer exit is unconditional once shown by this hook."
 (add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
 (add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
 
+;; TLS trust anchors.  The bundle ships etc/ca-bundle.pem (Apple's
+;; root-CA set, exported from the build host by ios/Makefile); none
+;; of gnutls-trustfiles' built-in defaults (/etc/ssl and friends)
+;; exist inside the iOS sandbox, so without this every certificate
+;; verification would fail.  Harmless when the build carries no
+;; GnuTLS: the form only runs if something loads gnutls.el, and a
+;; missing bundle file leaves the defaults untouched.
+(with-eval-after-load 'gnutls
+  (let ((bundle (expand-file-name "ca-bundle.pem" data-directory)))
+    (when (file-readable-p bundle)
+      (setq gnutls-trustfiles (list bundle)))))
+
 ;; iOS forbids subprocesses (posix_spawn is sandboxed away), so
 ;; dired must use the pure-Lisp ls emulation instead of spawning
 ;; `ls' -- the same arrangement Android uses, but keyed here off

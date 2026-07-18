@@ -178,6 +178,29 @@ Results land in ~/ios-test-results.txt; one line per test."
                    (functionp (lookup-key (current-global-map)
                                           [mouse-wheel-down-event])))))
 
+  ;;; --- TLS --------------------------------------------------------
+  ;; No live handshake here: a probe blocking in the GnuTLS C layer
+  ;; against an unreachable network could hang the whole battery
+  ;; before the results file is written.  Presence checks are
+  ;; deterministic; real handshakes are exercised on-device
+  ;; (package refresh) and manually.
+
+  (ios-test-deftest tls-available
+    "gnutls-available-p reports the linked GnuTLS stack"
+    (cl-assert (gnutls-available-p)))
+
+  (ios-test-deftest tls-trust-anchors
+    "bundled ca-bundle.pem exists and gnutls-trustfiles points at it"
+    (let ((bundle (expand-file-name "ca-bundle.pem" data-directory)))
+      (cl-assert (file-readable-p bundle))
+      ;; Loading gnutls.el triggers the ios-win.el trustfile setup.
+      (require 'gnutls)
+      (cl-assert (member bundle gnutls-trustfiles))
+      ;; The bundle must actually parse as a non-empty PEM set.
+      (with-temp-buffer
+        (insert-file-contents bundle nil 0 4096)
+        (cl-assert (search-forward "BEGIN CERTIFICATE" nil t)))))
+
   ;;; --- Write the results -----------------------------------------
 
   (let ((path (expand-file-name "ios-test-results.txt" "~")))

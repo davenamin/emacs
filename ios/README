@@ -38,6 +38,48 @@ See .github/workflows/ios-cross.yml and ios-sim-diag.yml for the
 exact CI invocations, including the install / launch / screenshot
 smoke test that runs on every push.
 
+TLS (GnuTLS)
+------------
+
+Without further preparation the build carries no TLS, so anything
+that opens an https connection (package refresh against GNU ELPA,
+url.el, network streams with :type tls) fails.  To include TLS,
+cross-compile the GnuTLS stack first and point configure at it:
+
+  ios/build-deps.sh --sdk iphoneos --prefix "$PWD/ios-deps/iphoneos"
+  ./configure --with-ios --with-ios-deps="$PWD/ios-deps/iphoneos"
+  make ios
+
+build-deps.sh fetches, cross-compiles, and installs static GMP,
+Nettle, and GnuTLS for the requested SDK (pass --sdk
+iphonesimulator for simulator builds -- the deps prefix must match
+the SDK the Emacs build targets).  It needs pkg-config on the host
+(brew install pkg-config).  Tarballs are downloaded from
+ftp.gnu.org / www.gnupg.org over TLS into <prefix>/../downloads;
+pre-seed that directory with independently verified tarballs if
+your threat model requires it.  The script prints the SHA-256 of
+every tarball it uses.
+
+This mirrors the Android port, which bundles cross-compiled
+GnuTLS, GMP, Nettle, libtasn1, and p11-kit built with its
+ndk-build harness (see java/INSTALL, section GNUTLS).  The iOS
+stack is smaller: libtasn1 and unistring are built into GnuTLS
+(--with-included-*) and PKCS#11 support is off, so p11-kit is not
+needed.
+
+Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
+build host's Apple root-CA set into the bundle as
+etc/ca-bundle.pem (security find-certificate -a -p against
+SystemRootCertificates.keychain), and lisp/term/ios-win.el points
+gnutls-trustfiles at it.
+
+Licensing: GnuTLS is LGPLv2.1+; Nettle and GMP are dual
+GPLv2+/LGPLv3+.  All are compatible with GPLv3+ Emacs.  For App
+Store submissions, note that shipping TLS does not change the
+export-compliance picture materially: standard HTTPS falls under
+the usual exemption categories, but the ITSAppUsesNonExemptEncryption
+declaration (see below) remains the submitter's call.
+
 Installing on a physical device
 -------------------------------
 

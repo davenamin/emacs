@@ -160,6 +160,16 @@ $(ios_appdir)/etc/charsets: $(ios_appdir)
 	rsync -a --delete \
 	  --exclude='.git*' --exclude='Makefile*' --exclude='emacs.1' \
 	  $(abs_top_srcdir)/etc/ $(ios_appdir)/etc/
+	## TLS trust anchors.  iOS has no /etc/ssl and GnuTLS is built
+	## without a default trust store, so export Apple's root-CA set
+	## from the build host into the bundle; ios-win.el points
+	## gnutls-trustfiles here.  Exported unconditionally -- it is a
+	## few hundred KB and forward-compatible with TLS-less builds.
+	## security(1) is part of macOS; find-certificate -a -p emits
+	## every certificate in the keychain as PEM.
+	security find-certificate -a -p \
+	  /System/Library/Keychains/SystemRootCertificates.keychain \
+	  > $(ios_appdir)/etc/ca-bundle.pem
 	touch $@ || true
 
 ## Step 2: drop the cross-compiled emacs binary into the bundle and

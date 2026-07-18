@@ -1415,6 +1415,13 @@ AC_ARG_WITH([ios-bundle-id],
      Device and App Store builds must use an identifier registered
      to the signing team's Apple Developer account])],
   [IOS_BUNDLE_ID=$withval])
+AC_ARG_WITH([ios-deps],
+  [AS_HELP_STRING([--with-ios-deps=DIR],
+    [prefix holding cross-compiled iOS dependency libraries
+     (currently the GnuTLS stack) produced by ios/build-deps.sh.
+     Must match the SDK being targeted (iphoneos vs
+     iphonesimulator).  When absent, Emacs builds without TLS])],
+  [IOS_DEPS=$withval])
 
 if test "$with_ios" = "yes"; then
   # Default the deployment target before the toolchain helper consumes
@@ -1424,6 +1431,23 @@ if test "$with_ios" = "yes"; then
 
   AS_IF([test "$XCONFIGURE" = "ios"], [],
     [AC_MSG_NOTICE([Configuring iOS cross-compile via XCONFIGURE=ios.])
+
+     # Normalize --with-ios-deps to an absolute path before the
+     # recursive pass consumes it (its value gets baked into
+     # LIBGNUTLS_LIBS -L flags) and fail early when it does not
+     # look like a prefix produced by ios/build-deps.sh.
+     AS_IF([test -n "$IOS_DEPS"],
+       [case "$IOS_DEPS" in
+          /*) ;;
+          *) IOS_DEPS=`pwd`/$IOS_DEPS ;;
+        esac
+        AS_IF([test -f "$IOS_DEPS/lib/pkgconfig/gnutls.pc"], [],
+          [AC_MSG_ERROR([--with-ios-deps: no lib/pkgconfig/gnutls.pc under
+$IOS_DEPS.  Build the TLS dependency stack first:
+
+  $srcdir/ios/build-deps.sh --sdk ${IOS_SDK:-iphoneos} --prefix $IOS_DEPS
+
+(and make sure the --sdk used there matches this build's IOS_SDK).])])])
 
      # Sanity-check the toolchain in a subshell.  The helper aborts
      # cleanly if we are not on macOS, if xcrun is missing, or if
@@ -1481,6 +1505,7 @@ by hand to see the underlying error.])])
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
             IOS_BUNDLE_ID="$IOS_BUNDLE_ID" \
+            IOS_DEPS="$IOS_DEPS" \
             ac_cv_func_pipe2=no \
             $CONFIG_SHELL $0 $ios_passthrough], [],
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
@@ -1530,7 +1555,6 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_jpeg=no
   with_xml2=no
   with_sqlite3=no
-  with_gnutls=no
   with_tiff=no
   with_selinux=no
   with_modules=no
@@ -1553,6 +1577,24 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_ns=no
   with_x=no
   with_pgtk=no
+
+  # GnuTLS is the one optional library the iOS port supports, via a
+  # cross-compiled static stack (ios/build-deps.sh) -- the same
+  # feature the Android port provides through its ndk-build ports
+  # of gnutls/gmp/nettle (java/INSTALL, section GNUTLS).  Enable it
+  # only in the inner cross pass, and only when --with-ios-deps
+  # points at a prefix that has it; the outer pass stays minimal
+  # (it exists to build host tools and bootstrap-emacs), and
+  # builds without deps behave exactly as before.  Restricting
+  # PKG_CONFIG_LIBDIR to the deps prefix keeps Homebrew's host
+  # libraries from leaking into the cross link.
+  if test "$XCONFIGURE" = "ios" && test -n "$IOS_DEPS"; then
+    with_gnutls=yes
+    PKG_CONFIG_LIBDIR="$IOS_DEPS/lib/pkgconfig"
+    export PKG_CONFIG_LIBDIR
+  else
+    with_gnutls=no
+  fi
 
   # Force the dumping strategy to "none" for iOS.  The recursive
   # XCONFIGURE=ios cross-build can't run temacs on the host to

@@ -49,13 +49,32 @@ jobs:
       - name: Regenerate configure
         run: ./autogen.sh
 
+      # The TLS dependency stack (gmp, nettle, gnutls) is a
+      # ~10-minute build from source, so cache the installed
+      # prefix keyed on the build script; build-deps.sh is a fast
+      # no-op on a cache hit.
+      - name: Cache iOS TLS deps
+        uses: actions/cache@v4
+        with:
+          path: ios-deps
+          key: ios-deps-iphoneos-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
+      - name: Build TLS deps (gmp, nettle, gnutls)
+        run: |
+          ios/build-deps.sh --sdk iphoneos \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphoneos"
+
       - name: Configure --with-ios
         id: configure
         run: |
           mkdir -p build-ios
           cd build-ios
-          ../configure --with-ios 2>&1 | tee configure.out
+          ../configure --with-ios \
+            --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphoneos" \
+            2>&1 | tee configure.out
           tail -60 configure.out
+          grep -q 'Does Emacs use -lgnutls?[[:space:]]*yes' configure.out || {
+            echo '::error::iOS configure did not enable GnuTLS'; exit 1; }
 
       - name: make ios
         id: make
