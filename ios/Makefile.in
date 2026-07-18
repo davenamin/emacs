@@ -182,9 +182,12 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	cp -f $(ios_emacs_binary) $@
 	## actool reports errors on stdout and has been seen exiting 0
 	## while doing so; the icon step below therefore logs actool's
-	## output, checks the partial plist actually gained
-	## CFBundleIconName, and prints the log on any failure --
-	## discarding the output left failures undiagnosable.
+	## output and treats the run as failed unless the compiled
+	## Assets.car landed in the bundle and the partial plist
+	## parses, printing the log in that case.  (The icon keys sit
+	## NESTED under CFBundleIcons/CFBundlePrimaryIcon in the
+	## partial plist, so probing a top-level key is not a valid
+	## success check.)
 	@if [ -f "$(ios_icon_png)" ]; then \
 	  echo "ios/Makefile: compiling app icon asset catalog"; \
 	  catalog="$(srcdir)/$(ios_appsrc)/Assets.xcassets"; \
@@ -217,7 +220,8 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	    > "$(abs_builddir)/actool.log" 2>&1; \
 	  actool_status=$$?; \
 	  if [ $$actool_status -ne 0 ] \
-	     || ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' \
+	     || [ ! -f "$(ios_appdir)/Assets.car" ] \
+	     || ! /usr/libexec/PlistBuddy -c 'Print' \
 	            "$(abs_builddir)/actool-partial.plist" \
 	            >/dev/null 2>&1; then \
 	    echo "ios/Makefile: actool failed; its output follows:" >&2; \
