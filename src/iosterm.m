@@ -38,7 +38,9 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "lisp.h"
 #include "iosterm.h"
 #include "termhooks.h"
+#include "termchar.h"
 #include "keyboard.h"
+#include "blockinput.h"
 #include "frame.h"
 #include "window.h"
 #include "dispextern.h"
@@ -264,8 +266,12 @@ ios_draw_glyph_string (struct glyph_string *s)
     }
   if (s->font)
     {
-      int slant = FONT_SLANT_NUMERIC (s->font);
-      int weight = FONT_WEIGHT_NUMERIC (s->font);
+      /* The FONT_*_NUMERIC accessors take the Lisp font object,
+         not the struct font pointer.  */
+      Lisp_Object font_obj;
+      XSETFONT (font_obj, s->font);
+      int slant = FONT_SLANT_NUMERIC (font_obj);
+      int weight = FONT_WEIGHT_NUMERIC (font_obj);
       if (slant > 100)  deco |= IOS_DECO_ITALIC;
       if (weight > 100) deco |= IOS_DECO_BOLD;
     }
