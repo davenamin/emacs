@@ -2962,12 +2962,6 @@ AC_SUBST([CROSS_SUFFIX])
 # IOS=yes; on that pass the iOS translation units (src/ios.m,
 # iosterm.m, etc.) are pulled into IOS_OBJ and the iOS-specific
 # macros are defined.
-#
-# This commit only wires the substitutions; the recursive cross-
-# configure invocation (analogous to lines 1297-1302 for Android) and
-# the corresponding cross/xcode-build/ infrastructure land in
-# follow-up commits.  Until then --with-ios is a documented
-# placeholder that does not yet produce an iOS build.
 
 AS_IF([test "$IOS" = "yes"],[
   window_system=ios
@@ -7527,8 +7521,8 @@ AS_IF([test -z "$ios_appdir"], [ios_appdir=`pwd`/ios/Emacs.app])
 AC_SUBST([ios_appdir])
 
 ## Minimum supported iOS version (passed into ios/Emacs.base/Info.plist
-## and, in a follow-up commit, into the -mios-version-min CFLAG of the
-## XCONFIGURE=ios cross-compile).
+## and, via cross/xcode-build/xcode-toolchain.sh, into the
+## -mios-version-min CFLAG of the XCONFIGURE=ios cross-compile).
 AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
 AC_SUBST([IOS_DEPLOYMENT_TARGET])
 

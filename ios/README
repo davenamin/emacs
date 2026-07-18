@@ -380,16 +380,14 @@ Works:
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
   * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): thirteen probes covering sandbox
+    ios-run-self-tests): fifteen probes covering sandbox
     identity, file round-trip, clipboard, geometry, appearance,
-    image load, face attributes, frame-background-mode, and the
-    pinch / wheel / drag-n-drop event bindings.  CI fails the
-    run on any FAIL line and writes the per-probe results back
-    in ci-diag/sim-install.txt.
+    image load, face attributes, frame-background-mode, the
+    pinch / wheel / drag-n-drop event bindings, and TLS (GnuTLS
+    availability and trust anchors).  One PASS / FAIL line per
+    probe is written to ~/ios-test-results.txt.
 
 Known issues / deferred:
-  * Images are not implemented (nsimage.m's NS_IMPL_IOS arm and
-    the image glyph drawing path).
   * Rendering uses an overpaint command list (correct, simple);
     per-row damage tracking is the planned optimization.
   * Pane headers inside submenus are dropped -- action sheets
