@@ -1415,6 +1415,12 @@ AC_ARG_WITH([ios-bundle-id],
      Device and App Store builds must use an identifier registered
      to the signing team's Apple Developer account])],
   [IOS_BUNDLE_ID=$withval])
+AC_ARG_WITH([ios-app-name],
+  [AS_HELP_STRING([--with-ios-app-name=NAME],
+    [name the iOS app shows under its icon and in system UI
+     (CFBundleDisplayName / CFBundleName; default Emacs).  Does not
+     change the bundle directory (Emacs.app) or the executable])],
+  [IOS_APP_NAME=$withval])
 AC_ARG_WITH([ios-deps],
   [AS_HELP_STRING([--with-ios-deps=DIR],
     [prefix holding cross-compiled iOS dependency libraries
@@ -7534,6 +7540,15 @@ AC_SUBST([IOS_DEPLOYMENT_TARGET])
 ## which is how the recursive XCONFIGURE=ios pass receives it).
 AS_IF([test -z "$IOS_BUNDLE_ID"], [IOS_BUNDLE_ID=org.gnu.emacs])
 AC_SUBST([IOS_BUNDLE_ID])
+
+## User-visible app name for ios/Emacs.base/Info.plist
+## (CFBundleDisplayName, the label under the home-screen icon, and
+## CFBundleName, the short name system UI uses -- Apple recommends
+## 15 characters or fewer for the latter).  The bundle directory
+## stays Emacs.app and the executable stays emacs regardless;
+## neither is user-visible on device.
+AS_IF([test -z "$IOS_APP_NAME"], [IOS_APP_NAME=Emacs])
+AC_SUBST([IOS_APP_NAME])
 
 ## Platform identity for ios/Emacs.base/Info.plist.  CoreSimulator's
 ## install path (IXPlaceholder) and MobileInstallation on device both

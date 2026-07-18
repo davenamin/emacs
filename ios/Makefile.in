@@ -53,7 +53,13 @@ ios_min_version = @IOS_DEPLOYMENT_TARGET@
 ## absent, the step is skipped and the app shows the system's blank
 ## placeholder icon (fine for Simulator / device development; App
 ## Store validation rejects icon-less submissions).
-ios_icon_png = $(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+##
+## Alternatively pass IOS_APP_ICON=/path/to/icon.png on the make
+## command line (make ios IOS_APP_ICON=...) to use artwork kept
+## outside the source tree; the recipe assembles a build-dir asset
+## catalog around it.  Either way the PNG must be 1024x1024, opaque,
+## and without alpha for App Store acceptance.
+ios_icon_png = $(if $(IOS_APP_ICON),$(IOS_APP_ICON),$(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/AppIcon.png)
 
 ## Provenance of the Emacs Mach-O for iOS.  Produced by the cross-
 ## build harness in cross/, which consumes the *.ios artifacts that
@@ -181,13 +187,24 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	cp -f $(ios_emacs_binary) $@
 	@if [ -f "$(ios_icon_png)" ]; then \
 	  echo "ios/Makefile: compiling app icon asset catalog"; \
+	  catalog="$(srcdir)/$(ios_appsrc)/Assets.xcassets"; \
+	  if [ -n "$(IOS_APP_ICON)" ]; then \
+	    catalog="$(abs_builddir)/Assets.xcassets"; \
+	    rm -rf "$$catalog"; \
+	    mkdir -p "$$catalog/AppIcon.appiconset"; \
+	    cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/Contents.json" \
+	      "$$catalog/Contents.json"; \
+	    cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/Contents.json" \
+	      "$$catalog/AppIcon.appiconset/Contents.json"; \
+	    cp "$(IOS_APP_ICON)" "$$catalog/AppIcon.appiconset/AppIcon.png"; \
+	  fi; \
 	  xcrun actool --compile "$(ios_appdir)" \
 	    --output-partial-info-plist \
 	      "$(abs_builddir)/actool-partial.plist" \
 	    --app-icon AppIcon \
 	    --platform $(ios_platform) \
 	    --minimum-deployment-target $(ios_min_version) \
-	    "$(srcdir)/$(ios_appsrc)/Assets.xcassets" \
+	    "$$catalog" \
 	    > /dev/null; \
 	  for key in CFBundleIconName CFBundleIcons \
 	             'CFBundleIcons~ipad' CFBundlePrimaryIcon; do \

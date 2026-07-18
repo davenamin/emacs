@@ -269,13 +269,28 @@ App Store submission requirements this port already carries
   * Launch screen.  UILaunchStoryboardName + storyboard, required
     for all submissions since mid-2020.
   * App icon.  NOT shipped -- Apple requires original artwork.
-    Drop a 1024x1024 PNG at
+    Either drop a 1024x1024 PNG at
     ios/Emacs.base/Assets.xcassets/AppIcon.appiconset/AppIcon.png
-    and the bundle step compiles it with actool (single-size
-    asset catalog, auto-scaled variants) and merges
-    CFBundleIconName / CFBundleIcons into Info.plist.  Store
-    validation rejects icon-less binaries (ITMS-90704 family);
-    Simulator / device development works fine without.
+    or keep the artwork outside the tree and pass its path on the
+    make command line:
+
+      make ios IOS_APP_ICON=$HOME/art/emacs-icon.png
+
+    Both routes compile the icon with actool (single-size asset
+    catalog, auto-scaled variants) and merge CFBundleIconName /
+    CFBundleIcons into Info.plist.  The PNG must be exactly
+    1024x1024 and fully opaque (no alpha channel) for App Store
+    acceptance.  Store validation rejects icon-less binaries
+    (ITMS-90704 family); Simulator / device development works
+    fine without.
+  * App name.  Pass --with-ios-app-name=NAME at configure time to
+    set the label under the home-screen icon
+    (CFBundleDisplayName) and the short name system UI uses
+    (CFBundleName; keep it 15 characters or fewer).  Defaults to
+    Emacs.  The bundle directory (Emacs.app) and executable name
+    are internal and unaffected.  Note the App Store product name
+    shown on the store page is set in App Store Connect, not in
+    the bundle.
   * Bundle identifier.  Pass --with-ios-bundle-id= at configure
     time; the App Store re-signs on ingestion and the published
     app carries no embedded provisioning profile (TN3125).
