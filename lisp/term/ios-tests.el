@@ -180,6 +180,12 @@ Results land in ~/ios-test-results.txt; one line per test."
     (dolist (p '(menu-bar-lines tab-bar-lines tool-bar-lines))
       (cl-assert (numberp (frame-parameter nil p)))))
 
+  (ios-test-deftest font-parameter-is-string
+    "the `font' frame parameter is a name string, not a font object"
+    ;; set-frame-font, frameset/desktop save, and describe-font all
+    ;; expect a string; a font object here signals wrong-type-argument.
+    (cl-assert (stringp (frame-parameter nil 'font))))
+
   ;;; --- Drag-n-drop handler ---------------------------------------
 
   (ios-test-deftest drag-n-drop-handler-bound

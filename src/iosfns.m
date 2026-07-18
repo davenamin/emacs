@@ -225,7 +225,12 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
      fontset_name(FRAME_FONTSET(f)), which is AREF(Vfontset_table, id)
      -- a negative id segfaults.  */
   FRAME_FONTSET (f) = fontset_from_font (font_obj);
-  store_frame_param (f, Qfont, font_obj);
+  /* The `font' frame parameter is a font-name string on every
+     port (gui_set_font stores its string argument), so anything
+     reading it -- set-frame-font, frameset/desktop save,
+     describe-font -- expects a string; storing the font object
+     here made those signal "Wrong type argument: stringp".  */
+  store_frame_param (f, Qfont, Ffont_xlfd_name (font_obj, Qnil, Qt));
 
   /* Geometry, in logical points (CoreGraphics + CTLine work in
      points; Retina scaling happens underneath).

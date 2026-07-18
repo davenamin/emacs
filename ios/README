@@ -425,7 +425,7 @@ Works:
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
   * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): twenty probes covering sandbox
+    ios-run-self-tests): twenty-one probes covering sandbox
     identity, file round-trip, clipboard, geometry, appearance,
     image load, face attributes, color-name resolution, theme
     face-spec matching, frame parameters, frame-background-mode,
