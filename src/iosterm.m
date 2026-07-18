@@ -198,12 +198,6 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
                                (void *) s->img->pixmap);
       return;
     }
-  char *utf8 = ios_glyph_string_to_utf8 (s);
-  if (utf8 == NULL || *utf8 == '\0')
-    {
-      if (utf8) xfree (utf8);
-      return;
-    }
   double font_size = (s->font && s->font->pixel_size > 0)
                      ? (double) s->font->pixel_size
                      : 14.0;
@@ -230,6 +224,23 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
       unsigned long cursor = f->output_data.ios->cursor_pixel;
       fg = bg;
       bg = cursor;
+    }
+
+  char *utf8 = ios_glyph_string_to_utf8 (s);
+  if (utf8 == NULL || *utf8 == '\0')
+    {
+      if (utf8) xfree (utf8);
+      /* No text, but the glyph string still owns its background.
+         Stretch glyphs materialize `:align-to' spaces -- the
+         backbone of tabulated-list header lines (package-menu) and
+         mode-line-format-right-align -- and returning early here
+         left those regions permanently unpainted: stale splash
+         pixels showed through the package-menu header, and the
+         mode line accumulated out-of-date text under its
+         right-align gap during on-device testing.  */
+      if (w > 0 && h > 0)
+        ios_canvas_clear_rect ((double) s->x, (double) s->y, w, h, bg);
+      return;
     }
 
   /* Translate face decorations into canvas flags.  Bold / italic

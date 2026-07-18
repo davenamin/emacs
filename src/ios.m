@@ -51,6 +51,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <sys/stat.h>
 
@@ -451,6 +452,20 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
    highlight_frame) would race frame deletion on the Emacs
    thread.  The drain in iosterm.m attaches the frame on the
    Emacs thread before storing the event.  */
+/* Monotonic milliseconds for input_event.timestamp.  keyboard.c's
+   click-count logic compares successive button timestamps against
+   double-click-time; the constant 0 previously stored here made
+   every tap look simultaneous with the previous one, so repeated
+   taps at the same spot escalated into double- and triple-clicks
+   indefinitely.  */
+static Time
+ios_event_timestamp (void)
+{
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  return (Time) ts.tv_sec * 1000 + ts.tv_nsec / 1000000;
+}
+
 static void
 ios_emit_button_event (int button, int updown, CGPoint pt)
 {
@@ -462,7 +477,7 @@ ios_emit_button_event (int button, int updown, CGPoint pt)
   ie.x = make_fixnum ((int) pt.x);
   ie.y = make_fixnum ((int) pt.y);
   ie.frame_or_window = Qnil;
-  ie.timestamp = 0;
+  ie.timestamp = ios_event_timestamp ();
   ios_enqueue_event (&ie);
 }
 
@@ -481,7 +496,7 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
   ie.y = make_fixnum ((int) pt.y);
   ie.frame_or_window = Qnil;
   ie.arg = Qnil;
-  ie.timestamp = 0;
+  ie.timestamp = ios_event_timestamp ();
   ios_enqueue_event (&ie);
 }
 
@@ -882,6 +897,12 @@ ios_hid_to_xkeysym (long hid)
 {
   switch (hid)
     {
+    /* Backspace must be intercepted here: UIKey.characters for the
+       hardware delete key is "\b" (0x08), so falling through to
+       ios_pack_uikey delivered C-h -- the help prefix -- instead of
+       deleting.  0xff08 is XK_BackSpace, which keyboard.c turns
+       into <backspace> and local-function-key-map remaps to DEL.  */
+    case UIKeyboardHIDUsageKeyboardDeleteOrBackspace: return 0xff08;
     case UIKeyboardHIDUsageKeyboardLeftArrow:    return 0xff51;
     case UIKeyboardHIDUsageKeyboardUpArrow:      return 0xff52;
     case UIKeyboardHIDUsageKeyboardRightArrow:   return 0xff53;
@@ -925,7 +946,7 @@ ios_emit_function_key (UIKey *key)
   ie.modifiers = mods;
   /* Frame attached by the drain on the Emacs thread.  */
   ie.frame_or_window = Qnil;
-  ie.timestamp = 0;
+  ie.timestamp = ios_event_timestamp ();
   ios_enqueue_event (&ie);
   return YES;
 }
@@ -1286,6 +1307,19 @@ void
 ios_set_backgrounded (bool flag)
 {
   atomic_store (&ios_backgrounded, flag);
+}
+
+/* The canvas view, for main-thread UIKit code that needs to anchor
+   presentation relative to Emacs frame coordinates (iosmenu.m's
+   popovers).  Frame pixels and canvas points are the same space, so
+   a popover sourceRect built from Emacs event coordinates is only
+   correct when its sourceView is this view -- anchoring to the root
+   view offset every popover by the safe-area inset.  Main thread
+   only; may return nil during launch.  */
+UIView *
+ios_menu_anchor_view (void)
+{
+  return ios_canvas;
 }
 
 static inline bool

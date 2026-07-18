@@ -40,6 +40,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "coding.h"
 #include "menu.h"
 
+/* The Emacs canvas view (ios.m).  Main thread only; nil during
+   launch.  */
+extern UIView *ios_menu_anchor_view (void);
+
 @interface IOSMenuNode : NSObject
 @property (nonatomic, copy) NSString *title;
 /* For leaves, the menu_items vector index of MENU_ITEMS_ITEM_NAME
@@ -319,12 +323,19 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y,
       return;
     }
   /* iPad: action sheets present as popovers; anchor at (x, y) so
-     they appear near the touch point.  */
+     they appear near the touch point.  X and y are Emacs frame
+     pixels, and frame pixels equal canvas points -- so the anchor
+     is only meaningful with the canvas as sourceView.  Anchoring to
+     the root view (as this code originally did) offset every
+     popover by the canvas's safe-area inset within the window,
+     which on-device read as menus pointing at the wrong mode-line
+     element.  */
   UIPopoverPresentationController *pop
     = sheet.popoverPresentationController;
   if (pop != nil)
     {
-      pop.sourceView = root.view;
+      UIView *anchor = ios_menu_anchor_view ();
+      pop.sourceView = anchor != nil ? anchor : root.view;
       pop.sourceRect = CGRectMake (x, y, 1, 1);
       pop.permittedArrowDirections = UIPopoverArrowDirectionAny;
     }
