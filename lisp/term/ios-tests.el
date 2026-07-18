@@ -201,6 +201,18 @@ Results land in ~/ios-test-results.txt; one line per test."
         (insert-file-contents bundle nil 0 4096)
         (cl-assert (search-forward "BEGIN CERTIFICATE" nil t)))))
 
+  ;;; --- Documentation ----------------------------------------------
+
+  (ios-test-deftest doc-strings-available
+    "built-in docstrings resolve through the bundled DOC file"
+    (cl-assert (stringp (documentation 'car))))
+
+  (ios-test-deftest info-manuals-present
+    "bundled Info directory exists and INFOPATH points at it"
+    (let ((dir (getenv "INFOPATH")))
+      (cl-assert (stringp dir))
+      (cl-assert (file-exists-p (expand-file-name "dir" dir)))))
+
   ;;; --- Write the results -----------------------------------------
 
   (let ((path (expand-file-name "ios-test-results.txt" "~")))

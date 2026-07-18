@@ -2053,8 +2053,14 @@ ios_setenv_bundle_paths (void)
     return;
   NSString *lisp = [bundle stringByAppendingPathComponent:@"lisp"];
   NSString *etc  = [bundle stringByAppendingPathComponent:@"etc"];
+  NSString *info = [bundle stringByAppendingPathComponent:@"info"];
   setenv ("EMACSLOADPATH", lisp.UTF8String, 1);
   setenv ("EMACSDATA",     etc.UTF8String,  1);
+  /* Built-in docstrings (etc/DOC) and the Info manuals also live
+     in the bundle; doc-directory follows EMACSDOC and info.el
+     seeds Info-directory-list from INFOPATH.  */
+  setenv ("EMACSDOC",      etc.UTF8String,  1);
+  setenv ("INFOPATH",      info.UTF8String, 1);
   ios_launch_log ([NSString stringWithFormat:
                    @"ios_setenv_bundle_paths: EMACSLOADPATH=%@ EMACSDATA=%@",
                    lisp, etc]);

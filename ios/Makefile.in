@@ -171,6 +171,27 @@ $(ios_appdir)/etc/charsets: $(ios_appdir)
 	security find-certificate -a -p \
 	  /System/Library/Keychains/SystemRootCertificates.keychain \
 	  > $(ios_appdir)/etc/ca-bundle.pem
+	## DOC (built-in docstrings) is generated into cross/etc by
+	## the top-level ios target; without it C-h on any C-level
+	## function or variable fails.  The Info manuals land in
+	## <srcdir>/info via make info.  ios.m points EMACSDOC and
+	## INFOPATH at these bundle locations.
+	@if [ -f "$(abs_top_builddir)/cross/etc/DOC" ]; then \
+	  cp -f "$(abs_top_builddir)/cross/etc/DOC" \
+	    "$(ios_appdir)/etc/DOC"; \
+	else \
+	  echo "ios/Makefile: cross/etc/DOC missing; C-h for" ; \
+	  echo "  built-ins will fail.  Run make ios from the top" ; \
+	  echo "  level to generate it." ; \
+	fi
+	@if [ -f "$(abs_top_srcdir)/info/dir" ]; then \
+	  rsync -a --delete --exclude='.git*' \
+	    "$(abs_top_srcdir)/info/" "$(ios_appdir)/info/"; \
+	else \
+	  echo "ios/Makefile: <srcdir>/info missing; Info manuals" ; \
+	  echo "  will be absent.  Run make ios from the top level" ; \
+	  echo "  to generate them." ; \
+	fi
 	touch $@ || true
 
 ## Step 2: drop the cross-compiled emacs binary into the bundle and

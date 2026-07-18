@@ -417,7 +417,15 @@ ios ios-bundle:
 ## through its own prerequisites.
 	$(MAKE) -C src bootstrap-emacs$(EXEEXT) bootstrap-emacs.pdmp
 	$(MAKE) -C lisp autoloads EMACS="../src/bootstrap-emacs$(EXEEXT)"
+## The Info manuals are also generated artifacts the bundle ships
+## (into <srcdir>/info, like the autoload files).
+	$(MAKE) info
 	$(MAKE) -C cross all
+## DOC must be generated from the iOS object list -- the cross
+## build skips it (its emacs target is just a temacs copy), and a
+## host DOC would lack the iOS-specific built-ins.  The rule runs
+## the host make-docfile over the cross objects.
+	$(MAKE) -C cross/src ../etc/DOC
 	$(MAKE) -C ios all
 
 ## Package the (signed) bundle as an .ipa for TestFlight / App
