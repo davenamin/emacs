@@ -22,21 +22,16 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    that the rest of the iOS port (iosterm.m, iosvfs.c, etc.) uses to
    talk back to UIKit.
 
-   Phase 1 of the runtime bring-up (this commit): UIApplicationMain
-   instantiates EmacsAppDelegate, which is defined IN THIS BINARY (it
-   previously lived only in ios/Emacs/AppDelegate.m, which is part of
-   the bundle template but is not compiled into the cross-built
-   binary -- so NSClassFromString returned nil and UIApplicationMain
-   sat on a nil delegate forever, producing the "launches but hangs"
-   symptom).  EmacsAppDelegate shows a red "Emacs is loading..."
-   screen so launch is visually confirmable, redirects stdout/stderr
-   to a file in the app's Documents/ directory so any C-level print
-   output is captured, and dispatches ios_main() to a background
-   queue so the (still-stub-heavy) Emacs initialization does not
-   block the UI thread.  Diagnostic breadcrumbs are appended to
-   Documents/emacs-launch.log at every step -- NSLog alone is
+   UIApplicationMain instantiates EmacsAppDelegate, which must be
+   defined in this binary: classes in the bundle template sources
+   (ios/Emacs/) are not compiled into the cross-built executable,
+   so NSClassFromString would return nil.  The delegate redirects
+   stdout/stderr into the app's Documents/ directory and runs
+   ios_main() on a dedicated background thread so Emacs
+   initialization never blocks the UI thread.  Launch breadcrumbs
+   are appended to Documents/emacs-launch.log; NSLog alone is
    unreliable on Simulator launches that happen outside
-   `xcrun simctl launch --console`.  */
+   `xcrun simctl launch --console'.  */
 
 #include <config.h>
 
@@ -384,20 +379,17 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
   if ((self = [super initWithFrame:frame]))
     {
       /* Match the system appearance until Emacs pushes its real
-         frame background (ios_canvas_set_background below): a
-         hardcoded white canvas showed white bars in dark mode
-         wherever sub-row slack or margins went unpainted, which
-         on-device testing read as broken layout.  */
+         frame background (ios_canvas_set_background below), so
+         unpainted margins and sub-row slack blend in under both
+         light and dark appearance.  */
       self.backgroundColor = UIColor.systemBackgroundColor;
       self.opaque = YES;
       _pending = [NSMutableArray array];
       _displayed = @[];
       _lock = [[NSLock alloc] init];
       self.userInteractionEnabled = YES;
-      /* A single-tap on the canvas pushes a RET into the input
-         queue.  This is enough to dismiss the splash screen and
-         get *scratch* to redisplay; multi-touch and real text
-         entry follow in later commits.  */
+      /* Single-tap: become first responder (bringing up the soft
+         keyboard) and synthesize a mouse-1 click; see handleTap.  */
       UITapGestureRecognizer *tap = [[UITapGestureRecognizer alloc]
                                      initWithTarget:self
                                      action:@selector (handleTap:)];
@@ -454,10 +446,8 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
    Emacs thread before storing the event.  */
 /* Monotonic milliseconds for input_event.timestamp.  keyboard.c's
    click-count logic compares successive button timestamps against
-   double-click-time; the constant 0 previously stored here made
-   every tap look simultaneous with the previous one, so repeated
-   taps at the same spot escalated into double- and triple-clicks
-   indefinitely.  */
+   double-click-time, so button events need real timestamps; a
+   constant would make every tap read as a multi-click.  */
 static Time
 ios_event_timestamp (void)
 {
@@ -898,10 +888,10 @@ ios_hid_to_xkeysym (long hid)
   switch (hid)
     {
     /* Backspace must be intercepted here: UIKey.characters for the
-       hardware delete key is "\b" (0x08), so falling through to
-       ios_pack_uikey delivered C-h -- the help prefix -- instead of
-       deleting.  0xff08 is XK_BackSpace, which keyboard.c turns
-       into <backspace> and local-function-key-map remaps to DEL.  */
+       hardware delete key is "\b" (0x08), which the character
+       packer would deliver as C-h, the help prefix.  0xff08 is
+       XK_BackSpace, which keyboard.c turns into <backspace> and
+       local-function-key-map remaps to DEL.  */
     case UIKeyboardHIDUsageKeyboardDeleteOrBackspace: return 0xff08;
     case UIKeyboardHIDUsageKeyboardLeftArrow:    return 0xff51;
     case UIKeyboardHIDUsageKeyboardUpArrow:      return 0xff52;
@@ -1695,12 +1685,10 @@ ios_emacs_bg_thread (void *unused)
 
 /* ---- EmacsAppDelegate ----------------------------------------- */
 
-/* UIApplicationDelegate that boots Emacs.  Defined in this binary so
-   UIApplicationMain's NSClassFromString lookup succeeds.  Phase 1:
-   shows a red placeholder screen, redirects stdio, and dispatches
-   ios_main() to a background queue.  Phase 2 will replace the
-   placeholder screen with an EmacsUIView once iosterm.m grows real
-   drawing.  */
+/* UIApplicationDelegate that boots Emacs.  Defined in this binary
+   so UIApplicationMain's NSClassFromString lookup succeeds.  Sets
+   up the window, canvas, and (in debug builds) the launch-log
+   strip, then starts the Emacs thread.  */
 
 @interface EmacsAppDelegate : UIResponder <UIApplicationDelegate>
 @property (strong, nonatomic) UIWindow *window;
@@ -1743,13 +1731,12 @@ ios_emacs_bg_thread (void *unused)
                   constraintEqualToAnchor:safe.trailingAnchor]];
   /* Bottom-pin to the KEYBOARD layout guide, not the safe area:
      the soft keyboard overlays the safe area without changing it,
-     so a safe-area-pinned canvas keeps its full height and the
-     keyboard covers the bottom rows -- which is precisely the
-     minibuffer, reported unusable ("truncated") from on-device
-     testing.  UIKeyboardLayoutGuide (iOS 15+, our deployment
+     so a safe-area-pinned canvas would keep its full height and
+     the keyboard would cover the bottom rows -- precisely the
+     minibuffer.  UIKeyboardLayoutGuide (iOS 15+, our deployment
      floor) tracks the keyboard's top edge and follows the
      safe-area bottom when the keyboard is hidden, so this one
-     constraint gives us shrink-on-show / grow-on-dismiss through
+     constraint provides shrink-on-show / grow-on-dismiss through
      the existing layoutSubviews -> resize channel.  */
   [cs addObject:[canvas.bottomAnchor
                   constraintEqualToAnchor:

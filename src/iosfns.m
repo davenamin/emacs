@@ -20,8 +20,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    It exposes Emacs Lisp primitives for frame creation, display
    geometry, tooltips, and other UIKit-backed user-visible features.
 
-   Skeleton only; the real implementation lands in follow-up
-   commits.  */
+   Mirrors the structure of androidfns.c.  */
 
 #include <config.h>
 
@@ -98,15 +97,7 @@ have a color display.  */)
 }
 
 DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
-       doc: /* SKIP: minimal iOS bring-up stub of x-create-frame.
-
-Allocates a struct frame attached to the one iOS display, sets
-output_method to output_ios, hooks up output_data.ios with sensible
-defaults, and returns the new frame.  Does NOT load fonts, register
-font drivers, draw anything, or wire input events: those are
-follow-up commits.  The frame is just real enough that startup.el's
-(make-frame ...) call completes and Lisp code can inspect frame
-parameters without crashing.  */)
+       doc: /* SKIP: real doc in xfns.c.  */)
   (Lisp_Object parms)
 {
   struct frame *f;
@@ -206,8 +197,7 @@ parameters without crashing.  */)
      is essentially always available -- and sizing from it directly
      means the first-ever redisplay already has the right cols and
      rows, instead of a whole-screen guess that visibly snaps when
-     the first resize event lands (mis-sized frames were the
-     first thing reported from on-device testing).
+     the first resize event lands.
 
      Fallback (canvas not yet laid out): the display's logical
      size, which at least has the right orientation.  */
@@ -279,8 +269,8 @@ parameters without crashing.  */)
   f->terminal->reference_count++;
   f->after_make_frame = true;
 
-  (void) kb;    /* silence unused warning until kb is consumed below */
-  (void) parms; /* same; parms is parsed for real in a follow-up */
+  (void) kb;
+  (void) parms;
   return frame;
 }
 

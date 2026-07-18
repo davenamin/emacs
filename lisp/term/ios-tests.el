@@ -182,8 +182,8 @@ Results land in ~/ios-test-results.txt; one line per test."
   ;; No live handshake here: a probe blocking in the GnuTLS C layer
   ;; against an unreachable network could hang the whole battery
   ;; before the results file is written.  Presence checks are
-  ;; deterministic; real handshakes are exercised on-device
-  ;; (package refresh) and manually.
+  ;; deterministic; real handshakes are exercised interactively
+  ;; (package refresh).
 
   (ios-test-deftest tls-available
     "gnutls-available-p reports the linked GnuTLS stack"

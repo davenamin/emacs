@@ -7286,11 +7286,8 @@ init_display_interactive (void)
 #ifdef HAVE_IOS
   /* iOS is always a GUI app -- there is no controlling tty and no
      interactive ncurses fallback that would make sense.  Take the
-     window-system path unconditionally and let ios_term_init wire up
-     the terminal.  ios_term_init is still a stub; until it returns a
-     real terminal, the initial frame stays output_initial -- code that
-     later touches its display will be the next thing to break, and
-     that's exactly the signal we want.  */
+     window-system path unconditionally and let ios_term_init wire
+     up the terminal.  */
   if (!inhibit_window_system)
     {
       Vinitial_window_system = Qios;

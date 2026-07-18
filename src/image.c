@@ -153,11 +153,10 @@ typedef struct pgtk_bitmap_record Bitmap_Record;
 #ifdef HAVE_IOS
 #include "iosterm.h"
 
-/* iOS image scaffolding is a stub for now: ios_pixmap is void *,
-   the GET_PIXEL / PUT_PIXEL hooks aren't wired to a real CGImage
-   yet.  These defines satisfy image.c's compile-time references
-   so the file links into the cross-built emacs; runtime image
-   support comes later.  */
+/* iOS renders images through the native image API
+   (ios_load_image / CGImage); the XImage-style pixel hooks below
+   satisfy image.c's compile-time references but are never used at
+   runtime.  */
 typedef struct ios_bitmap_record Bitmap_Record;
 
 #define GET_PIXEL(ximg, x, y)        ((unsigned long) 0)

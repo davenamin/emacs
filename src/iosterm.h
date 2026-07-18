@@ -94,8 +94,7 @@ typedef void *Emacs_Window;
 
 /* Bitmap allocation -- per-display ring of small image records that
    image.c hands out IDs against.  Same shape as androidterm.h's
-   android_bitmap_record; the iOS image code is itself a stub for
-   now so the fields stay minimal.  */
+   android_bitmap_record.  */
 struct ios_bitmap_record
 {
   /* The image backing the bitmap and its mask.  */

@@ -38,12 +38,10 @@
 	</array>
 	<!-- Without UIDeviceFamily, iOS classifies the app as
 	     iPhone-only; on an iPad it then runs inside the scaled
-	     iPhone compatibility window -- UIScreen reports the legacy
-	     480x320@2x geometry, everything renders upscaled ("fonts
-	     huge compared to the resolution"), and the window cannot be
-	     made fullscreen.  Observed exactly so during on-device
-	     testing.  1 = iPhone/iPod touch, 2 = iPad.  App Store
-	     ingestion also requires this key.  -->
+	     iPhone compatibility window: UIScreen reports the legacy
+	     480x320@2x geometry, everything renders upscaled, and the
+	     window cannot be made fullscreen.  1 = iPhone/iPod touch,
+	     2 = iPad.  App Store ingestion also requires this key.  -->
 	<key>UIDeviceFamily</key>
 	<array>
 		<integer>1</integer>

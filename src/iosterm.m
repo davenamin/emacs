@@ -22,9 +22,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    Emacs input_event values, and the inverse direction of drawing the
    glass into a CALayer-backed UIView.
 
-   This commit installs the skeleton only; the real implementation
-   lands in follow-up commits that mirror the structure of
-   androidterm.c.  */
+   The structure mirrors androidterm.c.  */
 
 #include <config.h>
 
@@ -179,7 +177,7 @@ extern void ios_canvas_draw_image (double x, double y,
                                    void *cgimage);
 
 static void
-ios_noop_draw_glyph_string (struct glyph_string *s)
+ios_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
   if (s->first_glyph && s->first_glyph->type == IMAGE_GLYPH)
@@ -230,14 +228,10 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
   if (utf8 == NULL || *utf8 == '\0')
     {
       if (utf8) xfree (utf8);
-      /* No text, but the glyph string still owns its background.
-         Stretch glyphs materialize `:align-to' spaces -- the
-         backbone of tabulated-list header lines (package-menu) and
-         mode-line-format-right-align -- and returning early here
-         left those regions permanently unpainted: stale splash
-         pixels showed through the package-menu header, and the
-         mode line accumulated out-of-date text under its
-         right-align gap during on-device testing.  */
+      /* No text, but the glyph string still owns its background:
+         stretch glyphs materialize `:align-to' spaces (tabulated
+         list header lines, mode-line-format-right-align), and
+         skipping them would leave stale pixels behind.  */
       if (w > 0 && h > 0)
         ios_canvas_clear_rect ((double) s->x, (double) s->y, w, h, bg);
       return;
@@ -276,13 +270,12 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
       if (weight > 100) deco |= IOS_DECO_BOLD;
     }
 
-  /* Pass the frame's column width so the canvas can position
-     every character on Emacs's integer cell grid.  Core Text's
-     natural advances (e.g. 8.43pt for 14pt SF Mono) disagree
-     with the ceil'd cell width Emacs lays out with (9pt), and
-     mixing the two grids shows up the moment single characters
-     are repainted -- cursor passage visibly re-typeset text
-     during on-device testing.  */
+  /* Pass the frame's column width so the canvas positions every
+     character on Emacs's integer cell grid.  Core Text's natural
+     advances (e.g. 8.43pt for 14pt SF Mono) disagree with the
+     ceil'd cell width Emacs lays out with (9pt); mixing the two
+     grids misplaces any glyph repainted on its own, e.g. by
+     cursor passage.  */
   ios_canvas_draw_text ((double) s->x, (double) s->y,
                         w, h, fg, bg, utf8, font_size, deco,
                         (double) FRAME_COLUMN_WIDTH (s->f));
@@ -369,7 +362,7 @@ ios_noop_define_frame_cursor (struct frame *f, Emacs_Cursor cursor)
 }
 
 static void
-ios_noop_clear_frame_area (struct frame *f, int x, int y, int width, int height)
+ios_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 {
   unsigned long bg = (f && f->output_data.ios)
                      ? FRAME_BACKGROUND_PIXEL (f) : 0xffffff;
@@ -384,7 +377,7 @@ ios_noop_clear_under_internal_border (struct frame *f)
 }
 
 static void
-ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
+ios_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                              int x, int y, enum text_cursor_kinds cursor_type,
                              int cursor_width, bool on_p, bool active_p)
 {
@@ -402,12 +395,10 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
        port-specific to do here.  */
     return;
 
-  /* CRITICAL bookkeeping: erase_phys_cursor consults
-     w->phys_cursor_on_p and returns without erasing when it is
-     false.  Without these assignments the generic machinery never
-     erases, and cursor motion without a text change (C-f, C-n,
-     blink) leaves a trail of stale cursor marks -- the port's
-     worst user-visible defect during on-device testing.  Mirrors
+  /* erase_phys_cursor consults w->phys_cursor_on_p and returns
+     without erasing when it is false; without these assignments
+     cursor motion without a text change (C-f, C-n, blink) leaves
+     stale cursor marks behind.  Mirrors
      android_draw_window_cursor.  */
   w->phys_cursor_type = cursor_type;
   w->phys_cursor_on_p = true;
@@ -445,13 +436,10 @@ ios_noop_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                           pixel, (int) cursor_type);
 }
 
-/* Separator between side-by-side windows (C-x 3).  Without it the
-   windows visually bleed into each other -- same defect family as
-   the other silently-empty drawing stubs found after on-device
-   testing.  A one-pixel line in the vertical-border face's
-   foreground (frame foreground when the face isn't realized),
-   painted through the same clear-rect command the erase path
-   uses.  */
+/* Separator between side-by-side windows (C-x 3): a one-pixel
+   line in the vertical-border face's foreground (frame foreground
+   when the face isn't realized), painted through the same
+   clear-rect command the erase path uses.  */
 static void
 ios_draw_vertical_window_border (struct window *w, int x, int y_0, int y_1)
 {
@@ -550,13 +538,9 @@ ios_term_update_end (struct frame *f)
 }
 static void
 ios_noop_flush_display (struct frame *f) { (void) f; }
-/* dispnew calls this AFTER deciding the run's rows moved on
-   screen; it will not redraw them.  An empty implementation
-   therefore leaves stale pixels behind on every scroll -- the
-   dominant "draws uncleanly" defect from on-device testing
-   (buffer scrolling, and the row shuffle when the minibuffer
-   grows and shrinks).  Geometry and mode-line clipping mirror
-   xterm's x_scroll_run.  */
+/* dispnew calls this AFTER committing the run's rows as moved;
+   it will not redraw them, so the pixels must really move.
+   Geometry and mode-line clipping mirror xterm's x_scroll_run.  */
 static void
 ios_scroll_run (struct window *w, struct run *run)
 {
@@ -593,12 +577,11 @@ ios_scroll_run (struct window *w, struct run *run)
                      (double) (to_y - from_y));
 }
 
-/* Redisplay interface for iOS frames.  Wire up the shared gui_*
-   helpers (defined in xdisp.c) for the produce/write/insert/
-   clear/glyph paths so init_iterator's first call to PRODUCE_GLYPHS
-   doesn't NULL-deref.  CALayer-backed drawing (draw_glyph_string,
-   draw_window_cursor, ...) is still NULL; we'll fill those in once
-   the EmacsUIView has a real Core Graphics back-end.  */
+/* Redisplay interface for iOS frames.  Shared gui_* helpers
+   (defined in xdisp.c) cover the produce/write/insert/clear
+   paths; the ios_* entries draw through the EmacsUIView command
+   queue.  Slots left as noops are either unreachable on iOS or
+   have no useful implementation (see each function's comment).  */
 static struct redisplay_interface ios_redisplay_interface =
   {
     ios_frame_parm_handlers,
@@ -618,11 +601,11 @@ static struct redisplay_interface ios_redisplay_interface =
     ios_noop_define_fringe_bitmap,
     ios_noop_destroy_fringe_bitmap,
     ios_noop_compute_glyph_string_overhangs,
-    ios_noop_draw_glyph_string,
+    ios_draw_glyph_string,
     ios_noop_define_frame_cursor,
-    ios_noop_clear_frame_area,
+    ios_clear_frame_area,
     ios_noop_clear_under_internal_border,
-    ios_noop_draw_window_cursor,
+    ios_draw_window_cursor,
     ios_draw_vertical_window_border,
     ios_draw_window_divider,
     ios_noop_shift_glyphs_for_insert,
@@ -1480,10 +1463,7 @@ syms_of_iosterm (void)
 {
   /* Qios itself is DEFSYM'd in frame.c alongside Qandroid and the
      other window-system symbols: framep returns it from every
-     build, including the host build of an iOS tree (which
-     compiles frame.c but not this file -- the host bootstrap pass
-     added for autoload generation broke exactly there when the
-     DEFSYM lived here).  */
+     build, including builds that do not compile this file.  */
   Fprovide (Qios, Qnil);
 
   /* Cross-port "x-*" variables that cus-start.el expects to be bound

@@ -23,10 +23,10 @@
 ;;; Commentary:
 
 ;; This file contains the support for initializing the Lisp side of
-;; iOS windowing.  It is the iOS counterpart to lisp/term/android-win.el
-;; and lisp/term/ns-win.el, and is currently a stub: subsequent commits
-;; will populate it with clipboard, drag-and-drop, gesture, and frame
-;; handling functions in parallel to android-win.el.
+;; iOS windowing: window-system setup, pasteboard integration,
+;; Files-app access, drag-and-drop, soft-keyboard hooks, TLS trust
+;; anchors, and dired configuration.  It is the iOS counterpart to
+;; lisp/term/android-win.el and lisp/term/ns-win.el.
 
 ;;; Code:
 
@@ -69,15 +69,10 @@ UIKit's `traitCollectionDidChange:'.  Default binding refreshes
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
-WINDOW-SYSTEM is `ios'.  DISPLAY is ignored.  This is a minimal stub
-that lets startup.el's window-system bring-up reach completion; the
-underlying terminal (the one ios_term_init will produce) is the
-actual graphics back end and is still being filled in."
+WINDOW-SYSTEM is `ios'.  DISPLAY is ignored."
   (create-default-fontset)
   ;; Seed frame-background-mode from the OS-wide appearance so the
-  ;; default theme picks dark or light accordingly.  Defensive: a
-  ;; stub binary built before ios-system-appearance landed would
-  ;; signal void-function and break startup.
+  ;; default theme picks dark or light accordingly.
   (when (fboundp 'ios-system-appearance)
     (let ((mode (ios-system-appearance)))
       (when (memq mode '(dark light))

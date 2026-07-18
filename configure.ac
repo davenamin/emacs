@@ -1615,10 +1615,9 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   # The OUTER host pass keeps the default pdumper strategy: the
   # ios target builds host bootstrap-emacs + bootstrap-emacs.pdmp
   # to generate the bundle's autoload files, and forcing
-  # DUMPING=none there left src/Makefile without the
-  # bootstrap-emacs.pdmp rule ("No rule to make target" in CI),
-  # while also making every batch invocation of bootstrap-emacs
-  # pay a full source-form loadup.
+  # DUMPING=none there would leave src/Makefile without the
+  # bootstrap-emacs.pdmp rule while also making every batch
+  # invocation of bootstrap-emacs pay a full source-form loadup.
   if test "$XCONFIGURE" = "ios"; then
     with_dumping=none
     with_pdumper=no

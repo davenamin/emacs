@@ -324,12 +324,9 @@ ios_present_node (IOSMenuNode *node, int serial, int x, int y,
     }
   /* iPad: action sheets present as popovers; anchor at (x, y) so
      they appear near the touch point.  X and y are Emacs frame
-     pixels, and frame pixels equal canvas points -- so the anchor
-     is only meaningful with the canvas as sourceView.  Anchoring to
-     the root view (as this code originally did) offset every
-     popover by the canvas's safe-area inset within the window,
-     which on-device read as menus pointing at the wrong mode-line
-     element.  */
+     pixels, and frame pixels equal canvas points, so the anchor is
+     only meaningful with the canvas as sourceView -- the root view
+     is offset from the canvas by the safe-area inset.  */
   UIPopoverPresentationController *pop
     = sheet.popoverPresentationController;
   if (pop != nil)
