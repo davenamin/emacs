@@ -154,6 +154,13 @@ Results land in ~/ios-test-results.txt; one line per test."
     "frame-background-mode is one of light / dark"
     (cl-assert (memq frame-background-mode '(light dark))))
 
+  (ios-test-deftest frame-bar-parameters-numeric
+    "menu/tab/tool-bar-lines frame parameters are numbers"
+    ;; window-deletable-p and friends do arithmetic on these; a
+    ;; port that fails to store them breaks every window dismissal.
+    (dolist (p '(menu-bar-lines tab-bar-lines tool-bar-lines))
+      (cl-assert (numberp (frame-parameter nil p)))))
+
   ;;; --- Drag-n-drop handler ---------------------------------------
 
   (ios-test-deftest drag-n-drop-handler-bound

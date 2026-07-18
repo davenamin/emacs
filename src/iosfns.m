@@ -140,6 +140,19 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
   store_frame_param (f, Qforeground_color, build_string ("black"));
   store_frame_param (f, Qbackground_color, build_string ("white"));
 
+  /* The bar-line counts must exist in param_alist as numbers from
+     the start: window-management code does arithmetic on them
+     ((> (frame-parameter f 'tab-bar-lines) 0) in window-deletable-p
+     runs whenever a window is dismissed), and a missing parameter
+     reads back as nil.  Every port stores these at frame creation;
+     the ios_set_* handlers below keep them current afterwards.  */
+  store_frame_param (f, Qmenu_bar_lines,
+                     make_fixnum (FRAME_MENU_BAR_LINES (f)));
+  store_frame_param (f, Qtab_bar_lines,
+                     make_fixnum (FRAME_TAB_BAR_LINES (f)));
+  store_frame_param (f, Qtool_bar_lines,
+                     make_fixnum (FRAME_TOOL_BAR_LINES (f)));
+
   /* Fontset starts unset; -1 is the "no fontset" sentinel that
      fontset.c recognizes.  */
   FRAME_FONTSET (f) = -1;
