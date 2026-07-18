@@ -85,7 +85,9 @@ extern void ios_canvas_draw_text (double x, double y,
                                   unsigned long fg_pixel,
                                   unsigned long bg_pixel,
                                   const char *utf8, double font_size,
-                                  unsigned deco, double cell_width);
+                                  unsigned deco, double cell_width,
+                                  double clip_x, double clip_y,
+                                  double clip_width, double clip_height);
 
 /* Decoration bits the canvas understands; must match the
    EmacsDrawDeco enum in ios.m.  */
@@ -176,12 +178,22 @@ ios_glyph_string_to_utf8 (struct glyph_string *s)
    scope; declared here so the IMAGE_GLYPH branch can call it.  */
 extern void ios_canvas_draw_image (double x, double y,
                                    double width, double height,
-                                   void *cgimage);
+                                   void *cgimage,
+                                   double clip_x, double clip_y,
+                                   double clip_width, double clip_height);
 
 static void
 ios_draw_glyph_string (struct glyph_string *s)
 {
   ios_dbg_draw++;
+
+  /* Clip to the window area owning this glyph string, exactly as
+     the other ports do.  Without it, the partially-visible last
+     row of a window whose height is not a whole number of lines
+     paints its full height over the mode line below it.  */
+  NativeRectangle clip;
+  get_glyph_string_clip_rect (s, &clip);
+
   if (s->first_glyph && s->first_glyph->type == IMAGE_GLYPH)
     {
       /* Image glyph: paint the image at the glyph string's
@@ -195,7 +207,10 @@ ios_draw_glyph_string (struct glyph_string *s)
                                          ? s->slice.width : s->width),
                                (double) (s->slice.height > 0
                                          ? s->slice.height : s->height),
-                               (void *) s->img->pixmap);
+                               (void *) s->img->pixmap,
+                               (double) clip.x, (double) clip.y,
+                               (double) clip.width,
+                               (double) clip.height);
       return;
     }
   double font_size = (s->font && s->font->pixel_size > 0)
@@ -235,7 +250,10 @@ ios_draw_glyph_string (struct glyph_string *s)
          list header lines, mode-line-format-right-align), and
          skipping them would leave stale pixels behind.  */
       if (w > 0 && h > 0)
-        ios_canvas_clear_rect ((double) s->x, (double) s->y, w, h, bg);
+        ios_canvas_draw_text ((double) s->x, (double) s->y, w, h,
+                              fg, bg, "", font_size, 0, 0,
+                              (double) clip.x, (double) clip.y,
+                              (double) clip.width, (double) clip.height);
       return;
     }
 
@@ -284,7 +302,9 @@ ios_draw_glyph_string (struct glyph_string *s)
      cursor passage.  */
   ios_canvas_draw_text ((double) s->x, (double) s->y,
                         w, h, fg, bg, utf8, font_size, deco,
-                        (double) FRAME_COLUMN_WIDTH (s->f));
+                        (double) FRAME_COLUMN_WIDTH (s->f),
+                        (double) clip.x, (double) clip.y,
+                        (double) clip.width, (double) clip.height);
   xfree (utf8);
 }
 
@@ -475,6 +495,14 @@ ios_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
               ? glyph_row->height
               : FRAME_LINE_HEIGHT (f);
   unsigned long pixel = f->output_data.ios->cursor_pixel;
+
+  /* Clamp to the window's text area: on a partially visible last
+     row the cursor must not paint over the mode line below.  */
+  int text_bottom = WINDOW_TOP_EDGE_Y (w) + window_text_bottom_y (w);
+  if (abs_y + h_px > text_bottom)
+    h_px = text_bottom - abs_y;
+  if (h_px <= 0)
+    return;
 
   if (cursor_type == FILLED_BOX_CURSOR)
     {

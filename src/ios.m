@@ -321,6 +321,15 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 @property (nonatomic) CGFloat fontSize;
 @property (nonatomic) EmacsDrawDeco deco;
 @property (nonatomic) CGFloat shiftDy;   /* EmacsDrawKindShift only */
+/* Clip rectangle in Emacs (top-left) coordinates; clipWidth <= 0
+   means unclipped.  Redisplay clips glyph strings to the window
+   area that owns them -- most visibly the partially-visible last
+   row of a window whose height is not an exact multiple of the
+   line height, which must not paint over the mode line below.  */
+@property (nonatomic) CGFloat clipX;
+@property (nonatomic) CGFloat clipY;
+@property (nonatomic) CGFloat clipWidth;
+@property (nonatomic) CGFloat clipHeight;
 /* Emacs cell (column) width in points.  Text is positioned per
    composed character on this grid rather than with Core Text's
    natural advances; 0 falls back to a single natural-advance
@@ -1063,7 +1072,18 @@ ios_emit_function_key (UIKey *key)
       if (cmd.kind == EmacsDrawKindShift)
         [self renderShift:cmd];
       else
-        [self renderCommand:cmd];
+        {
+          CGContextSaveGState (_backing);
+          if (cmd.clipWidth > 0)
+            CGContextClipToRect (_backing,
+                                 CGRectMake (cmd.clipX,
+                                             _backingH - cmd.clipY
+                                             - cmd.clipHeight,
+                                             cmd.clipWidth,
+                                             cmd.clipHeight));
+          [self renderCommand:cmd];
+          CGContextRestoreGState (_backing);
+        }
     }
   [_lock unlock];
 }
@@ -1513,7 +1533,9 @@ void
 ios_canvas_draw_text (double x, double y, double width, double height,
                       unsigned long fg_pixel, unsigned long bg_pixel,
                       const char *utf8, double font_size,
-                      unsigned deco, double cell_width)
+                      unsigned deco, double cell_width,
+                      double clip_x, double clip_y,
+                      double clip_width, double clip_height)
 {
   if (ios_is_backgrounded ())
     return;
@@ -1532,6 +1554,10 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.fontSize = font_size > 0 ? font_size : 14;
   cmd.deco = (EmacsDrawDeco) deco;
   cmd.cellWidth = cell_width;
+  cmd.clipX = clip_x;
+  cmd.clipY = clip_y;
+  cmd.clipWidth = clip_width;
+  cmd.clipHeight = clip_height;
   [v drawCommand:cmd];
 }
 
@@ -1563,7 +1589,9 @@ ios_canvas_clear_rect (double x, double y, double width, double height,
    clears the pixmap stays safe.  */
 void
 ios_canvas_draw_image (double x, double y, double width, double height,
-                       void *cgimage)
+                       void *cgimage,
+                       double clip_x, double clip_y,
+                       double clip_width, double clip_height)
 {
   if (ios_is_backgrounded ())
     return;
@@ -1577,6 +1605,10 @@ ios_canvas_draw_image (double x, double y, double width, double height,
   cmd.width = width;
   cmd.height = height;
   cmd.cgImage = (CGImageRef) cgimage;   /* setter retains */
+  cmd.clipX = clip_x;
+  cmd.clipY = clip_y;
+  cmd.clipWidth = clip_width;
+  cmd.clipHeight = clip_height;
   [v drawCommand:cmd];
 }
 
