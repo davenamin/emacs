@@ -337,6 +337,37 @@ ios_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
     }
 }
 
+/* Deliberate noops, matching slots the Android port also leaves
+   empty or that have no iOS meaning:
+
+   define/destroy_fringe_bitmap: ios_draw_fringe_bitmap renders
+   from the fringe parameter's bit pattern on every call, so no
+   per-terminal bitmap cache exists to maintain.
+
+   compute_glyph_string_overhangs: the font driver reports
+   uniform cell metrics (lbearing 0, rbearing == width), so every
+   overhang is zero, which is what the unset fields already say.
+
+   define_frame_cursor: mouse pointer shapes; iOS has no drawn
+   pointer.
+
+   flush_display: drawing commands reach the view queue as they
+   are issued and there is no back buffer to flip.
+
+   update_window_begin/end: NULL in the Android port as well; the
+   generic machinery does the per-window bookkeeping.
+
+   shift_glyphs_for_insert: reached only through insert/delete
+   character output optimizations that redisplay does not use on
+   window systems.
+
+   show/hide_hourglass: implemented via pointer shapes on other
+   ports; no pointer here.
+
+   default_font_parameter: the port has a single font family (the
+   system monospaced font), so there is no selection to make at
+   frame creation.  */
+
 static void
 ios_noop_define_fringe_bitmap (int which, unsigned short *bits, int h, int wd)
 {
@@ -371,9 +402,29 @@ ios_clear_frame_area (struct frame *f, int x, int y, int width, int height)
 }
 
 static void
-ios_noop_clear_under_internal_border (struct frame *f)
+ios_clear_under_internal_border (struct frame *f)
 {
-  (void) f;
+  int border = FRAME_INTERNAL_BORDER_WIDTH (f);
+
+  if (border <= 0)
+    return;
+
+  int width = FRAME_PIXEL_WIDTH (f);
+  int height = FRAME_PIXEL_HEIGHT (f);
+  int margin = FRAME_TOP_MARGIN_HEIGHT (f);
+  int bottom_margin = FRAME_BOTTOM_MARGIN_HEIGHT (f);
+  int face_id = (!NILP (Vface_remapping_alist)
+                 ? lookup_basic_face (NULL, f, INTERNAL_BORDER_FACE_ID)
+                 : INTERNAL_BORDER_FACE_ID);
+  struct face *face = FACE_FROM_ID_OR_NULL (f, face_id);
+  unsigned long color = face ? face->background
+                             : FRAME_BACKGROUND_PIXEL (f);
+
+  ios_canvas_clear_rect (0, margin, width, border, color);
+  ios_canvas_clear_rect (0, 0, border, height, color);
+  ios_canvas_clear_rect (width - border, 0, border, height, color);
+  ios_canvas_clear_rect (0, height - bottom_margin - border,
+                         width, border, color);
 }
 
 static void
@@ -484,10 +535,15 @@ ios_noop_default_font_parameter (struct frame *f, Lisp_Object parms)
 }
 
 static void
-ios_noop_after_update_window_line (struct window *w,
-                                   struct glyph_row *desired_row)
+ios_after_update_window_line (struct window *w,
+                              struct glyph_row *desired_row)
 {
-  (void) w; (void) desired_row;
+  eassert (w);
+
+  /* Fringe bitmaps are drawn by a separate pass; force it after
+     the row's contents change so bitmaps never go stale.  */
+  if (!desired_row->mode_line_p && !w->pseudo_window_p)
+    desired_row->redraw_fringe_bitmaps_p = true;
 }
 
 static void
@@ -506,6 +562,16 @@ ios_noop_update_window_end (struct window *w, bool cursor_on_p,
    above can't.  */
 
 extern void ios_launch_log (NSString *);
+
+/* terminal->frame_up_to_date_hook.  Re-run the mouse highlight at
+   its last known position once redisplay settles, so a highlight
+   deferred during the update (or invalidated by text moving under
+   an active drag) is restored.  */
+static void
+ios_frame_up_to_date (struct frame *f)
+{
+  FRAME_MOUSE_UPDATE (f);
+}
 
 static void
 ios_term_update_begin (struct frame *f)
@@ -590,7 +656,7 @@ static struct redisplay_interface ios_redisplay_interface =
     gui_insert_glyphs,
     gui_clear_end_of_line,
     ios_scroll_run,
-    ios_noop_after_update_window_line,
+    ios_after_update_window_line,
     ios_noop_update_window_begin,
     ios_noop_update_window_end,
     ios_noop_flush_display,
@@ -604,7 +670,7 @@ static struct redisplay_interface ios_redisplay_interface =
     ios_draw_glyph_string,
     ios_noop_define_frame_cursor,
     ios_clear_frame_area,
-    ios_noop_clear_under_internal_border,
+    ios_clear_under_internal_border,
     ios_draw_window_cursor,
     ios_draw_vertical_window_border,
     ios_draw_window_divider,
@@ -778,6 +844,7 @@ ios_term_init (void)
   terminal->defined_color_hook = ios_defined_color;
   terminal->update_begin_hook = ios_term_update_begin;
   terminal->update_end_hook = ios_term_update_end;
+  terminal->frame_up_to_date_hook = ios_frame_up_to_date;
   terminal->mouse_position_hook = ios_mouse_position;
   terminal->ring_bell_hook = ios_ring_bell;
   terminal->menu_show_hook = ios_menu_show;
