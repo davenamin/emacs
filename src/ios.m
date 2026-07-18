@@ -364,6 +364,7 @@ extern void ios_enqueue_event (struct input_event *ie);
 extern void ios_publish_canvas_size (double width, double height);
 extern void ios_publish_mouse_motion (double x, double y);
 extern void ios_publish_appearance_change (void);
+extern void ios_publish_foreground_expose (void);
 extern void ios_publish_open_file (const char *path);
 extern void ios_publish_pinch (double x, double y, double dx, double dy,
                                double scale, double angle);
@@ -1964,6 +1965,10 @@ ios_emacs_bg_thread (void *unused)
 {
   ios_launch_log (@"AppDelegate applicationDidBecomeActive");
   ios_set_backgrounded (false);
+  /* Force a full repaint: the backing store received no draws
+     while backgrounded, so parts of it are stale until Emacs
+     redraws from scratch.  */
+  ios_publish_foreground_expose ();
   /* UIKit resigns the first responder around scene deactivation;
      without re-acquiring it here, hardware keyboard input is dead
      after returning to the app until the user taps the canvas.  */

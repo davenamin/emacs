@@ -809,6 +809,12 @@ static bool ios_motion_dirty = false;
    sharing the (uncontended) lock keeps the cross-thread
    publishing protocol uniform.  */
 static bool ios_appearance_dirty = false;
+/* Set by ios_publish_foreground_expose when the app returns to
+   the foreground; the Emacs-thread drain garbages every frame so
+   the backing store, which received no draws while backgrounded,
+   is fully repainted.  Guarded by ios_motion_lock like the
+   appearance flag.  */
+static bool ios_foreground_expose = false;
 
 static void
 ios_ring_bell (struct frame *f)
@@ -1209,6 +1215,41 @@ ios_apply_pending_appearance (void)
   safe_run_hooks (intern_c_string ("ios-appearance-changed-hook"));
 }
 
+/* Publish a foreground-expose from the UIKit thread.  */
+void
+ios_publish_foreground_expose (void)
+{
+  pthread_mutex_lock (&ios_motion_lock);
+  ios_foreground_expose = true;
+  pthread_mutex_unlock (&ios_motion_lock);
+  ios_wake ();
+}
+
+/* Force a full repaint of every frame after a return to the
+   foreground.  While backgrounded the ios_canvas_* draw sinks are
+   no-ops, yet redisplay still marks its glyph matrices as drawn,
+   so on return Emacs believes the screen is current and would
+   leave whatever was "drawn" while away missing from the backing
+   store.  Garbaging the frames forces a from-scratch redraw.  */
+static void
+ios_apply_pending_foreground_expose (void)
+{
+  bool dirty;
+  pthread_mutex_lock (&ios_motion_lock);
+  dirty = ios_foreground_expose;
+  ios_foreground_expose = false;
+  pthread_mutex_unlock (&ios_motion_lock);
+  if (!dirty)
+    return;
+  Lisp_Object tail, frame;
+  FOR_EACH_FRAME (tail, frame)
+    {
+      struct frame *f = XFRAME (frame);
+      if (FRAME_IOS_P (f) && FRAME_VISIBLE_P (f))
+        SET_FRAME_GARBAGED (f);
+    }
+}
+
 /* Consume the dirty bit and call note_mouse_highlight on the
    selected frame so the region highlight follows the finger
    during drag-select.  No-op if no motion has been published
@@ -1341,6 +1382,9 @@ ios_drain_events (struct terminal *terminal, struct input_event *hold_quit)
   /* And run ios-appearance-changed-hook if dark / light just
      flipped under us.  */
   ios_apply_pending_appearance ();
+  /* And force a full repaint if we just returned to the
+     foreground (the backing store received no draws while away).  */
+  ios_apply_pending_foreground_expose ();
   /* And turn any open-this-file request from another app into a
      drag-n-drop event.  */
   ios_apply_pending_open (hold_quit);
