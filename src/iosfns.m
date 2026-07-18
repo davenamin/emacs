@@ -223,10 +223,9 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
   f->pixel_width  = f->text_width;
   f->pixel_height = f->text_height;
 
-  /* Initialize the face cache (allocates it via make_face_cache and
-     calls realize_basic_faces).  This is the call that previously
-     SIGSEGVd; it should succeed now that FRAME_FONT and color
-     pixels are non-sentinel.  */
+  /* Initialize the face cache (allocates it via make_face_cache
+     and calls realize_basic_faces).  Requires FRAME_FONT and the
+     color pixels above to be valid.  */
   init_frame_faces (f);
 
   /* Call change_frame_size so Emacs's window layout machinery

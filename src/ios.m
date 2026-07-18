@@ -1491,9 +1491,10 @@ ios_hide_tooltip (void)
 
    The canvas must never resign first responder to dismiss the
    soft keyboard: hardware key events (pressesBegan:) arrive only
-   while it is first responder, so resigning left external
-   keyboards dead after every minibuffer exit.  Instead swap in an
-   empty inputView, which hides the soft keyboard while keeping
+   while it is first responder, and the minibuffer hooks hide the
+   keyboard on every exit -- resigning would leave external
+   keyboards dead from then on.  Instead swap in an empty
+   inputView, which hides the soft keyboard while keeping
    responder status.  */
 void
 ios_set_keyboard_visible (bool visible)

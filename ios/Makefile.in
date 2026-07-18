@@ -180,14 +180,13 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
                      $(ios_appdir)/lisp/loadup.el \
                      $(ios_appdir)/etc/charsets
 	cp -f $(ios_emacs_binary) $@
-	## actool reports errors on stdout and has been seen exiting 0
-	## while doing so; the icon step below therefore logs actool's
-	## output and treats the run as failed unless the compiled
-	## Assets.car landed in the bundle and the partial plist
-	## parses, printing the log in that case.  (The icon keys sit
-	## NESTED under CFBundleIcons/CFBundlePrimaryIcon in the
-	## partial plist, so probing a top-level key is not a valid
-	## success check.)
+	## actool reports errors on stdout and can exit 0 while doing
+	## so; the icon step below therefore logs actool's output and
+	## treats the run as failed unless the compiled Assets.car
+	## landed in the bundle and the partial plist parses, printing
+	## the log in that case.  (The icon keys sit nested under
+	## CFBundleIcons/CFBundlePrimaryIcon in the partial plist, so
+	## probing a top-level key is not a valid success check.)
 	@if [ -f "$(ios_icon_png)" ]; then \
 	  echo "ios/Makefile: compiling app icon asset catalog"; \
 	  catalog="$(srcdir)/$(ios_appsrc)/Assets.xcassets"; \

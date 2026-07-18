@@ -221,6 +221,19 @@ Inspect the signed entitlements with `codesign -d --entitlements
 App.app/embedded.mobileprovision`; compare `application-identifier`,
 `TeamIdentifier`, `ProvisionedDevices`, and every entitlement key.
 
+If codesign itself fails with errSecInternalComponent, the
+Security framework could not use the signing key: the login
+keychain is locked (typical after a reboot, and always over SSH)
+or the key's access control does not authorize codesign
+non-interactively.  Unlock with
+
+  security unlock-keychain login.keychain-db
+
+and, if it recurs, authorize the key permanently:
+
+  security set-key-partition-list -S apple-tool:,apple: \
+    -k <login-password> login.keychain-db
+
 devicectl needs Xcode 15+ and iOS 17+.  Older targets need
 ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
 `--console` flag for streaming the app's stdout/stderr requires
