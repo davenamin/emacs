@@ -360,6 +360,10 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
 - (void) appendCommand:(EmacsDrawCommand *)cmd;
 - (void) beginFrame;
 - (void) endFrame;
+/* When set, inputView returns an empty view so the soft keyboard
+   stays hidden while the canvas remains first responder (hardware
+   keys keep flowing).  */
+- (void) setKeyboardSuppressed:(BOOL)flag;
 @end
 
 @implementation EmacsUIView
@@ -372,6 +376,20 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
   NSMutableArray<EmacsDrawCommand *> *_pending;
   NSArray<EmacsDrawCommand *> *_displayed;
   NSLock *_lock;
+  /* Non-nil replaces the system keyboard; see
+     setKeyboardSuppressed.  */
+  UIView *_suppressedInputView;
+}
+
+- (void) setKeyboardSuppressed:(BOOL)flag
+{
+  _suppressedInputView
+    = flag ? [[UIView alloc] initWithFrame:CGRectZero] : nil;
+}
+
+- (UIView *) inputView
+{
+  return _suppressedInputView;
 }
 
 - (instancetype) initWithFrame:(CGRect)frame
@@ -829,14 +847,16 @@ ios_pack_uikey (UIKey *key)
      already reflects it.  */
   int mods = ios_mods_from_flags (key.modifierFlags, false);
 
-  /* For Control combos prefer charactersIgnoringModifiers so
-     C-Shift-a still produces 'a' (which the canonicalization
-     below turns into 0x01).  For everything else use characters,
-     which already applies Shift / AltGr layout-correctly: Shift+a
-     is "A", Shift+1 on US is "!", and on non-US layouts Option-e
-     etc. produce the right composed glyphs.  */
+  /* For Control and Option combos prefer
+     charactersIgnoringModifiers: C-Shift-a must produce 'a' (the
+     canonicalization below turns it into 0x01), and with Option
+     acting as Meta, key.characters would be the Option-layer
+     glyph -- Option-f is a florin sign on a US layout -- so M-f
+     would arrive as Meta plus that glyph instead of Meta-f.  For
+     everything else use characters, which applies Shift
+     layout-correctly: Shift+a is "A", Shift+1 on US is "!".  */
   NSString *chars =
-    (key.modifierFlags & UIKeyModifierControl)
+    (key.modifierFlags & (UIKeyModifierControl | UIKeyModifierAlternate))
     ? key.charactersIgnoringModifiers
     : key.characters;
   if (chars.length == 0)
@@ -1414,7 +1434,14 @@ ios_hide_tooltip (void)
 /* Show or hide the software keyboard from Lisp (via the
    ios-show-keyboard / ios-hide-keyboard primitives in iosfns.m).
    Called on the Emacs thread; hops to the main queue because
-   first-responder changes are UI-thread-only.  */
+   responder and input-view changes are UI-thread-only.
+
+   The canvas must never resign first responder to dismiss the
+   soft keyboard: hardware key events (pressesBegan:) arrive only
+   while it is first responder, so resigning left external
+   keyboards dead after every minibuffer exit.  Instead swap in an
+   empty inputView, which hides the soft keyboard while keeping
+   responder status.  */
 void
 ios_set_keyboard_visible (bool visible)
 {
@@ -1422,10 +1449,9 @@ ios_set_keyboard_visible (bool visible)
     EmacsUIView *v = ios_canvas;
     if (v == nil)
       return;
-    if (visible)
-      [v becomeFirstResponder];
-    else
-      [v resignFirstResponder];
+    [v setKeyboardSuppressed:!visible];
+    [v reloadInputViews];
+    [v becomeFirstResponder];
   });
 }
 
@@ -1848,6 +1874,10 @@ ios_emacs_bg_thread (void *unused)
 {
   ios_launch_log (@"AppDelegate applicationDidBecomeActive");
   ios_set_backgrounded (false);
+  /* UIKit resigns the first responder around scene deactivation;
+     without re-acquiring it here, hardware keyboard input is dead
+     after returning to the app until the user taps the canvas.  */
+  [ios_canvas becomeFirstResponder];
 }
 
 - (void)applicationWillResignActive:(UIApplication *)application
