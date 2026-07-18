@@ -322,6 +322,11 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 @property (nonatomic) CGFloat fontSize;
 @property (nonatomic) EmacsDrawDeco deco;
 @property (nonatomic) CGFloat shiftDy;   /* EmacsDrawKindShift only */
+/* Emacs cell (column) width in points.  Text is positioned per
+   composed character on this grid rather than with Core Text's
+   natural advances; 0 falls back to a single natural-advance
+   CTLine (pre-grid behavior).  */
+@property (nonatomic) CGFloat cellWidth;
 /* For EmacsDrawKindImage: a manually-CGImageRetained image.  CGImage
    is not toll-free-bridged to NSObject, so an ARC strong id would
    leak: the setter manages the retain explicitly, and dealloc
@@ -1153,16 +1158,60 @@ ios_emit_function_key (UIKey *key)
         NSFontAttributeName: font,
         NSForegroundColorAttributeName: uifg,
       };
-      NSAttributedString *as = [[NSAttributedString alloc]
-                                 initWithString:cmd.text attributes:attrs];
-      CTLineRef line = CTLineCreateWithAttributedString
-        ((__bridge CFAttributedStringRef) as);
-      if (line == NULL)
-        continue;
       CGFloat baseline = self.bounds.size.height - cmd.y - font.ascender;
-      CGContextSetTextPosition (cg, cmd.x, baseline);
-      CTLineDraw (line, cg);
-      CFRelease (line);
+      if (cmd.cellWidth > 0)
+        {
+          /* Position every composed character on Emacs's integer
+             cell grid.  A single CTLine advances by Core Text's
+             natural glyph widths (8.43pt for 14pt SF Mono), while
+             Emacs computes glyph positions from the ceil'd cell
+             width (9pt) -- so a run drawn with natural advances
+             disagrees with any later single-character repaint at
+             an Emacs-computed x (cursor passage), visibly
+             re-typesetting the row.  Per-cell placement makes the
+             two grids identical.  Characters whose natural width
+             is closer to two cells (CJK) get two.  */
+          __block CGFloat pen = cmd.x;
+          CGFloat cell = cmd.cellWidth;
+          [cmd.text enumerateSubstringsInRange:
+                      NSMakeRange (0, cmd.text.length)
+                    options:
+                      NSStringEnumerationByComposedCharacterSequences
+                    usingBlock:^(NSString *ch, NSRange sub,
+                                 NSRange encl, BOOL *stop) {
+            (void) sub; (void) encl; (void) stop;
+            NSAttributedString *cas =
+              [[NSAttributedString alloc] initWithString:ch
+                                              attributes:attrs];
+            CTLineRef cl = CTLineCreateWithAttributedString
+              ((__bridge CFAttributedStringRef) cas);
+            if (cl != NULL)
+              {
+                double natural =
+                  CTLineGetTypographicBounds (cl, NULL, NULL, NULL);
+                int ncells = (natural > cell * 1.5) ? 2 : 1;
+                CGContextSetTextPosition (cg, pen, baseline);
+                CTLineDraw (cl, cg);
+                CFRelease (cl);
+                pen += cell * ncells;
+              }
+            else
+              pen += cell;
+          }];
+        }
+      else
+        {
+          NSAttributedString *as = [[NSAttributedString alloc]
+                                     initWithString:cmd.text
+                                         attributes:attrs];
+          CTLineRef line = CTLineCreateWithAttributedString
+            ((__bridge CFAttributedStringRef) as);
+          if (line == NULL)
+            continue;
+          CGContextSetTextPosition (cg, cmd.x, baseline);
+          CTLineDraw (line, cg);
+          CFRelease (line);
+        }
 
       /* Decorations: stroke the same fg color underneath / above /
          through the text.  Coordinates are in the flipped CG
@@ -1360,7 +1409,7 @@ void
 ios_canvas_draw_text (double x, double y, double width, double height,
                       unsigned long fg_pixel, unsigned long bg_pixel,
                       const char *utf8, double font_size,
-                      unsigned deco)
+                      unsigned deco, double cell_width)
 {
   if (ios_is_backgrounded ())
     return;
@@ -1378,6 +1427,7 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.text = [NSString stringWithUTF8String:utf8];
   cmd.fontSize = font_size > 0 ? font_size : 14;
   cmd.deco = (EmacsDrawDeco) deco;
+  cmd.cellWidth = cell_width;
   [v appendCommand:cmd];
 }
 

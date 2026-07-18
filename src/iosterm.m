@@ -85,7 +85,7 @@ extern void ios_canvas_draw_text (double x, double y,
                                   unsigned long fg_pixel,
                                   unsigned long bg_pixel,
                                   const char *utf8, double font_size,
-                                  unsigned deco);
+                                  unsigned deco, double cell_width);
 
 /* Decoration bits the canvas understands; must match the
    EmacsDrawDeco enum in ios.m.  */
@@ -265,8 +265,16 @@ ios_noop_draw_glyph_string (struct glyph_string *s)
       if (weight > 100) deco |= IOS_DECO_BOLD;
     }
 
+  /* Pass the frame's column width so the canvas can position
+     every character on Emacs's integer cell grid.  Core Text's
+     natural advances (e.g. 8.43pt for 14pt SF Mono) disagree
+     with the ceil'd cell width Emacs lays out with (9pt), and
+     mixing the two grids shows up the moment single characters
+     are repainted -- cursor passage visibly re-typeset text
+     during on-device testing.  */
   ios_canvas_draw_text ((double) s->x, (double) s->y,
-                        w, h, fg, bg, utf8, font_size, deco);
+                        w, h, fg, bg, utf8, font_size, deco,
+                        (double) FRAME_COLUMN_WIDTH (s->f));
   xfree (utf8);
 }
 
