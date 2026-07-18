@@ -180,19 +180,33 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
                      $(ios_appdir)/lisp/loadup.el \
                      $(ios_appdir)/etc/charsets
 	cp -f $(ios_emacs_binary) $@
+	## actool reports errors on stdout and has been seen exiting 0
+	## while doing so; the icon step below therefore logs actool's
+	## output, checks the partial plist actually gained
+	## CFBundleIconName, and prints the log on any failure --
+	## discarding the output left failures undiagnosable.
 	@if [ -f "$(ios_icon_png)" ]; then \
 	  echo "ios/Makefile: compiling app icon asset catalog"; \
 	  catalog="$(srcdir)/$(ios_appsrc)/Assets.xcassets"; \
 	  if [ -n "$(IOS_APP_ICON)" ]; then \
+	    if [ ! -f "$(IOS_APP_ICON)" ]; then \
+	      echo "ios/Makefile: IOS_APP_ICON not found: $(IOS_APP_ICON)" >&2; \
+	      echo "  Use an absolute path; make does not expand ~." >&2; \
+	      exit 1; \
+	    fi; \
 	    catalog="$(abs_builddir)/Assets.xcassets"; \
-	    rm -rf "$$catalog"; \
-	    mkdir -p "$$catalog/AppIcon.appiconset"; \
-	    cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/Contents.json" \
-	      "$$catalog/Contents.json"; \
-	    cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/Contents.json" \
-	      "$$catalog/AppIcon.appiconset/Contents.json"; \
-	    cp "$(IOS_APP_ICON)" "$$catalog/AppIcon.appiconset/AppIcon.png"; \
+	    { rm -rf "$$catalog" \
+	      && mkdir -p "$$catalog/AppIcon.appiconset" \
+	      && cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/Contents.json" \
+	           "$$catalog/Contents.json" \
+	      && cp "$(srcdir)/$(ios_appsrc)/Assets.xcassets/AppIcon.appiconset/Contents.json" \
+	           "$$catalog/AppIcon.appiconset/Contents.json" \
+	      && cp "$(IOS_APP_ICON)" \
+	           "$$catalog/AppIcon.appiconset/AppIcon.png"; } \
+	      || { echo "ios/Makefile: assembling icon catalog failed" >&2; \
+	           exit 1; }; \
 	  fi; \
+	  rm -f "$(abs_builddir)/actool-partial.plist"; \
 	  xcrun actool --compile "$(ios_appdir)" \
 	    --output-partial-info-plist \
 	      "$(abs_builddir)/actool-partial.plist" \
@@ -200,7 +214,16 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	    --platform $(ios_platform) \
 	    --minimum-deployment-target $(ios_min_version) \
 	    "$$catalog" \
-	    > /dev/null; \
+	    > "$(abs_builddir)/actool.log" 2>&1; \
+	  actool_status=$$?; \
+	  if [ $$actool_status -ne 0 ] \
+	     || ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' \
+	            "$(abs_builddir)/actool-partial.plist" \
+	            >/dev/null 2>&1; then \
+	    echo "ios/Makefile: actool failed; its output follows:" >&2; \
+	    cat "$(abs_builddir)/actool.log" >&2; \
+	    exit 1; \
+	  fi; \
 	  for key in CFBundleIconName CFBundleIcons \
 	             'CFBundleIcons~ipad' CFBundlePrimaryIcon; do \
 	    /usr/libexec/PlistBuddy -c "Delete :$$key" \
