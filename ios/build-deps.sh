@@ -56,9 +56,17 @@ GMP_VERSION=6.3.0
 NETTLE_VERSION=3.10.1
 GNUTLS_VERSION=3.8.9
 
-GMP_URL="https://ftp.gnu.org/gnu/gmp/gmp-$GMP_VERSION.tar.xz"
-NETTLE_URL="https://ftp.gnu.org/gnu/nettle/nettle-$NETTLE_VERSION.tar.gz"
-GNUTLS_URL="https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz"
+## Download locations, tried in order.  ftpmirror.gnu.org is the
+## GNU project's geo mirror redirector and is the recommended
+## download host; ftp.gnu.org itself is the fallback since some
+## networks cannot reach one or the other.  dotsrc is one of the
+## GnuPG project's listed mirrors.
+GMP_URLS="https://ftpmirror.gnu.org/gmp/gmp-$GMP_VERSION.tar.xz
+          https://ftp.gnu.org/gnu/gmp/gmp-$GMP_VERSION.tar.xz"
+NETTLE_URLS="https://ftpmirror.gnu.org/nettle/nettle-$NETTLE_VERSION.tar.gz
+             https://ftp.gnu.org/gnu/nettle/nettle-$NETTLE_VERSION.tar.gz"
+GNUTLS_URLS="https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz
+             https://mirrors.dotsrc.org/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz"
 
 sdk=iphoneos
 arch=arm64
@@ -144,14 +152,29 @@ downloads=`cd "$downloads" && pwd`
 work=`cd "$work" && pwd`
 prefix=`cd "$prefix" && pwd`
 
+## fetch URL...: download the file the URLs name (all name the
+## same file) into the cache, trying each location in order.  A
+## pre-seeded file in the cache short-circuits the network
+## entirely.
 fetch ()
 {
-  url="$1"
-  file="$downloads/`basename "$url"`"
+  file="$downloads/`basename "$1"`"
   if [ ! -f "$file" ]; then
-    echo "build-deps.sh: fetching $url"
-    curl -fL --retry 3 -o "$file.tmp" "$url"
-    mv "$file.tmp" "$file"
+    for url in "$@"; do
+      echo "build-deps.sh: fetching $url"
+      if curl -fL --retry 3 --connect-timeout 15 \
+           -o "$file.tmp" "$url"; then
+        mv "$file.tmp" "$file"
+        break
+      fi
+      echo "build-deps.sh: $url failed; trying next mirror" >&2
+    done
+    test -f "$file" || {
+      echo "build-deps.sh: could not download `basename "$file"`." >&2
+      echo "  Fetch it manually (verify the GNU signature if you" >&2
+      echo "  can) and place it in $downloads, then re-run." >&2
+      exit 1
+    }
   fi
   echo "build-deps.sh: using `shasum -a 256 "$file"`"
 }
@@ -189,7 +212,7 @@ build_failed ()
 ## assembler-dialect roulette with Apple's integrated assembler;
 ## public-key performance remains more than adequate for TLS
 ## handshakes.
-fetch "$GMP_URL"
+fetch $GMP_URLS
 unpack "gmp-$GMP_VERSION.tar.xz" "gmp-$GMP_VERSION"
 echo "build-deps.sh: building gmp-$GMP_VERSION"
 ( cd "$work/gmp-$GMP_VERSION" \
@@ -214,7 +237,7 @@ echo "build-deps.sh: building gmp-$GMP_VERSION"
 ## that typedefs the real ones fails to compile.  Autoconf 2.70+
 ## turned the macro into a compile check; seed the cache var for
 ## every dependency whose configure predates that fix.
-fetch "$NETTLE_URL"
+fetch $NETTLE_URLS
 unpack "nettle-$NETTLE_VERSION.tar.gz" "nettle-$NETTLE_VERSION"
 echo "build-deps.sh: building nettle-$NETTLE_VERSION"
 ( cd "$work/nettle-$NETTLE_VERSION" \
@@ -238,7 +261,7 @@ echo "build-deps.sh: building nettle-$NETTLE_VERSION"
 ## --disable-hardware-acceleration: GnuTLS's lib/accelerated
 ## aarch64 assembly is GNU-as flavored like Nettle's; the C code
 ## paths avoid the same Apple-assembler incompatibility.
-fetch "$GNUTLS_URL"
+fetch $GNUTLS_URLS
 unpack "gnutls-$GNUTLS_VERSION.tar.xz" "gnutls-$GNUTLS_VERSION"
 echo "build-deps.sh: building gnutls-$GNUTLS_VERSION"
 ( cd "$work/gnutls-$GNUTLS_VERSION" \
