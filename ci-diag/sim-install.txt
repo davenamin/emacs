@@ -106,11 +106,11 @@ m4
 [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/texinfo/manifests/7.3[0m
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m, [32mpkgconf[39m and [32mtexinfo[39m[0m
 ✔︎ Bottle Manifest m4 (1.4.21)
-✔︎ Bottle autoconf (2.73)
-✔︎ Bottle m4 (1.4.21)
-✔︎ Bottle pkgconf (3.0.3)
-✔︎ Bottle libtool (2.6.2)
 ✔︎ Bottle automake (1.18.1_1)
+✔︎ Bottle m4 (1.4.21)
+✔︎ Bottle autoconf (2.73)
+✔︎ Bottle libtool (2.6.2)
+✔︎ Bottle pkgconf (3.0.3)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake:[0m [32mm4[39m and [32mautoconf[39m[0m
 [32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
@@ -177,118 +177,87 @@ build-deps.sh: full compile output in /Users/runner/work/emacs/emacs/ios-deps/bu
 build-deps.sh: fetching https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0 87 2045k   87 1788k    0     0  2222k      0 --:--:-- --:--:-- --:--:-- 2221k100 2045k  100 2045k    0     0  2500k      0 --:--:-- --:--:-- --:--:-- 2500k
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0 2045k    0 15495    0     0  46277      0  0:00:45 --:--:--  0:00:45 46253100 2045k  100 2045k    0     0  2527k      0 --:--:-- --:--:-- --:--:-- 2524k
 build-deps.sh: using a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898  /Users/runner/work/emacs/emacs/ios-deps/downloads/gmp-6.3.0.tar.xz
 build-deps.sh: building gmp-6.3.0
 build-deps.sh: fetching https://ftp.gnu.org/gnu/nettle/nettle-3.10.1.tar.gz
   % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
                                  Dload  Upload   Total   Spent    Left  Speed
-  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2581k  100 2581k    0     0  3219k      0 --:--:-- --:--:-- --:--:-- 3222k
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  6 2581k    6  179k    0     0   390k      0  0:00:06 --:--:--  0:00:06  390k100 2581k  100 2581k    0     0  3369k      0 --:--:-- --:--:-- --:--:-- 3365k
 build-deps.sh: using b0fcdd7fc0cdea6e80dcf1dd85ba794af0d5b4a57e26397eee3bc193272d9132  /Users/runner/work/emacs/emacs/ios-deps/downloads/nettle-3.10.1.tar.gz
 build-deps.sh: building nettle-3.10.1
-build-deps.sh: nettle-3.10.1 FAILED; last 80 lines of /Users/runner/work/emacs/emacs/ios-deps/build-iphonesimulator/build.log:
-	&& true
-/Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -I.  -DHAVE_CONFIG_H -arch arm64 -isysroot /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -mios-simulator-version-min=15.0 -O2 -I/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator/include -ggdb3 -Wall -W -Wno-sign-compare   -Wmissing-prototypes -Wmissing-declarations -Wstrict-prototypes   -Wpointer-arith -Wbad-function-cast -Wnested-externs -fPIC -MT non-nettle.o -MD -MP -MF non-nettle.o.d -c non-nettle.c \
-	&& true
-In file included from getopt1.c:26:
-./getopt.h:169:19: warning: a function declaration without a prototype is deprecated in all versions of C [-Wstrict-prototypes]
-  169 | extern int getopt ();
-      |                   ^
-      |                    void
-In file included from getopt.c:33:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/stdlib.h:58:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/_stdlib.h:70:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/wait.h:109:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/signal.h:156:
-/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/_types/_uid_t.h:31:31: error: cannot combine with previous 'type-name' declaration specifier
-   31 | typedef __darwin_uid_t        uid_t;
-      |                               ^
-./config.h:227:15: note: expanded from macro 'uid_t'
-  227 | #define uid_t int
-      |               ^
-In file included from non-nettle.c:40:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/stdlib.h:58:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/_stdlib.h:70:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/wait.h:109:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/signal.h:156:
-/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/_types/_uid_t.h:31:31: error: cannot combine with previous 'type-name' declaration specifier
-   31 | typedef __darwin_uid_t        uid_t;
-      |                               ^
-./config.h:227:15: note: expanded from macro 'uid_t'
-  227 | #define uid_t int
-      |               ^
-In file included from getopt.c:35:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/unistd.h:73:
-In file included from /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/unistd.h:204:
-/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/sys/_types/_gid_t.h:31:25: error: cannot combine with previous 'type-name' declaration specifier
-   31 | typedef __darwin_gid_t  gid_t;
-      |                         ^
-./config.h:215:15: note: expanded from macro 'gid_t'
-  215 | #define gid_t int
-      |               ^
-In file included from getopt.c:91:
-./getopt.h:169:19: warning: a function declaration without a prototype is deprecated in all versions of C [-Wstrict-prototypes]
-  169 | extern int getopt ();
-      |                   ^
-      |                    void
-./getopt.h:169:12: warning: a function declaration without a prototype is deprecated in all versions of C and is treated as a zero-parameter prototype in C23, conflicting with a previous declaration [-Wdeprecated-non-prototype]
-  169 | extern int getopt ();
-      |            ^
-/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/unistd.h:521:6: note: conflicting prototype is here
-  521 | int      getopt(int __argc, char *_LIBC_CSTR const [_LIBC_COUNT(__argc)], const char *) __DARWIN_ALIAS(getopt);
-      |          ^
-1 error generated.
-1 warning generated.
-getopt.c:139:21: warning: a function declaration without a prototype is deprecated in all versions of C [-Wstrict-prototypes]
-  139 | extern char *getenv ();
-      |                     ^
-      |                      void
-getopt.c:139:14: warning: a function declaration without a prototype is deprecated in all versions of C and is treated as a zero-parameter prototype in C23, conflicting with a previous declaration [-Wdeprecated-non-prototype]
-  139 | extern char *getenv ();
-      |              ^
-/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk/usr/include/_stdlib.h:167:18: note: conflicting prototype is here
-  167 | char *_LIBC_CSTR        getenv(const char *);
-      |                         ^
-make[1]: *** [non-nettle.o] Error 1
-getopt.cmake[1]: *** Waiting for unfinished jobs....
-:265:25: warning: unused parameter 'argc' [-Wunused-parameter]
-  265 | _getopt_initialize (int argc, char *const *argv, const char *optstring,
-      |                         ^
-getopt.c:265:44: warning: unused parameter 'argv' [-Wunused-parameter]
-  265 | _getopt_initialize (int argc, char *const *argv, const char *optstring,
-      |                                            ^
-In file included from getopt.c:91:
-./getopt.h:169:12: warning: a function declaration without a prototype is deprecated in all versions of C and is not supported in C23 [-Wdeprecated-non-prototype]
-  169 | extern int getopt ();
-      |            ^
-getopt.c:1181:1: note: conflicting prototype is here
- 1181 | getopt (int argc, char *const *argv, const char *optstring)
-      | ^
-7 warnings and 2 errors generated.
-make[1]: *** [getopt.o] Error 1
-make: *** [all] Error 2
-[exit=1]
+build-deps.sh: fetching https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0 11 6686k   11  800k    0     0   517k      0  0:00:12  0:00:01  0:00:11  517k100 6686k  100 6686k    0     0  3092k      0  0:00:02  0:00:02 --:--:-- 3092k
+build-deps.sh: using 69e113d802d1670c4d5ac1b99040b1f2d5c7c05daec5003813c049b5184820ed  /Users/runner/work/emacs/emacs/ios-deps/downloads/gnutls-3.8.9.tar.xz
+build-deps.sh: building gnutls-3.8.9
+build-deps.sh: done.
+build-deps.sh: configure Emacs with --with-ios-deps=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+[exit=0]
 
 ===== CONFIGURE (iphonesimulator) =====
-[configure exit=1]
-checking for xcrun... xcrun
-checking for make... yes
-checking for GNU Make... make
-checking build system type... aarch64-apple-darwin25.4.0
-checking host system type... aarch64-apple-darwin25.4.0
-configure: Configuring iOS cross-compile via XCONFIGURE=ios.
-configure: error: --with-ios-deps: no lib/pkgconfig/gnutls.pc under
-/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator.  Build the TLS dependency stack first:
-
-  ../ios/build-deps.sh --sdk iphonesimulator --prefix /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
-
-(and make sure the --sdk used there matches this build's IOS_SDK).
-0
+[configure exit=0]
+config.status: linking ../lib/time.in.h to cross/lib/time.in.h
+config.status: linking ../lib/time_r.c to cross/lib/time_r.c
+config.status: linking ../lib/time_rz.c to cross/lib/time_rz.c
+config.status: linking ../lib/timegm.c to cross/lib/timegm.c
+config.status: linking ../lib/timespec-add.c to cross/lib/timespec-add.c
+config.status: linking ../lib/timespec-sub.c to cross/lib/timespec-sub.c
+config.status: linking ../lib/timespec.c to cross/lib/timespec.c
+config.status: linking ../lib/timespec.h to cross/lib/timespec.h
+config.status: linking ../lib/u64.c to cross/lib/u64.c
+config.status: linking ../lib/u64.h to cross/lib/u64.h
+config.status: linking ../lib/unistd.c to cross/lib/unistd.c
+config.status: linking ../lib/unistd.in.h to cross/lib/unistd.in.h
+config.status: linking ../lib/unlocked-io.h to cross/lib/unlocked-io.h
+config.status: linking ../lib/utimens.c to cross/lib/utimens.c
+config.status: linking ../lib/utimens.h to cross/lib/utimens.h
+config.status: linking ../lib/utimensat.c to cross/lib/utimensat.c
+config.status: linking ../lib/verify.h to cross/lib/verify.h
+config.status: linking ../lib/warn-on-use.h to cross/lib/warn-on-use.h
+config.status: linking ../lib/af_alg.h to cross/lib/af_alg.h
+config.status: linking ../lib/save-cwd.h to cross/lib/save-cwd.h
+config.status: linking ../lib/fingerprint.c to cross/lib/fingerprint.c
+config.status: linking ../lib/fingerprint.h to cross/lib/fingerprint.h
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/openat-die.c to cross/lib/openat-die.c
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/min-max.h to cross/lib/min-max.h
+config.status: executing src/epaths.h commands
+config.status: executing src/.gdbinit commands
+config.status: executing doc/emacs/emacsver.texi commands
+config.status: executing etc-refcards-emacsver.tex commands
+1
 
 ===== MAKE IOS =====
 [make exit=2]
 --- last 25 lines of make-ios.out ---
-make: *** No rule to make target `ios'.  Stop.
+  GEN      ../../../etc/charsets/CP949-2BYTE.map
+  GEN      ../../../etc/charsets/BIG5-1.map
+  GEN      ../../../etc/charsets/BIG5-2.map
+  GEN      ../../../etc/charsets/MULE-ethiopic.map
+  GEN      ../../../etc/charsets/MULE-ipa.map
+  GEN      ../../../etc/charsets/MULE-is13194.map
+  GEN      ../../../etc/charsets/MULE-sisheng.map
+  GEN      ../../../etc/charsets/MULE-tibetan.map
+  GEN      ../../../etc/charsets/MULE-lviscii.map
+  GEN      ../../../etc/charsets/MULE-uviscii.map
+  GEN      ../../../lisp/international/cp51932.el
+  GEN      ../../../lisp/international/eucjp-ms.el
+  GEN      ../../../admin/charsets/charsets.stamp
+/Applications/Xcode_26.5.app/Contents/Developer/usr/bin/make -C ../admin/unidata charscript.el
+  GEN      ../../../lisp/international/charscript.el
+/Applications/Xcode_26.5.app/Contents/Developer/usr/bin/make -C ../admin/unidata emoji-zwj.el
+  GEN      ../../../lisp/international/emoji-zwj.el
+  CCLD     temacs
+mkdir -p ../etc
+/Applications/Xcode_26.5.app/Contents/Developer/usr/bin/make -C ../lisp update-subdirs
+cp -f temacs bootstrap-emacs
+codesign -s - -f bootstrap-emacs
+bootstrap-emacs: replacing existing signature
+make[1]: *** No rule to make target `bootstrap-emacs.pdmp'.  Stop.
+make: *** [ios] Error 2
 --- make errors (if any) ---
 
 ===== (B) OUR BUNDLE: STRUCTURE =====
@@ -363,13 +332,13 @@ error: /Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.x
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5'
-device=88A4B229-6C49-4931-99A3-4367B08681DA
+device=EE381856-0B13-4F01-BF3F-F67DAF8DD60C
 
-$ xcrun simctl boot 88A4B229-6C49-4931-99A3-4367B08681DA
+$ xcrun simctl boot EE381856-0B13-4F01-BF3F-F67DAF8DD60C
 [exit=0]
 
-$ xcrun simctl bootstatus 88A4B229-6C49-4931-99A3-4367B08681DA -b
-Monitoring boot status for ci-diag-phone (88A4B229-6C49-4931-99A3-4367B08681DA).
+$ xcrun simctl bootstatus EE381856-0B13-4F01-BF3F-F67DAF8DD60C -b
+Monitoring boot status for ci-diag-phone (EE381856-0B13-4F01-BF3F-F67DAF8DD60C).
 Device already booted, nothing to do.
 
 [exit=0]
@@ -402,12 +371,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 88A4B229-6C49-4931-99A3-4367B08681DA ref-app/Hello.app
+$ xcrun simctl install EE381856-0B13-4F01-BF3F-F67DAF8DD60C ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 88A4B229-6C49-4931-99A3-4367B08681DA build-ios-sim/ios/Emacs.app
+$ xcrun simctl install EE381856-0B13-4F01-BF3F-F67DAF8DD60C build-ios-sim/ios/Emacs.app
 An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
 Simulator device failed to install the application.
 Unhandled error domain NSPOSIXErrorDomain, code 2
@@ -438,7 +407,7 @@ Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
 
 $ xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
 Detected file type from extension: PNG
-Note: No display specified. Defaulting to display: 0E185DFB-E11D-4CDD-8C9E-AE380AD2D0B7 (screenID: 1, name: LCD)
+Note: No display specified. Defaulting to display: 9CF97401-4A7B-4561-BEA9-67318AAE017D (screenID: 1, name: LCD)
 Wrote screenshot to: /Users/runner/work/emacs/emacs/ci-diag/sim-screenshot.png
 [exit=0]
 
@@ -464,8 +433,8 @@ Timestamp               Ty Process[PID:TID]
 --- unified log crash signatures ---
 
 --- crash reports ---
-  scanning /Users/runner/Library/Logs/CoreSimulator/88A4B229-6C49-4931-99A3-4367B08681DA/CrashReporter (recursive)
-  scanning /Users/runner/Library/Logs/CoreSimulator/88A4B229-6C49-4931-99A3-4367B08681DA (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/EE381856-0B13-4F01-BF3F-F67DAF8DD60C/CrashReporter (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/EE381856-0B13-4F01-BF3F-F67DAF8DD60C (recursive)
   scanning /Users/runner/Library/Logs/CoreSimulator/CrashReporter/Standalone (recursive)
   scanning /Users/runner/Library/Logs/DiagnosticReports (recursive)
 
