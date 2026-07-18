@@ -106,11 +106,11 @@ m4
 [34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/texinfo/manifests/7.3[0m
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m, [32mpkgconf[39m and [32mtexinfo[39m[0m
 ✔︎ Bottle Manifest m4 (1.4.21)
-✔︎ Bottle m4 (1.4.21)
-✔︎ Bottle pkgconf (3.0.3)
-✔︎ Bottle autoconf (2.73)
 ✔︎ Bottle automake (1.18.1_1)
 ✔︎ Bottle libtool (2.6.2)
+✔︎ Bottle m4 (1.4.21)
+✔︎ Bottle autoconf (2.73)
+✔︎ Bottle pkgconf (3.0.3)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake:[0m [32mm4[39m and [32mautoconf[39m[0m
 [32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
@@ -169,69 +169,46 @@ Installing git hooks...
 You can now run './configure'.
 [exit=0]
 
+===== TLS DEPS (gmp, nettle, gnutls) =====
+
+$ ios/build-deps.sh --sdk iphonesimulator --prefix /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+build-deps.sh: sdk=iphonesimulator arch=arm64 min=15.0 prefix=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+build-deps.sh: full compile output in /Users/runner/work/emacs/emacs/ios-deps/build-iphonesimulator/build.log
+build-deps.sh: fetching https://ftp.gnu.org/gnu/gmp/gmp-6.3.0.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2045k  100 2045k    0     0  2497k      0 --:--:-- --:--:-- --:--:-- 2500k
+build-deps.sh: using a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898  /Users/runner/work/emacs/emacs/ios-deps/downloads/gmp-6.3.0.tar.xz
+build-deps.sh: building gmp-6.3.0
+build-deps.sh: fetching https://ftp.gnu.org/gnu/nettle/nettle-3.10.1.tar.gz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2581k  100 2581k    0     0  3204k      0 --:--:-- --:--:-- --:--:-- 3202k
+build-deps.sh: using b0fcdd7fc0cdea6e80dcf1dd85ba794af0d5b4a57e26397eee3bc193272d9132  /Users/runner/work/emacs/emacs/ios-deps/downloads/nettle-3.10.1.tar.gz
+build-deps.sh: building nettle-3.10.1
+[exit=2]
+
 ===== CONFIGURE (iphonesimulator) =====
-[configure exit=0]
-config.status: linking ../lib/time.in.h to cross/lib/time.in.h
-config.status: linking ../lib/time_r.c to cross/lib/time_r.c
-config.status: linking ../lib/time_rz.c to cross/lib/time_rz.c
-config.status: linking ../lib/timegm.c to cross/lib/timegm.c
-config.status: linking ../lib/timespec-add.c to cross/lib/timespec-add.c
-config.status: linking ../lib/timespec-sub.c to cross/lib/timespec-sub.c
-config.status: linking ../lib/timespec.c to cross/lib/timespec.c
-config.status: linking ../lib/timespec.h to cross/lib/timespec.h
-config.status: linking ../lib/u64.c to cross/lib/u64.c
-config.status: linking ../lib/u64.h to cross/lib/u64.h
-config.status: linking ../lib/unistd.c to cross/lib/unistd.c
-config.status: linking ../lib/unistd.in.h to cross/lib/unistd.in.h
-config.status: linking ../lib/unlocked-io.h to cross/lib/unlocked-io.h
-config.status: linking ../lib/utimens.c to cross/lib/utimens.c
-config.status: linking ../lib/utimens.h to cross/lib/utimens.h
-config.status: linking ../lib/utimensat.c to cross/lib/utimensat.c
-config.status: linking ../lib/verify.h to cross/lib/verify.h
-config.status: linking ../lib/warn-on-use.h to cross/lib/warn-on-use.h
-config.status: linking ../lib/af_alg.h to cross/lib/af_alg.h
-config.status: linking ../lib/save-cwd.h to cross/lib/save-cwd.h
-config.status: linking ../lib/fingerprint.c to cross/lib/fingerprint.c
-config.status: linking ../lib/fingerprint.h to cross/lib/fingerprint.h
-config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
-config.status: linking ../lib/openat-die.c to cross/lib/openat-die.c
-config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
-config.status: linking ../lib/min-max.h to cross/lib/min-max.h
-config.status: executing src/epaths.h commands
-config.status: executing src/.gdbinit commands
-config.status: executing doc/emacs/emacsver.texi commands
-config.status: executing etc-refcards-emacsver.tex commands
+[configure exit=1]
+checking for xcrun... xcrun
+checking for make... yes
+checking for GNU Make... make
+checking build system type... aarch64-apple-darwin25.4.0
+checking host system type... aarch64-apple-darwin25.4.0
+configure: Configuring iOS cross-compile via XCONFIGURE=ios.
+configure: error: --with-ios-deps: no lib/pkgconfig/gnutls.pc under
+/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator.  Build the TLS dependency stack first:
+
+  ../ios/build-deps.sh --sdk iphonesimulator --prefix /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+
+(and make sure the --sdk used there matches this build's IOS_SDK).
+0
 
 ===== MAKE IOS =====
 [make exit=2]
 --- last 25 lines of make-ios.out ---
-  CC       timespec.o
-  CC       timespec-add.o
-  CC       timespec-sub.o
-  CC       u64.o
-  CC       unistd.o
-  CC       utimens.o
-  CC       utimensat.o
-  CC       openat-die.o
-  CC       save-cwd.o
-  AR       libgnu.a
-/Applications/Xcode_26.5.app/Contents/Developer/usr/bin/make -C ../lib-src/ make-docfile
-  CCLD     make-docfile
-  GEN      globals.h
-  CC       dispnew.o
-  CC       frame.o
-../../src/frame.c:322:14: error: use of undeclared identifier 'Qios'; did you mean 'Qdos'?
-  322 |       return Qios;
-      |              ^~~~
-      |              Qdos
-./globals.h:2255:21: note: 'Qdos' declared here
- 2255 | DEFINE_LISP_SYMBOL (Qdos)
-      |                     ^
-1 error generated.
-make[1]: *** [frame.o] Error 1
-make: *** [ios] Error 2
+make: *** No rule to make target `ios'.  Stop.
 --- make errors (if any) ---
-126:../../src/frame.c:322:14: error: use of undeclared identifier 'Qios'; did you mean 'Qdos'?
 
 ===== (B) OUR BUNDLE: STRUCTURE =====
 
@@ -305,91 +282,64 @@ error: /Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.x
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5'
-device=F2CA1D58-285E-4FA7-8411-B4694C67ECBE
+device=01BC3F48-24D8-4995-89A0-EC20F858F70B
 
-$ xcrun simctl boot F2CA1D58-285E-4FA7-8411-B4694C67ECBE
+$ xcrun simctl boot 01BC3F48-24D8-4995-89A0-EC20F858F70B
 [exit=0]
 
-$ xcrun simctl bootstatus F2CA1D58-285E-4FA7-8411-B4694C67ECBE -b
-Monitoring boot status for ci-diag-phone (F2CA1D58-285E-4FA7-8411-B4694C67ECBE).
-[2026-07-18 11:24:21 +0000] Status=2, isTerminal=NO, Elapsed=01:00.
+$ xcrun simctl bootstatus 01BC3F48-24D8-4995-89A0-EC20F858F70B -b
+Monitoring boot status for ci-diag-phone (01BC3F48-24D8-4995-89A0-EC20F858F70B).
+[2026-07-18 12:01:31 +0000] Status=2, isTerminal=NO, Elapsed=01:11.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:53 seconds
+		Migration Elapsed:01:04 seconds
 
-[2026-07-18 11:24:22 +0000] Status=2, isTerminal=NO, Elapsed=01:01.
+[2026-07-18 12:01:32 +0000] Status=2, isTerminal=NO, Elapsed=01:12.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.-0LaunchServicesMigrator (00LaunchServicesMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:54 seconds
+		Migration Elapsed:01:05 seconds
 
-[2026-07-18 11:24:26 +0000] Status=2, isTerminal=NO, Elapsed=01:05.
+[2026-07-18 12:01:37 +0000] Status=2, isTerminal=NO, Elapsed=01:17.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.securityd.KeychainMigrator (KeychainMigrator.migrator, user-agnostic)
-		Migration Elapsed:00:55 seconds
-
-[2026-07-18 11:24:28 +0000] Status=2, isTerminal=NO, Elapsed=01:07.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:00:58 seconds
-
-[2026-07-18 11:24:29 +0000] Status=2, isTerminal=NO, Elapsed=01:08.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:01:00 seconds
-
-[2026-07-18 11:24:31 +0000] Status=2, isTerminal=NO, Elapsed=01:09.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:01:01 seconds
-
-[2026-07-18 11:24:34 +0000] Status=2, isTerminal=NO, Elapsed=01:12.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
-		Migration Elapsed:01:02 seconds
-
-[2026-07-18 11:24:37 +0000] Status=2, isTerminal=NO, Elapsed=01:15.
-	Waiting on Data Migration
-		Reason:Running plugin com.apple.addressbook.migrator (AddressBookLegacy.migrator)
 		Migration Elapsed:01:06 seconds
 
-[2026-07-18 11:24:37 +0000] Status=2, isTerminal=NO, Elapsed=01:16.
+[2026-07-18 12:01:42 +0000] Status=2, isTerminal=NO, Elapsed=01:22.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:10 seconds
+
+[2026-07-18 12:01:49 +0000] Status=2, isTerminal=NO, Elapsed=01:29.
+	Waiting on Data Migration
+		Reason:Running plugin com.apple.managedconfiguration.migrator (MCProfile.migrator, user-agnostic)
+		Migration Elapsed:01:15 seconds
+
+[2026-07-18 12:01:50 +0000] Status=2, isTerminal=NO, Elapsed=01:31.
 	Waiting on Data Migration
 		Reason:Running plugin com.apple.MobileSafari.migrator (MobileSafari.migrator)
-		Migration Elapsed:01:08 seconds
+		Migration Elapsed:01:22 seconds
 
-[2026-07-18 11:24:38 +0000] Status=2, isTerminal=NO, Elapsed=01:17.
+[2026-07-18 12:01:52 +0000] Status=2, isTerminal=NO, Elapsed=01:33.
 	Waiting on Data Migration
-		Reason:Running plugin com.apple.locationd.migrator (CoreLocationMigrator.migrator) (Concurrent: Running plugin com.apple.MobileSlideShow (MobileSlideShow.migrator, concurrent after com.apple.accounts.migrator))
-		Migration Elapsed:01:09 seconds
+		Reason:Running plugin com.apple.tone.migrator (Tones.migrator)
+		Migration Elapsed:01:24 seconds
 
-[2026-07-18 11:24:40 +0000] Status=4, isTerminal=NO, Elapsed=01:19.
+[2026-07-18 12:01:53 +0000] Status=4, isTerminal=NO, Elapsed=01:33.
 	Waiting on System App
 
-[2026-07-18 11:24:42 +0000] Status=4, isTerminal=NO, Elapsed=01:21.
+[2026-07-18 12:01:53 +0000] Status=4, isTerminal=NO, Elapsed=01:34.
 	Waiting on System App
 
-[2026-07-18 11:24:43 +0000] Status=4, isTerminal=NO, Elapsed=01:21.
+[2026-07-18 12:01:54 +0000] Status=4, isTerminal=NO, Elapsed=01:35.
 	Waiting on System App
 
-[2026-07-18 11:24:44 +0000] Status=4, isTerminal=NO, Elapsed=01:22.
+[2026-07-18 12:01:56 +0000] Status=4, isTerminal=NO, Elapsed=01:36.
 	Waiting on System App
 
-[2026-07-18 11:24:44 +0000] Status=4, isTerminal=NO, Elapsed=01:23.
+[2026-07-18 12:01:57 +0000] Status=4, isTerminal=NO, Elapsed=01:38.
 	Waiting on System App
 
-[2026-07-18 11:24:45 +0000] Status=4, isTerminal=NO, Elapsed=01:24.
-	Waiting on System App
-
-[2026-07-18 11:24:46 +0000] Status=4, isTerminal=NO, Elapsed=01:24.
-	Waiting on System App
-
-[2026-07-18 11:24:48 +0000] Status=4, isTerminal=NO, Elapsed=01:26.
-	Waiting on System App
-
-[2026-07-18 11:24:52 +0000] Status=4, isTerminal=NO, Elapsed=01:30.
-	Waiting on System App
-
-[2026-07-18 11:24:57 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:35.
+[2026-07-18 12:02:09 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:49.
 	Finished
 
 [exit=0]
@@ -422,12 +372,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install F2CA1D58-285E-4FA7-8411-B4694C67ECBE ref-app/Hello.app
+$ xcrun simctl install 01BC3F48-24D8-4995-89A0-EC20F858F70B ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install F2CA1D58-285E-4FA7-8411-B4694C67ECBE build-ios-sim/ios/Emacs.app
+$ xcrun simctl install 01BC3F48-24D8-4995-89A0-EC20F858F70B build-ios-sim/ios/Emacs.app
 An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
 Simulator device failed to install the application.
 Unhandled error domain NSPOSIXErrorDomain, code 2
@@ -458,7 +408,7 @@ Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
 
 $ xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
 Detected file type from extension: PNG
-Note: No display specified. Defaulting to display: 2788D426-F651-4944-A914-F51B25CF1901 (screenID: 1, name: LCD)
+Note: No display specified. Defaulting to display: D3F7446C-C1E9-4902-B2FA-6DC947C0CCDE (screenID: 1, name: LCD)
 Wrote screenshot to: /Users/runner/work/emacs/emacs/ci-diag/sim-screenshot.png
 [exit=0]
 
@@ -484,8 +434,8 @@ Timestamp               Ty Process[PID:TID]
 --- unified log crash signatures ---
 
 --- crash reports ---
-  scanning /Users/runner/Library/Logs/CoreSimulator/F2CA1D58-285E-4FA7-8411-B4694C67ECBE/CrashReporter (recursive)
-  scanning /Users/runner/Library/Logs/CoreSimulator/F2CA1D58-285E-4FA7-8411-B4694C67ECBE (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/01BC3F48-24D8-4995-89A0-EC20F858F70B/CrashReporter (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/01BC3F48-24D8-4995-89A0-EC20F858F70B (recursive)
   scanning /Users/runner/Library/Logs/CoreSimulator/CrashReporter/Standalone (recursive)
   scanning /Users/runner/Library/Logs/DiagnosticReports (recursive)
 
