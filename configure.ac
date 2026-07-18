@@ -1596,19 +1596,29 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
     with_gnutls=no
   fi
 
-  # Force the dumping strategy to "none" for iOS.  The recursive
-  # XCONFIGURE=ios cross-build can't run temacs on the host to
-  # produce a pdmp file (the binary targets iOS), so we skip
-  # build-time dumping entirely; the resulting emacs binary
-  # bootstraps Lisp from source on every startup (slower but
-  # correct).  with_pdumper / HAVE_PDUMPER / DUMPING are all
-  # overridden here even though the early dumping block at
+  # Force the dumping strategy to "none" for the iOS cross pass
+  # only.  The recursive XCONFIGURE=ios cross-build can't run
+  # temacs on the host to produce a pdmp file (the binary targets
+  # iOS), so it skips build-time dumping entirely; the resulting
+  # emacs binary bootstraps Lisp from source on every startup
+  # (slower but correct).  with_pdumper / HAVE_PDUMPER / DUMPING
+  # are all overridden here even though the early dumping block at
   # ~line 455 has already run -- the values these variables hold
   # at AC_OUTPUT are what get substituted into the Makefiles.
-  with_dumping=none
-  with_pdumper=no
-  HAVE_PDUMPER=no
-  DUMPING=none
+  #
+  # The OUTER host pass keeps the default pdumper strategy: the
+  # ios target builds host bootstrap-emacs + bootstrap-emacs.pdmp
+  # to generate the bundle's autoload files, and forcing
+  # DUMPING=none there left src/Makefile without the
+  # bootstrap-emacs.pdmp rule ("No rule to make target" in CI),
+  # while also making every batch invocation of bootstrap-emacs
+  # pay a full source-form loadup.
+  if test "$XCONFIGURE" = "ios"; then
+    with_dumping=none
+    with_pdumper=no
+    HAVE_PDUMPER=no
+    DUMPING=none
+  fi
 fi
 
 # CROSS_SUFFIX is computed later (after REALLY_ANDROID is set), see
