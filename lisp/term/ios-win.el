@@ -153,6 +153,15 @@ minibuffer exit is unconditional once shown by this hook."
 (add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
 (add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
 
+;; Named colors.  The C-level color lookup resolves hex literals
+;; and the tty pseudo colors on its own; the full X11 name table
+;; is bridged over from tty-colors.el here (both are preloaded, in
+;; this order, by loadup.el).  Without this every named face color
+;; (gray40, medium blue, ...) fails to resolve.
+(declare-function ios-internal-register-colors "iosterm.m" (alist))
+(when (fboundp 'ios-internal-register-colors)
+  (ios-internal-register-colors color-name-rgb-alist))
+
 ;; TLS trust anchors.  The bundle ships etc/ca-bundle.pem (Apple's
 ;; root-CA set, exported from the build host by ios/Makefile); none
 ;; of gnutls-trustfiles' built-in defaults (/etc/ssl and friends)

@@ -259,6 +259,8 @@ extern struct ios_display_info *x_display_list;
 extern int ios_main (int argc, char **argv);
 extern char *ios_dump_path (void);
 extern struct terminal *ios_term_init (void);
+extern bool ios_defined_color (struct frame *, const char *,
+                               Emacs_Color *, bool, bool);
 extern int ios_read_socket (struct terminal *terminal,
                             struct input_event *hold_quit);
 

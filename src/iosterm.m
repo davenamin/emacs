@@ -66,9 +66,9 @@ static frame_parm_handler ios_frame_parm_handlers[];
 
 /* Forward declarations for terminal hooks defined further down in
    this file but installed inside ios_term_init.  */
-static bool ios_defined_color (struct frame *f, const char *color_name,
-                               Emacs_Color *color, bool alloc_p,
-                               bool make_index);
+bool ios_defined_color (struct frame *f, const char *color_name,
+                        Emacs_Color *color, bool alloc_p,
+                        bool make_index);
 
 /* No-op redisplay hooks.  Generic redisplay reaches into the
    per-port draw functions via FRAME_RIF (f)->draw_glyph_string etc.;
@@ -1502,56 +1502,122 @@ frame_set_mouse_pixel_position (struct frame *f, int pix_x, int pix_y)
   (void) pix_y;
 }
 
-/* terminal->defined_color_hook implementation.  Resolve a color name
-   to an RGB triple.  load_color2 in xfaces.c calls this via the
-   terminal struct -- if the hook is NULL the call segfaults.  This
-   minimal version recognises black, white, and #rrggbb literals;
-   anything else returns false and the caller falls back to the
-   frame's foreground/background pixel.  */
-static bool
+/* Named-color table: canonical name -> packed 0x00RRGGBB fixnum.
+   Filled by ios-internal-register-colors from tty-colors.el's
+   color-name-rgb-alist during loadup.  */
+static Lisp_Object ios_color_map;
+
+/* terminal->defined_color_hook implementation.  Resolve a color
+   name to an RGB triple: hex literals, the tty pseudo colors, and
+   the X11 named-color table.  load_color2 in xfaces.c calls this
+   via the terminal struct.  Also used by xw-color-values in
+   iosfns.m.  */
+bool
 ios_defined_color (struct frame *f, const char *color_name,
                    Emacs_Color *color, bool alloc_p, bool make_index)
 {
-  (void) f; (void) alloc_p; (void) make_index;
+  (void) alloc_p; (void) make_index;
   if (!color_name)
     return false;
 
-  unsigned r = 0, g = 0, b = 0;
-  bool ok = false;
+  unsigned long pixel;
 
-  if (strcasecmp (color_name, "black") == 0)
-    { r = g = b = 0; ok = true; }
-  else if (strcasecmp (color_name, "white") == 0)
-    { r = g = b = 0xff; ok = true; }
-  else if (strcasecmp (color_name, "red") == 0)
-    { r = 0xff; ok = true; }
-  else if (strcasecmp (color_name, "green") == 0)
-    { g = 0xff; ok = true; }
-  else if (strcasecmp (color_name, "blue") == 0)
-    { b = 0xff; ok = true; }
-  else if (color_name[0] == '#' && strlen (color_name) == 7)
+  if (strcmp (color_name, "unspecified-fg") == 0)
+    /* The tty pseudo colors mean "the frame's own colors"; face
+       specs written for both display types send them here.  */
+    pixel = f ? FRAME_FOREGROUND_PIXEL (f) : 0;
+  else if (strcmp (color_name, "unspecified-bg") == 0)
+    pixel = f ? FRAME_BACKGROUND_PIXEL (f) : 0xffffff;
+  else if (color_name[0] == '#')
     {
-      unsigned v;
-      if (sscanf (color_name + 1, "%6x", &v) == 1)
+      /* One to four hex digits per channel, as X parses it.  */
+      size_t len = strlen (color_name + 1);
+      if (len == 0 || len % 3 != 0 || len > 12)
+        return false;
+      int digits = len / 3;
+      unsigned comp[3];
+      for (int i = 0; i < 3; i++)
         {
-          r = (v >> 16) & 0xff;
-          g = (v >>  8) & 0xff;
-          b = (v      ) & 0xff;
-          ok = true;
+          unsigned v = 0;
+          for (int j = 0; j < digits; j++)
+            {
+              char c = color_name[1 + i * digits + j];
+              int hv = c >= '0' && c <= '9' ? c - '0'
+                : c >= 'a' && c <= 'f' ? c - 'a' + 10
+                : c >= 'A' && c <= 'F' ? c - 'A' + 10 : -1;
+              if (hv < 0)
+                return false;
+              v = v * 16 + hv;
+            }
+          switch (digits)
+            {
+            case 1: v *= 17; break;
+            case 3: v >>= 4; break;
+            case 4: v >>= 8; break;
+            }
+          comp[i] = v;
         }
+      pixel = ((unsigned long) comp[0] << 16) | (comp[1] << 8) | comp[2];
+    }
+  else
+    {
+      /* Named color: canonicalize the way tty-color-canonicalize
+         does (lower case, blanks removed) and consult the X11
+         table ios-win.el bridges over from tty-colors.el.  */
+      char buf[64];
+      size_t n = 0;
+      for (const char *p = color_name; *p && n < sizeof buf - 1; p++)
+        if (*p != ' ')
+          buf[n++] = *p >= 'A' && *p <= 'Z' ? *p + 32 : *p;
+      buf[n] = 0;
+      if (NILP (ios_color_map))
+        return false;
+      Lisp_Object v = Fgethash (build_string (buf), ios_color_map, Qnil);
+      if (!FIXNUMP (v))
+        return false;
+      pixel = XFIXNUM (v);
     }
 
-  if (!ok)
-    return false;
   /* Pack into pixel: 0x00RRGGBB -- iOS draws via Core Graphics which
      takes normalized floats, but the same packed form is used
      throughout the redisplay engine and is what FRAME_FOREGROUND_PIXEL
      stores.  */
-  color->pixel = (r << 16) | (g << 8) | b;
-  color->red   = r * 257;   /* X11 16-bit per channel */
-  color->green = g * 257;
-  color->blue  = b * 257;
+  color->pixel = pixel;
+  color->red   = ((pixel >> 16) & 0xff) * 257;  /* X11 16-bit */
+  color->green = ((pixel >>  8) & 0xff) * 257;
+  color->blue  = ( pixel        & 0xff) * 257;
   return true;
+}
+
+DEFUN ("ios-internal-register-colors", Fios_internal_register_colors,
+       Sios_internal_register_colors, 1, 1, 0,
+       doc: /* Register ALIST as the named-color table.
+Each element is (NAME R G B) with canonical NAME and 16-bit
+channel values, i.e. the format of `color-name-rgb-alist'.  */)
+  (Lisp_Object alist)
+{
+  Lisp_Object map = CALLN (Fmake_hash_table, QCtest, Qequal);
+  for (Lisp_Object tail = alist; CONSP (tail); tail = XCDR (tail))
+    {
+      Lisp_Object entry = XCAR (tail);
+      if (!CONSP (entry) || !STRINGP (XCAR (entry)))
+        continue;
+      Lisp_Object rgb = XCDR (entry);
+      if (!(CONSP (rgb) && CONSP (XCDR (rgb))
+            && CONSP (XCDR (XCDR (rgb)))))
+        continue;
+      Lisp_Object rr = XCAR (rgb);
+      Lisp_Object gg = XCAR (XCDR (rgb));
+      Lisp_Object bb = XCAR (XCDR (XCDR (rgb)));
+      if (!(FIXNUMP (rr) && FIXNUMP (gg) && FIXNUMP (bb)))
+        continue;
+      unsigned long pixel = (((XFIXNUM (rr) >> 8) & 0xff) << 16)
+        | (((XFIXNUM (gg) >> 8) & 0xff) << 8)
+        | ((XFIXNUM (bb) >> 8) & 0xff);
+      Fputhash (XCAR (entry), make_fixnum (pixel), map);
+    }
+  ios_color_map = map;
+  return Qnil;
 }
 
 /* Cross-port "x-*" variables: cus-start.el bails ("not bound")
@@ -1566,6 +1632,10 @@ syms_of_iosterm (void)
      other window-system symbols: framep returns it from every
      build, including builds that do not compile this file.  */
   Fprovide (Qios, Qnil);
+
+  ios_color_map = Qnil;
+  staticpro (&ios_color_map);
+  defsubr (&Sios_internal_register_colors);
 
   /* Cross-port "x-*" variables that cus-start.el expects to be bound
      whenever (fboundp 'x-create-frame) is true.  Documented in

@@ -86,6 +86,32 @@ Value is t if tooltip was open, nil otherwise.  */)
   return ios_hide_tooltip () ? Qt : Qnil;
 }
 
+DEFUN ("xw-color-defined-p", Fxw_color_defined_p, Sxw_color_defined_p,
+       1, 2, 0,
+       doc: /* SKIP: real doc in xfns.c.  */)
+  (Lisp_Object color, Lisp_Object frame)
+{
+  struct frame *f = decode_window_system_frame (frame);
+  Emacs_Color col;
+
+  CHECK_STRING (color);
+  return ios_defined_color (f, SSDATA (color), &col, false, false)
+    ? Qt : Qnil;
+}
+
+DEFUN ("xw-color-values", Fxw_color_values, Sxw_color_values, 1, 2, 0,
+       doc: /* SKIP: real doc in xfns.c.  */)
+  (Lisp_Object color, Lisp_Object frame)
+{
+  struct frame *f = decode_window_system_frame (frame);
+  Emacs_Color col;
+
+  CHECK_STRING (color);
+  if (!ios_defined_color (f, SSDATA (color), &col, false, false))
+    return Qnil;
+  return list3i (col.red, col.green, col.blue);
+}
+
 DEFUN ("xw-display-color-p", Fxw_display_color_p, Sxw_display_color_p,
        0, 1, 0,
        doc: /* Return t if the display supports color.
@@ -543,6 +569,8 @@ syms_of_iosfns (void)
 
   defsubr (&Sx_show_tip);
   defsubr (&Sx_hide_tip);
+  defsubr (&Sxw_color_defined_p);
+  defsubr (&Sxw_color_values);
   defsubr (&Sxw_display_color_p);
   defsubr (&Sx_display_grayscale_p);
   defsubr (&Sx_create_frame);
