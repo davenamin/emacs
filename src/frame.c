@@ -7259,6 +7259,7 @@ syms_of_frame (void)
   DEFSYM (Qpgtk, "pgtk");
   DEFSYM (Qhaiku, "haiku");
   DEFSYM (Qandroid, "android");
+  DEFSYM (Qios, "ios");
   DEFSYM (Qvisible, "visible");
   DEFSYM (Qbuffer_predicate, "buffer-predicate");
   DEFSYM (Qbuffer_list, "buffer-list");

@@ -1478,7 +1478,12 @@ ios_defined_color (struct frame *f, const char *color_name,
 void
 syms_of_iosterm (void)
 {
-  DEFSYM (Qios, "ios");
+  /* Qios itself is DEFSYM'd in frame.c alongside Qandroid and the
+     other window-system symbols: framep returns it from every
+     build, including the host build of an iOS tree (which
+     compiles frame.c but not this file -- the host bootstrap pass
+     added for autoload generation broke exactly there when the
+     DEFSYM lived here).  */
   Fprovide (Qios, Qnil);
 
   /* Cross-port "x-*" variables that cus-start.el expects to be bound
