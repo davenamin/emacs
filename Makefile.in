@@ -406,6 +406,18 @@ ios ios-bundle:
 	  echo "*** then make ios again."; \
 	  exit 1; \
 	fi
+## The app bundle ships the source lisp/ tree, and the on-device
+## loadup falls back to the stale ldefs-boot.el when the generated
+## autoload files (lisp/loaddefs.el, cl-loaddefs.el, ...) are
+## absent -- observed on-device as void-function errors for any
+## autoload cookie newer than ldefs-boot (dired-goto-subdir,
+## cl-some).  Generating them requires a runnable host Emacs, so
+## build the host bootstrap binary first -- the same arrangement
+## the Android port uses, where the host build byte-compiles the
+## lisp shipped in the APK.  bootstrap-emacs builds host lib/ and
+## lib-src/ tools through its own prerequisites.
+	$(MAKE) -C src bootstrap-emacs$(EXEEXT) bootstrap-emacs.pdmp
+	$(MAKE) -C lisp autoloads EMACS="../src/bootstrap-emacs$(EXEEXT)"
 	$(MAKE) -C cross all
 	$(MAKE) -C ios all
 

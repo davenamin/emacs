@@ -123,7 +123,23 @@ $(ios_appdir): $(srcdir)/$(ios_appsrc) Emacs.base/Info.plist
 ## Use rsync (preinstalled on macOS runners) to copy the trees;
 ## tar-pipe would also work but rsync gives a clean exclude rule for
 ## the Makefile / .gitignore noise.
-$(ios_appdir)/lisp/loadup.el: $(ios_appdir)
+## The $(wildcard) prerequisite makes the copy re-run whenever the
+## host build regenerates loaddefs.el (a good staleness proxy for
+## the whole family of generated autoload files); when the file has
+## never been generated the wildcard is empty and the recipe check
+## below produces a comprehensible error instead of shipping a
+## bundle whose loadup falls back to the stale ldefs-boot.el
+## (observed on-device: "Symbol's function definition is void:
+## dired-goto-subdir" / "cl-some" for every autoload cookie newer
+## than ldefs-boot).
+$(ios_appdir)/lisp/loadup.el: $(ios_appdir) \
+    $(wildcard $(abs_top_srcdir)/lisp/loaddefs.el)
+	@test -f $(abs_top_srcdir)/lisp/loaddefs.el || { \
+	  echo "ios/Makefile: lisp/loaddefs.el has not been generated."; \
+	  echo "  Run 'make ios' from the top-level build directory;"; \
+	  echo "  it builds the host bootstrap-emacs and the autoload"; \
+	  echo "  files before assembling the bundle."; \
+	  exit 1; }
 	rsync -a --delete \
 	  --exclude='*.elc' --exclude='.git*' --exclude='Makefile*' \
 	  $(abs_top_srcdir)/lisp/ $(ios_appdir)/lisp/
