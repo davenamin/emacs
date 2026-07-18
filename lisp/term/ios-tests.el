@@ -161,6 +161,18 @@ Results land in ~/ios-test-results.txt; one line per test."
       (cl-assert (color-defined-p name)))
     (cl-assert (equal (color-values "red") '(65535 0 0))))
 
+  (ios-test-deftest theme-face-specs-match
+    "color face-spec display predicates match on the iOS frame"
+    ;; The root cause of "themes have no effect": if display-graphic-p
+    ;; omits ios, display-color-p routes to the tty path, display-type
+    ;; becomes mono, and every (class color) theme spec fails to match.
+    (frame-set-background-mode (selected-frame))
+    (cl-assert (display-graphic-p))
+    (cl-assert (display-color-p))
+    (cl-assert (eq 'color (frame-parameter nil 'display-type)))
+    (cl-assert (face-spec-set-match-display
+                '((class color) (min-colors 89)) nil)))
+
   (ios-test-deftest frame-bar-parameters-numeric
     "menu/tab/tool-bar-lines frame parameters are numbers"
     ;; window-deletable-p and friends do arithmetic on these; a
