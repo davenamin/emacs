@@ -158,6 +158,16 @@ minibuffer exit is unconditional once shown by this hook."
 (add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
 (add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
 
+;; iOS forbids subprocesses (posix_spawn is sandboxed away), so
+;; dired must use the pure-Lisp ls emulation instead of spawning
+;; `ls' -- the same arrangement Android uses, but keyed here off
+;; the window system because the iOS build reports system-type
+;; `darwin', which ls-lisp's own default treats as
+;; has-working-ls.  Without this, dired fails with "Searching for
+;; program: No such file or directory, ls".
+(require 'ls-lisp)
+(setq ls-lisp-use-insert-directory-program nil)
+
 ;; Self-test entry point.  lisp/term is not on load-path by default
 ;; (terminal init files are loaded by emacs.c's window-system probe,
 ;; not via require), so the autoload file argument must include the
