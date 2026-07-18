@@ -162,11 +162,22 @@ log="$work/build.log"
 echo "build-deps.sh: sdk=$sdk arch=$arch min=$minver prefix=$prefix"
 echo "build-deps.sh: full compile output in $log"
 
+## Run one package build; on failure surface the log tail (CI
+## captures only this script's stdout -- the build log lives on
+## the runner and would otherwise vanish with it).
+build_failed ()
+{
+  echo "build-deps.sh: $1 FAILED; last 80 lines of $log:" >&2
+  tail -80 "$log" >&2
+  exit 1
+}
+
 ## ---- GMP --------------------------------------------------------
-## --disable-assembly: GMP's aarch64 assembly is fine with Apple
-## clang in most releases, but the C fallback removes the only
-## historically fragile part of this cross-compile and public-key
-## performance remains more than adequate for TLS handshakes.
+## --disable-assembly: like the nettle and gnutls assembler
+## disables below, prefer the portable C paths over
+## assembler-dialect roulette with Apple's integrated assembler;
+## public-key performance remains more than adequate for TLS
+## handshakes.
 fetch "$GMP_URL"
 unpack "gmp-$GMP_VERSION.tar.xz" "gmp-$GMP_VERSION"
 echo "build-deps.sh: building gmp-$GMP_VERSION"
@@ -174,19 +185,27 @@ echo "build-deps.sh: building gmp-$GMP_VERSION"
   && ./configure --host=$host_triple --prefix="$prefix" \
        --enable-static --disable-shared --disable-assembly \
        CC="$CC" CFLAGS="$target_cflags" \
-  && make -j"$jobs" && make install ) >> "$log" 2>&1
+  && make -j"$jobs" && make install ) >> "$log" 2>&1 \
+  || build_failed "gmp-$GMP_VERSION"
 
 ## ---- Nettle -----------------------------------------------------
+## --disable-assembler: Nettle's aarch64 assembly is written for
+## GNU as; Apple's integrated assembler rejects it (ELF section
+## directives, %-prefixed type annotations), which broke the first
+## CI cross-build of this stack.  The C implementations are fully
+## portable.
 fetch "$NETTLE_URL"
 unpack "nettle-$NETTLE_VERSION.tar.gz" "nettle-$NETTLE_VERSION"
 echo "build-deps.sh: building nettle-$NETTLE_VERSION"
 ( cd "$work/nettle-$NETTLE_VERSION" \
   && ./configure --host=$host_triple --prefix="$prefix" \
        --disable-shared --disable-documentation \
+       --disable-assembler \
        CC="$CC" \
        CFLAGS="$target_cflags -I$prefix/include" \
        LDFLAGS="-L$prefix/lib" \
-  && make -j"$jobs" && make install ) >> "$log" 2>&1
+  && make -j"$jobs" && make install ) >> "$log" 2>&1 \
+  || build_failed "nettle-$NETTLE_VERSION"
 
 ## ---- GnuTLS -----------------------------------------------------
 ## Included libtasn1 and unistring keep the dependency set at
@@ -195,6 +214,9 @@ echo "build-deps.sh: building nettle-$NETTLE_VERSION"
 ## default trust store is configured -- Emacs passes trust anchors
 ## explicitly through gnutls-trustfiles, which lisp/term/ios-win.el
 ## points at the ca-bundle.pem the bundle ships.
+## --disable-hardware-acceleration: GnuTLS's lib/accelerated
+## aarch64 assembly is GNU-as flavored like Nettle's; the C code
+## paths avoid the same Apple-assembler incompatibility.
 fetch "$GNUTLS_URL"
 unpack "gnutls-$GNUTLS_VERSION.tar.xz" "gnutls-$GNUTLS_VERSION"
 echo "build-deps.sh: building gnutls-$GNUTLS_VERSION"
@@ -206,12 +228,13 @@ echo "build-deps.sh: building gnutls-$GNUTLS_VERSION"
        --without-zstd --without-zlib --without-tpm --without-tpm2 \
        --disable-libdane --disable-doc --disable-tools \
        --disable-tests --disable-cxx --disable-nls \
-       --disable-guile \
+       --disable-guile --disable-hardware-acceleration \
        CC="$CC" \
        CFLAGS="$target_cflags -I$prefix/include" \
        LDFLAGS="-L$prefix/lib" \
        PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" \
-  && make -j"$jobs" && make install ) >> "$log" 2>&1
+  && make -j"$jobs" && make install ) >> "$log" 2>&1 \
+  || build_failed "gnutls-$GNUTLS_VERSION"
 
 ## ---- Post-process gnutls.pc for static linking -------------------
 ## Emacs's configure queries pkg-config without --static, so fold
