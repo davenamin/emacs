@@ -54,7 +54,7 @@ build-deps.sh fetches, cross-compiles, and installs static GMP,
 Nettle, and GnuTLS for the requested SDK (pass --sdk
 iphonesimulator for simulator builds -- the deps prefix must match
 the SDK the Emacs build targets).  It needs pkg-config on the host
-(brew install pkg-config).  Tarballs are downloaded from
+(see "Host tools" below).  Tarballs are downloaded from
 ftp.gnu.org / www.gnupg.org over TLS into <prefix>/../downloads;
 pre-seed that directory with independently verified tarballs if
 your threat model requires it.  The script prints the SHA-256 of
@@ -79,6 +79,41 @@ Store submissions, note that shipping TLS does not change the
 export-compliance picture materially: standard HTTPS falls under
 the usual exemption categories, but the ITSAppUsesNonExemptEncryption
 declaration (see below) remains the submitter's call.
+
+Host tools (Homebrew or Nix)
+----------------------------
+
+Xcode is required either way: the iOS SDKs and the codesigning
+machinery come only from Apple, so no package manager replaces it
+(and the Command Line Tools alone are not enough -- check that
+xcode-select -p points into Xcode.app).  The build needs four
+host tools beyond Xcode: autoconf, automake, texinfo (for
+makeinfo), and pkg-config.
+
+Homebrew:
+
+  brew install autoconf automake texinfo pkg-config
+
+Nix: prefer `nix shell', which only puts the tools on PATH:
+
+  nix shell nixpkgs#autoconf nixpkgs#automake \
+            nixpkgs#texinfo nixpkgs#pkg-config
+
+Avoid building from a `nix-shell -p' / stdenv dev shell: those
+export CC, CXX, LDFLAGS, and NIX_CFLAGS_COMPILE pointing at Nix's
+own clang wrapper and SDK, and the outer (host) configure pass
+would pick them up in preference to the Xcode toolchain.  If you
+must work inside such a shell, unset CC CXX LD CPPFLAGS CFLAGS
+LDFLAGS NIX_CFLAGS_COMPILE NIX_LDFLAGS before running configure.
+The cross side is pinned regardless: ios/build-deps.sh resolves
+clang, ar, ranlib, and strip through xcrun, and the recursive
+XCONFIGURE=ios pass gets CC/CXX/AR/RANLIB the same way from
+cross/xcode-build/xcode-toolchain.sh, so Nix toolchains on PATH
+cannot leak into the iOS binaries; the same applies to
+pkg-config, which only ever
+reads the .pc files inside the --with-ios-deps prefix
+(PKG_CONFIG_LIBDIR is forced there, so a Nix store pkg-config
+cannot pull host libraries into the cross link).
 
 Installing on a physical device
 -------------------------------

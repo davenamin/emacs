@@ -106,11 +106,22 @@ command -v xcrun >/dev/null 2>&1 || {
   exit 1
 }
 command -v pkg-config >/dev/null 2>&1 || {
-  echo "build-deps.sh: pkg-config not found (brew install pkg-config)." >&2
+  echo "build-deps.sh: pkg-config not found." >&2
+  echo "  Homebrew: brew install pkg-config" >&2
+  echo "  Nix:      nix shell nixpkgs#pkg-config" >&2
   exit 1
 }
 
+## Resolve the whole binutils surface through xcrun, not just the
+## compiler.  The packages' configure scripts otherwise take ar /
+## ranlib / strip from PATH, and environments that put non-Apple
+## toolchains first (Nix shells with a stdenv compiler, GNU
+## binutils installs) would corrupt the static archives or their
+## symbol tables.
 CC=`xcrun --sdk "$sdk" --find clang`
+AR=`xcrun --sdk "$sdk" --find ar`
+RANLIB=`xcrun --sdk "$sdk" --find ranlib`
+STRIP=`xcrun --sdk "$sdk" --find strip`
 SDKROOT=`xcrun --sdk "$sdk" --show-sdk-path`
 
 if [ "$sdk" = iphonesimulator ]; then
@@ -184,7 +195,8 @@ echo "build-deps.sh: building gmp-$GMP_VERSION"
 ( cd "$work/gmp-$GMP_VERSION" \
   && ./configure --host=$host_triple --prefix="$prefix" \
        --enable-static --disable-shared --disable-assembly \
-       CC="$CC" CFLAGS="$target_cflags" \
+       CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
+       CFLAGS="$target_cflags" \
   && make -j"$jobs" && make install ) >> "$log" 2>&1 \
   || build_failed "gmp-$GMP_VERSION"
 
@@ -214,7 +226,7 @@ echo "build-deps.sh: building nettle-$NETTLE_VERSION"
        --disable-shared --disable-documentation \
        --disable-assembler \
        ac_cv_type_uid_t=yes \
-       CC="$CC" \
+       CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
        CFLAGS="$target_cflags -I$prefix/include" \
        LDFLAGS="-L$prefix/lib" \
   && make -j"$jobs" && make install ) >> "$log" 2>&1 \
@@ -243,7 +255,7 @@ echo "build-deps.sh: building gnutls-$GNUTLS_VERSION"
        --disable-tests --disable-cxx --disable-nls \
        --disable-guile --disable-hardware-acceleration \
        ac_cv_type_uid_t=yes \
-       CC="$CC" \
+       CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
        CFLAGS="$target_cflags -I$prefix/include" \
        LDFLAGS="-L$prefix/lib" \
        PKG_CONFIG_LIBDIR="$prefix/lib/pkgconfig" \
