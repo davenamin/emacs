@@ -308,27 +308,59 @@ App Store submission requirements this port already carries
     time; the App Store re-signs on ingestion and the published
     app carries no embedded provisioning profile (TN3125).
 
+Review-policy risks to weigh before submitting:
+
+  * Downloaded code (guideline 2.5.2).  package-install fetches
+    Emacs Lisp from ELPA and executes it, and eval runs anything
+    the user types.  Apple's guideline permits self-contained
+    apps and carves out limited room for educational and
+    development tools; interpreter apps exist on the store under
+    that reading, but acceptance is reviewer-dependent.  Framing
+    the app as a text editor / development environment, keeping
+    package installation strictly user-initiated (it is), and
+    being ready to appeal are the practical mitigations; the
+    fallback is disabling package-install in a store build.
+  * UIKit scene lifecycle.  The app uses the legacy
+    UIApplicationDelegate launch path (no
+    UIApplicationSceneManifest).  Apple has announced that a
+    future SDK will require the UIScene lifecycle; when the
+    Xcode toolchain in use starts enforcing it, the delegate
+    bring-up in src/ios.m needs porting to a scene delegate.
+    Not a rejection today, but a known horizon.
+  * Reviewer interaction: commands that would spawn subprocesses
+    (M-x shell, compile) signal a clean Lisp error on device
+    rather than crashing, which is what guideline 2.1 cares
+    about.
+
+Handled mechanically by the build (no action needed): privacy
+manifest covering FileTimestamp, DiskSpace, UserDefaults, and
+SystemBootTime; DT* / BuildMachineOSBuild toolchain-provenance
+keys App Store ingestion expects from non-Xcode uploads; compiled
+launch storyboard; UIDeviceFamily; asset-catalog icon wiring; and
+a payload free of symlinks and stray executables (both are
+ingestion rejections).
+
 Submission items that remain YOUR decision:
 
   * Export compliance.  ITSAppUsesNonExemptEncryption is not set
     in Info.plist, so App Store Connect will walk you through the
-    export-compliance questionnaire on each upload.  Emacs links
-    no TLS library on iOS and its hash primitives (secure-hash)
-    are the kind of exempt use Apple describes in "Complying with
-    Encryption Export Regulations", but the declaration is a
-    legal statement the submitter must make.
+    export-compliance questionnaire on each upload.  With the
+    GnuTLS stack included, the app uses encryption in the
+    standard HTTPS sense Apple's "Complying with Encryption
+    Export Regulations" describes as exempt from documentation
+    requirements, but the declaration is a legal statement the
+    submitter must make.
   * Licensing.  GNU Emacs is GPLv3.  The FSF's position on App
     Store terms led to the removal of GNU Go (2010) and VLC's
     original takedown.  Nothing technical in this port changes
     that calculus; TestFlight and personal-device installs are
     unaffected.
 
-On first launch Emacs writes its pdumper image into
-
-  <sandbox>/Library/Application Support/Emacs/emacs.pdmp
-
-(seconds to tens of seconds depending on hardware); subsequent
-launches mmap it sub-second.
+Every launch bootstraps the Lisp environment from the bundled
+sources (the cross build cannot pre-dump, and no dump is written
+on device); startup takes a few seconds depending on hardware.
+Caching a pdumper image in the sandbox on first launch is the
+natural future optimization.
 
 Runtime / threading model
 -------------------------

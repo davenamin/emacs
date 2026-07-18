@@ -28,11 +28,13 @@
        readable across launches.  CA92.1 = data accessible only
        to this app.
 
-     SystemBootTime is deliberately NOT declared: Apple's list
-     for that category names ProcessInfo.systemUptime and
-     mach_absolute_time(), neither of which the iOS binary
-     references (filelock.c's boot-time lookup goes through
-     sysctl KERN_BOOTTIME, which is not on Apple's list).  -->
+     - SystemBootTime: ios.m timestamps input events with
+       clock_gettime (CLOCK_MONOTONIC), which on Darwin counts
+       from boot and sits in the API family Apple audits under
+       this category.  35F9.1 = measuring elapsed time between
+       events (click-count detection); the values never leave
+       the device.  (filelock.c's boot-time lookup goes through
+       sysctl KERN_BOOTTIME, which is not on Apple's list.)  -->
 <dict>
 	<key>NSPrivacyTracking</key>
 	<false/>
@@ -58,6 +60,14 @@
 			<key>NSPrivacyAccessedAPITypeReasons</key>
 			<array>
 				<string>85F4.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
 			</array>
 		</dict>
 		<dict>

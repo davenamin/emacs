@@ -104,6 +104,35 @@ $(ios_appdir): $(srcdir)/$(ios_appsrc) Emacs.base/Info.plist
 	    --exclude LaunchScreen.storyboard . ) | \
 	  ( cd $(ios_appdir) ; umask 022; tar xf - )
 	cp Emacs.base/Info.plist $(ios_appdir)/Info.plist
+	## Toolchain-provenance keys App Store ingestion expects on
+	## every upload (Xcode stamps them itself; a Makefile build
+	## must add them or validation rejects with the ITMS-90530
+	## family).  DTXcode is the version with the dots removed,
+	## zero-padded to at least four digits (26.5 -> 2650).
+	sdk_ver=`xcrun --sdk $(ios_platform) --show-sdk-version`; \
+	sdk_build=`xcrun --sdk $(ios_platform) --show-sdk-build-version`; \
+	xc_ver=`xcodebuild -version | sed -n 's/^Xcode //p'`; \
+	xc_build=`xcodebuild -version | sed -n 's/^Build version //p'`; \
+	dtxcode=`echo $$xc_ver | awk -F. \
+	  '{ printf "%s%s%s", $$1, $$2, ($$3 == "" ? "0" : $$3) }'`; \
+	os_build=`sw_vers -buildVersion`; \
+	set -e; \
+	for kv in \
+	  "DTSDKName=$(ios_platform)$$sdk_ver" \
+	  "DTPlatformVersion=$$sdk_ver" \
+	  "DTSDKBuild=$$sdk_build" \
+	  "DTPlatformBuild=$$sdk_build" \
+	  "DTXcode=$$dtxcode" \
+	  "DTXcodeBuild=$$xc_build" \
+	  "DTCompiler=com.apple.compilers.llvm.clang.1_0" \
+	  "BuildMachineOSBuild=$$os_build"; do \
+	  key=$${kv%%=*}; val=$${kv#*=}; \
+	  /usr/libexec/PlistBuddy \
+	    -c "Delete :$$key" "$(ios_appdir)/Info.plist" \
+	    2>/dev/null || true; \
+	  /usr/libexec/PlistBuddy \
+	    -c "Add :$$key string $$val" "$(ios_appdir)/Info.plist"; \
+	done
 	## iOS loads only COMPILED storyboards (.storyboardc).  Shipping
 	## the raw XML source leaves the app without a loadable launch
 	## screen, and devices then run it under legacy compatibility
