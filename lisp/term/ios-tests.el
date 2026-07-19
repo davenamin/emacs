@@ -192,6 +192,14 @@ Results land in ~/ios-test-results.txt; one line per test."
       (let ((dom (libxml-parse-html-region (point-min) (point-max))))
         (cl-assert (eq 'html (car dom))))))
 
+  (ios-test-deftest treesit-runtime-available
+    "the tree-sitter parsing runtime is linked in"
+    ;; Runtime only: language grammars are separate dylibs that must
+    ;; be pre-built and bundled (see ios/README); none ship by
+    ;; default, so this asserts the runtime, not a specific grammar.
+    (cl-assert (treesit-available-p))
+    (cl-assert (listp treesit-extra-load-path)))
+
   (ios-test-deftest sqlite-available
     "sqlite3 is linked and an in-memory round-trip works"
     ;; libsqlite3 comes from the iOS SDK (no cross-compiled dep);

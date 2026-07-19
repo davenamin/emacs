@@ -20,7 +20,8 @@
 
 ### Commentary:
 
-## Build GnuTLS (with GMP and Nettle) and libxml2 as static
+## Build GnuTLS (with GMP and Nettle), libxml2, and the
+## tree-sitter runtime as static
 ## libraries for iOS, producing an install prefix that
 ## configure --with-ios-deps=PREFIX consumes.  This is the iOS
 ## counterpart of the Android port's arrangement, where these same
@@ -39,7 +40,7 @@
 ## --prefix $PWD/ios-deps/<sdk>, --jobs = hw.ncpu.
 ##
 ## The script is a fast no-op when PREFIX already contains
-## lib/pkgconfig/libxml-2.0.pc (the last artifact built), so CI
+## lib/pkgconfig/tree-sitter.pc (the last artifact built), so CI
 ## can cache the prefix.  Source
 ## tarballs are fetched from the projects' official release hosts
 ## into PREFIX/../downloads; drop independently verified tarballs
@@ -57,6 +58,7 @@ GMP_VERSION=6.3.0
 NETTLE_VERSION=3.10.1
 GNUTLS_VERSION=3.8.9
 LIBXML2_VERSION=2.12.9
+TREESITTER_VERSION=0.24.7
 
 ## Download locations, tried in order.  ftpmirror.gnu.org is the
 ## GNU project's geo mirror redirector and is the recommended
@@ -70,6 +72,7 @@ NETTLE_URLS="https://ftpmirror.gnu.org/nettle/nettle-$NETTLE_VERSION.tar.gz
 GNUTLS_URLS="https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz
              https://mirrors.dotsrc.org/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz"
 LIBXML2_URLS="https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-$LIBXML2_VERSION.tar.xz"
+TREESITTER_URLS="https://github.com/tree-sitter/tree-sitter/archive/refs/tags/v$TREESITTER_VERSION.tar.gz"
 
 sdk=iphoneos
 arch=arm64
@@ -107,7 +110,7 @@ case "$prefix" in
 esac
 test -n "$jobs" || jobs=`sysctl -n hw.ncpu 2>/dev/null || echo 4`
 
-if [ -f "$prefix/lib/pkgconfig/libxml-2.0.pc" ]; then
+if [ -f "$prefix/lib/pkgconfig/tree-sitter.pc" ]; then
   echo "build-deps.sh: $prefix is already populated; nothing to do."
   exit 0
 fi
@@ -323,6 +326,43 @@ pc="$prefix/lib/pkgconfig/libxml-2.0.pc"
 sed -e 's|^Libs:.*|Libs: -L${libdir} -lxml2 -lm|' \
     "$pc" > "$pc.tmp"
 mv "$pc.tmp" "$pc"
+
+## ---- tree-sitter runtime ----------------------------------------
+## The parsing runtime for the *-ts-mode major modes.  Just the
+## library -- language grammars are separate and, on iOS, must be
+## pre-built and bundled (see ios/README): runtime installation
+## via treesit-install-language-grammar cannot work (no compiler,
+## and the sandbox bars dlopen of a non-bundle dylib).  tree-sitter
+## builds as a single amalgamation (lib/src/lib.c), so compile it
+## directly rather than driving its Makefile (which also builds a
+## versioned .dylib we do not want).
+fetch $TREESITTER_URLS
+unpack "v$TREESITTER_VERSION.tar.gz" "tree-sitter-$TREESITTER_VERSION"
+echo "build-deps.sh: building tree-sitter-$TREESITTER_VERSION"
+( cd "$work/tree-sitter-$TREESITTER_VERSION" \
+  && $CC $target_cflags -Ilib/include -Ilib/src \
+       -c lib/src/lib.c -o ts-lib.o \
+  && $AR rcs "$prefix/lib/libtree-sitter.a" ts-lib.o \
+  && $RANLIB "$prefix/lib/libtree-sitter.a" \
+  && mkdir -p "$prefix/include/tree_sitter" \
+  && cp lib/include/tree_sitter/*.h "$prefix/include/tree_sitter/" ) \
+    >> "$log" 2>&1 \
+  || build_failed "tree-sitter-$TREESITTER_VERSION"
+
+## Hand-write the pkg-config file (the amalgamation build skips it).
+mkdir -p "$prefix/lib/pkgconfig"
+cat > "$prefix/lib/pkgconfig/tree-sitter.pc" <<PCEOF
+prefix=$prefix
+exec_prefix=\${prefix}
+libdir=\${prefix}/lib
+includedir=\${prefix}/include
+
+Name: tree-sitter
+Description: An incremental parsing system for programming tools
+Version: $TREESITTER_VERSION
+Libs: -L\${libdir} -ltree-sitter
+Cflags: -I\${includedir}
+PCEOF
 
 echo "build-deps.sh: done."
 echo "build-deps.sh: configure Emacs with --with-ios-deps=$prefix"

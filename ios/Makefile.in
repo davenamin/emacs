@@ -200,6 +200,16 @@ $(ios_appdir)/etc/charsets: $(ios_appdir)
 	security find-certificate -a -p \
 	  /System/Library/Keychains/SystemRootCertificates.keychain \
 	  > $(ios_appdir)/etc/ca-bundle.pem
+	## tree-sitter grammar directory (treesit-extra-load-path points
+	## here).  Seeded from $(ios_appsrc)/tree-sitter if the builder
+	## provides pre-built, iOS-arm64 grammar dylibs there; otherwise
+	## left empty -- grammars cannot be installed at runtime on iOS
+	## (see ios/README).
+	$(MKDIR_P) $(ios_appdir)/tree-sitter
+	if [ -d "$(srcdir)/$(ios_appsrc)/tree-sitter" ]; then \
+	  cp -f $(srcdir)/$(ios_appsrc)/tree-sitter/*.dylib \
+	    $(ios_appdir)/tree-sitter/ 2>/dev/null || true; \
+	fi
 	## DOC (built-in docstrings) is generated into cross/etc by
 	## the top-level ios target; without it C-h on any C-level
 	## function or variable fails.  The Info manuals land in
@@ -294,6 +304,10 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	    "$(ios_appdir)/embedded.mobileprovision"; \
 	fi
 	@if [ -n "$(CODESIGN_IDENTITY)" ]; then \
+	  for dylib in $(ios_appdir)/tree-sitter/*.dylib; do \
+	    [ -f "$$dylib" ] || continue; \
+	    codesign --force --sign "$(CODESIGN_IDENTITY)" "$$dylib"; \
+	  done; \
 	  if [ -n "$(DEVICE_ENTITLEMENTS)" ]; then \
 	    codesign --force --sign "$(CODESIGN_IDENTITY)" \
 	      --entitlements "$(DEVICE_ENTITLEMENTS)" \

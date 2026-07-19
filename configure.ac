@@ -1562,7 +1562,6 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_tiff=no
   with_selinux=no
   with_modules=no
-  with_tree_sitter=no
   with_imagemagick=no
   with_lcms2=no
   with_mailutils=no
@@ -1601,11 +1600,13 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   if test "$XCONFIGURE" = "ios" && test -n "$IOS_DEPS"; then
     with_gnutls=yes
     with_xml2=yes
+    with_tree_sitter=yes
     PKG_CONFIG_LIBDIR="$IOS_DEPS/lib/pkgconfig"
     export PKG_CONFIG_LIBDIR
   else
     with_gnutls=no
     with_xml2=no
+    with_tree_sitter=no
   fi
 
   # sqlite3 needs no cross-compiled dependency: the iOS SDK ships
