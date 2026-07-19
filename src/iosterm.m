@@ -294,15 +294,22 @@ ios_draw_glyph_string (struct glyph_string *s)
       if (weight > 100) deco |= IOS_DECO_BOLD;
     }
 
-  /* Pass the frame's column width so the canvas positions every
-     character on Emacs's integer cell grid.  Core Text's natural
-     advances (e.g. 8.43pt for 14pt SF Mono) disagree with the
-     ceil'd cell width Emacs lays out with (9pt); mixing the two
-     grids misplaces any glyph repainted on its own, e.g. by
-     cursor passage.  */
+  /* The cell grid positions every character on Emacs's integer
+     column width, so Core Text's natural advances (e.g. 8.43pt
+     for 14pt SF Mono vs the ceil'd 9pt cell) can't misplace a
+     glyph repainted on its own, e.g. by cursor passage.  But that
+     alignment only holds for the frame's default font: a glyph
+     string in another font -- the variable-pitch and scaled-height
+     faces the splash screen and many packages use -- was laid out
+     by redisplay with that font's own (often proportional)
+     advances, so forcing it onto the default grid mis-lays the run
+     and drops its tail.  Pass 0 for non-default fonts so the canvas
+     draws them with natural advances instead.  */
+  double cell_width = (s->font == FRAME_FONT (s->f))
+                      ? (double) FRAME_COLUMN_WIDTH (s->f) : 0.0;
   ios_canvas_draw_text ((double) s->x, (double) s->y,
                         w, h, fg, bg, utf8, font_size, deco,
-                        (double) FRAME_COLUMN_WIDTH (s->f),
+                        cell_width,
                         (double) clip.x, (double) clip.y,
                         (double) clip.width, (double) clip.height);
   xfree (utf8);
