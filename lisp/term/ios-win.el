@@ -174,6 +174,19 @@ minibuffer exit is unconditional once shown by this hook."
     (when (file-readable-p bundle)
       (setq gnutls-trustfiles (list bundle)))))
 
+;; tree-sitter grammars.  The parsing runtime is linked in, but the
+;; language grammars are separate dynamic libraries.  On iOS they
+;; cannot be installed at runtime -- treesit-install-language-grammar
+;; needs a C compiler (no subprocesses) and would dlopen a dylib
+;; outside the app bundle (barred by the sandbox).  Pre-built
+;; grammars shipped inside the signed app bundle can be dlopen'd,
+;; so point treesit-extra-load-path at the bundle's tree-sitter dir.
+(when (and (fboundp 'ios-bundle-directory)
+           (boundp 'treesit-extra-load-path))
+  (add-to-list 'treesit-extra-load-path
+               (file-name-as-directory
+                (expand-file-name "tree-sitter" (ios-bundle-directory)))))
+
 ;; iOS forbids subprocesses (posix_spawn is sandboxed away), so
 ;; dired must use the pure-Lisp ls emulation instead of spawning
 ;; `ls' -- the same arrangement Android uses, but keyed here off

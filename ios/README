@@ -51,7 +51,8 @@ cross-compile the GnuTLS stack first and point configure at it:
   make ios
 
 build-deps.sh fetches, cross-compiles, and installs static GMP,
-Nettle, GnuTLS, and libxml2 for the requested SDK (pass --sdk
+Nettle, GnuTLS, libxml2, and the tree-sitter runtime for the
+requested SDK (pass --sdk
 iphonesimulator for simulator builds -- the deps prefix must match
 the SDK the Emacs build targets).  It needs pkg-config on the host
 (see "Host tools" below).  Tarballs are downloaded from
@@ -79,6 +80,26 @@ It provides the built-in database (M-x sqlite, sqlite-open, and
 packages such as org-roam / forge that use it).  Extension
 loading via arbitrary dylibs is a separate matter the sandbox
 restricts, but the core database is fully functional.
+
+tree-sitter is split into a runtime and per-language grammars.
+build-deps.sh cross-compiles the runtime (libtree-sitter), which
+is what --with-ios-deps enables: treesit-available-p is then t
+and the *-ts-mode major modes load.  The grammars are the harder
+part.  On iOS they CANNOT be installed at runtime the usual way:
+treesit-install-language-grammar compiles a grammar with a C
+compiler (no subprocesses) and dlopens the result from
+~/.emacs.d (the sandbox bars dlopen of a dylib outside the app
+bundle).  The one path that works is bundling: dlopen of a
+signed dylib INSIDE the app bundle is permitted.  So a grammar
+must be (1) cross-compiled to an iOS-arm64 .dylib against the
+target SDK, (2) placed in ios/Emacs.base/tree-sitter/ (the build
+copies *.dylib from there into Emacs.app/tree-sitter/, which
+treesit-extra-load-path points at) or dropped directly into the
+built bundle, and (3) signed -- the bundle step signs any
+tree-sitter/*.dylib inside-out before signing the bundle.  This
+bundled-grammar path is set up but has not been verified on a
+physical device; treat runtime grammar loading as experimental
+until confirmed on-device.
 
 Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
 build host's Apple root-CA set into the bundle as
@@ -438,7 +459,7 @@ Works:
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
   * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): twenty-three probes covering sandbox
+    ios-run-self-tests): twenty-four probes covering sandbox
     identity, file round-trip, clipboard, geometry, appearance,
     image load, face attributes, color-name resolution, theme
     face-spec matching, frame parameters, frame-background-mode,
