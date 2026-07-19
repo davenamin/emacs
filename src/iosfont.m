@@ -109,14 +109,15 @@ ios_spec_wants_mono (Lisp_Object spec)
   Lisp_Object sp = AREF (spec, FONT_SPACING_INDEX);
   if (FIXNUMP (sp))
     return XFIXNUM (sp) >= FONT_SPACING_MONO;
-  /* No spacing given: decide from the family.  A missing family, or a
-     generic "Monospace"/"fixed", means the fixed-pitch system font.  */
+  /* No spacing given: decide from the family.  A missing family means
+     the default (fixed-pitch) system font, and any family whose name
+     mentions "mono" -- including the private ".AppleSystemUIFont-
+     Monospaced" the default face inherits -- is monospaced.  */
   Lisp_Object fam = AREF (spec, FONT_FAMILY_INDEX);
   if (!SYMBOLP (fam) || NILP (fam))
     return true;
-  Lisp_Object name = SYMBOL_NAME (fam);
-  const char *s = SSDATA (name);
-  return (strcasecmp (s, "monospace") == 0
+  const char *s = SSDATA (SYMBOL_NAME (fam));
+  return (strcasestr (s, "mono") != NULL
           || strcasecmp (s, "fixed") == 0);
 }
 
@@ -138,8 +139,13 @@ ios_resolve_uifont (Lisp_Object spec, CGFloat size)
   if (SYMBOLP (fam) && !NILP (fam))
     {
       const char *s = SSDATA (SYMBOL_NAME (fam));
-      /* Emacs's generic families do not name real iOS faces.  */
-      if (strcasecmp (s, "monospace") && strcasecmp (s, "fixed")
+      /* Emacs's generic families, and Apple's private dot-prefixed
+         system families (the default face's ".AppleSystemUIFont*"),
+         do not name a face fontWithName can open -- route them through
+         the system-font constructors below, where weight is a real
+         parameter.  */
+      if (s[0] != '.'
+          && strcasecmp (s, "monospace") && strcasecmp (s, "fixed")
           && strcasecmp (s, "sans serif") && strcasecmp (s, "sans-serif")
           && strcasecmp (s, "sans"))
         family = [NSString stringWithUTF8String:s];
@@ -148,10 +154,11 @@ ios_resolve_uifont (Lisp_Object spec, CGFloat size)
   UIFont *base = nil;
   if (family)
     {
-      /* A named family (e.g. Courier, PingFang SC).  fontWithName
+      /* A named family (Courier, PingFang SC, ...).  fontWithName
          accepts a PostScript or full name; for a bare family name it
          can return nil, so fall back to a family-attribute descriptor,
-         which is how the script-fallback fonts (CJK, emoji) resolve.  */
+         which is how the script-fallback fonts (CJK, emoji) resolve.
+         Bold and italic are layered on as symbolic traits below.  */
       base = [UIFont fontWithName:family size:size];
       if (base == nil)
         {
@@ -161,33 +168,42 @@ ios_resolve_uifont (Lisp_Object spec, CGFloat size)
           if (fd)
             base = [UIFont fontWithDescriptor:fd size:size];
         }
-    }
-  if (base == nil)
-    {
-      UIFontWeight wt = wantBold ? UIFontWeightBold : UIFontWeightRegular;
-      base = wantMono
-        ? [UIFont monospacedSystemFontOfSize:size weight:wt]
-        : [UIFont systemFontOfSize:size weight:wt];
-    }
-  if (base == nil)
-    base = [UIFont systemFontOfSize:size];
-
-  /* Layer on bold/italic traits the base face may lack.  */
-  UIFontDescriptorSymbolicTraits want = 0;
-  if (wantBold)   want |= UIFontDescriptorTraitBold;
-  if (wantItalic) want |= UIFontDescriptorTraitItalic;
-  if (want)
-    {
-      UIFontDescriptor *d = base.fontDescriptor;
-      UIFontDescriptorSymbolicTraits tr = d.symbolicTraits | want;
-      UIFontDescriptor *d2 = [d fontDescriptorWithSymbolicTraits:tr];
-      if (d2)
+      UIFontDescriptorSymbolicTraits want = 0;
+      if (wantBold)   want |= UIFontDescriptorTraitBold;
+      if (wantItalic) want |= UIFontDescriptorTraitItalic;
+      if (base && want)
         {
-          UIFont *styled = [UIFont fontWithDescriptor:d2 size:size];
+          UIFontDescriptor *d = base.fontDescriptor;
+          UIFontDescriptor *d2 = [d fontDescriptorWithSymbolicTraits:
+                                    d.symbolicTraits | want];
+          UIFont *styled = d2 ? [UIFont fontWithDescriptor:d2 size:size] : nil;
           if (styled)
             base = styled;
         }
     }
+  if (base == nil)
+    {
+      /* System font: weight is a first-class parameter (the bold
+         monospaced system font carries no Bold symbolic trait, so
+         layering the trait would not make it bold).  Italic is still a
+         trait, applied on top.  */
+      UIFontWeight wt = wantBold ? UIFontWeightBold : UIFontWeightRegular;
+      base = wantMono
+        ? [UIFont monospacedSystemFontOfSize:size weight:wt]
+        : [UIFont systemFontOfSize:size weight:wt];
+      if (base && wantItalic)
+        {
+          UIFontDescriptor *d = base.fontDescriptor;
+          UIFontDescriptor *d2 = [d fontDescriptorWithSymbolicTraits:
+                                    d.symbolicTraits
+                                    | UIFontDescriptorTraitItalic];
+          UIFont *styled = d2 ? [UIFont fontWithDescriptor:d2 size:size] : nil;
+          if (styled)
+            base = styled;
+        }
+    }
+  if (base == nil)
+    base = [UIFont systemFontOfSize:size];
   return base;
 }
 
@@ -209,6 +225,22 @@ ios_uifont_entity (UIFont *uif)
   UIFontDescriptor *d = uif.fontDescriptor;
   UIFontDescriptorSymbolicTraits tr = d.symbolicTraits;
 
+  /* The system fonts express weight on the weight axis, not through
+     the Bold symbolic trait, so read the axis and OR in the trait for
+     named families that do use it.  Without this the bold monospaced
+     system font is mislabelled normal and find-font rejects it.  */
+  double waxis = 0;
+  NSDictionary *td = [d objectForKey:UIFontDescriptorTraitsAttribute];
+  if (td)
+    {
+      id wv = [td objectForKey:UIFontWeightTrait];
+      if ([wv isKindOfClass:[NSNumber class]])
+        waxis = [(NSNumber *) wv doubleValue];
+    }
+  bool isBold = (tr & UIFontDescriptorTraitBold) || waxis >= 0.25;
+  bool isItalic = (tr & UIFontDescriptorTraitItalic) != 0;
+  bool isMono = (tr & UIFontDescriptorTraitMonoSpace) != 0;
+
   ASET (entity, FONT_TYPE_INDEX, Qios);
   ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
   ASET (entity, FONT_FAMILY_INDEX,
@@ -219,12 +251,9 @@ ios_uifont_entity (UIFont *uif)
   ASET (entity, FONT_SIZE_INDEX, make_fixnum (0));
   ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
   ASET (entity, FONT_SPACING_INDEX,
-        make_fixnum ((tr & UIFontDescriptorTraitMonoSpace)
-                     ? FONT_SPACING_MONO : FONT_SPACING_PROPORTIONAL));
-  FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX,
-                  (tr & UIFontDescriptorTraitBold) ? Qbold : Qnormal);
-  FONT_SET_STYLE (entity, FONT_SLANT_INDEX,
-                  (tr & UIFontDescriptorTraitItalic) ? Qitalic : Qnormal);
+        make_fixnum (isMono ? FONT_SPACING_MONO : FONT_SPACING_PROPORTIONAL));
+  FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX, isBold ? Qbold : Qnormal);
+  FONT_SET_STYLE (entity, FONT_SLANT_INDEX, isItalic ? Qitalic : Qnormal);
   FONT_SET_STYLE (entity, FONT_WIDTH_INDEX, Qnormal);
 
   /* fontName is the PostScript name; recreate the exact face from it.  */
