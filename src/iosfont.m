@@ -222,22 +222,46 @@ static Lisp_Object
 ios_uifont_entity (UIFont *uif, Lisp_Object spec)
 {
   Lisp_Object entity = font_make_entity ();
-  UIFontDescriptor *d = uif.fontDescriptor;
-  UIFontDescriptorSymbolicTraits tr = d.symbolicTraits;
 
-  /* Label from the request first.  Apple's system-font descriptors are
-     opaque: the bold monospaced system font exposes neither its weight
-     axis nor a Bold or MonoSpace symbolic trait, so the resolved UIFont
-     cannot be trusted to report what it is, and a normal-labelled
-     entity makes find-font reject a bold spec.  OR in the descriptor
-     traits so a named family (Courier, ...) is still described
-     truthfully when the spec left a property unset.  */
-  bool isBold = ios_spec_wants_bold (spec)
-                || (tr & UIFontDescriptorTraitBold);
-  bool isItalic = ios_spec_wants_italic (spec)
-                  || (tr & UIFontDescriptorTraitItalic);
-  bool isMono = ios_spec_wants_mono (spec)
-                || (tr & UIFontDescriptorTraitMonoSpace);
+  /* Describe what the font ACTUALLY is, read through Core Text.  The
+     UIFontDescriptor is opaque for Apple's system fonts (it reports no
+     weight axis and no Bold/MonoSpace symbolic trait), but
+     CTFontCopyTraits -- the call macfont.m uses -- does expose the
+     numeric weight and slant, so the bold monospaced system font is
+     labelled bold and find-font accepts a bold spec.  */
+  bool isBold = false, isItalic = false, isMono = false;
+  CTFontRef ct = CTFontCreateWithName ((__bridge CFStringRef) uif.fontName,
+                                       uif.pointSize > 0 ? uif.pointSize : 14,
+                                       NULL);
+  if (ct)
+    {
+      CFDictionaryRef traits = CTFontCopyTraits (ct);
+      if (traits)
+        {
+          int64_t sym = 0;
+          double v;
+          CFNumberRef n = CFDictionaryGetValue (traits, kCTFontSymbolicTrait);
+          if (n)
+            CFNumberGetValue (n, kCFNumberSInt64Type, &sym);
+          isBold = (sym & kCTFontTraitBold) != 0;
+          isItalic = (sym & kCTFontTraitItalic) != 0;
+          isMono = (sym & kCTFontTraitMonoSpace) != 0;
+          /* The symbolic Bold/Italic bits are often unset on the system
+             fonts even when the weight/slant axes say otherwise.  */
+          n = CFDictionaryGetValue (traits, kCTFontWeightTrait);
+          if (n && CFNumberGetValue (n, kCFNumberDoubleType, &v) && v >= 0.25)
+            isBold = true;
+          n = CFDictionaryGetValue (traits, kCTFontSlantTrait);
+          if (n && CFNumberGetValue (n, kCFNumberDoubleType, &v) && v > 0.01)
+            isItalic = true;
+          CFRelease (traits);
+        }
+      CFRelease (ct);
+    }
+  /* Spacing: Core Text likewise omits the MonoSpace bit for the system
+     mono font, so fall back to the family-name heuristic.  */
+  if (!isMono)
+    isMono = ios_spec_wants_mono (spec);
 
   ASET (entity, FONT_TYPE_INDEX, Qios);
   ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
