@@ -291,6 +291,9 @@ typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
   EmacsDrawKindCursorBar,
   EmacsDrawKindCursorHBar,
   EmacsDrawKindImage,
+  /* Real Core Text glyphs: glyphData / glyphPos carry the CGGlyph and
+     CGPoint arrays, ctFont the face.  */
+  EmacsDrawKindGlyphs,
   /* Not a glyph op: blits the source band [y, y+height) within
      x-range [x, x+width) by shiftDy inside the backing store
      (scroll_run).  */
@@ -340,6 +343,13 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
    leak: the setter manages the retain explicitly, and dealloc
    releases.  */
 @property (nonatomic, assign) CGImageRef cgImage;
+/* For EmacsDrawKindGlyphs: the CGGlyph array, a matching CGPoint array
+   in Emacs (top-left, baseline-y) frame coordinates, and the face.
+   Commands paint synchronously, so ctFont is only borrowed for the
+   duration of the call and needs no retain.  */
+@property (nonatomic, strong) NSData *glyphData;
+@property (nonatomic, strong) NSData *glyphPos;
+@property (nonatomic, assign) CTFontRef ctFont;
 @end
 @implementation EmacsDrawCommand
 - (void) setCgImage:(CGImageRef)image
@@ -1163,6 +1173,30 @@ ios_emit_function_key (UIKey *key)
       return;
     }
 
+  if (cmd.kind == EmacsDrawKindGlyphs)
+    {
+      /* Real Core Text glyphs.  The backing context is in CG's native
+         bottom-left orientation, so each glyph origin flips from the
+         Emacs baseline (top-left, y-down) to y-up: cgy = H - y.  */
+      if (cmd.ctFont == NULL || cmd.glyphData == nil || cmd.glyphPos == nil)
+        return;
+      NSUInteger n = cmd.glyphData.length / sizeof (CGGlyph);
+      if (n == 0)
+        return;
+      const CGGlyph *glyphs = (const CGGlyph *) cmd.glyphData.bytes;
+      const CGPoint *epos   = (const CGPoint *) cmd.glyphPos.bytes;
+      CGPoint *pos = malloc (n * sizeof (CGPoint));
+      if (pos == NULL)
+        return;
+      for (NSUInteger i = 0; i < n; i++)
+        pos[i] = CGPointMake (epos[i].x, _backingH - epos[i].y);
+      CGContextSetRGBFillColor (cg, fr, fg, fb, 1.0);
+      CGContextSetTextMatrix (cg, CGAffineTransformIdentity);
+      CTFontDrawGlyphs (cmd.ctFont, glyphs, pos, n, cg);
+      free (pos);
+      return;
+    }
+
   if (cmd.kind != EmacsDrawKindText)
     {
       /* Cursor commands: just paint the rectangle.  */
@@ -1561,6 +1595,54 @@ ios_canvas_draw_text (double x, double y, double width, double height,
   cmd.clipY = clip_y;
   cmd.clipWidth = clip_width;
   cmd.clipHeight = clip_height;
+  [v drawCommand:cmd];
+}
+
+/* Draw N real Core Text glyphs.  GLYPHS are CGGlyph indices; XPOS gives
+   each glyph's x origin and BASELINE_Y the shared baseline, both in
+   Emacs (top-left) frame pixels.  CTFONT is borrowed for the duration
+   of this synchronous call (the struct font owns the +1 reference).  */
+void
+ios_canvas_draw_glyphs (void *ctfont,
+                        const unsigned short *glyphs,
+                        const double *xpos, int n,
+                        double baseline_y,
+                        unsigned long fg_pixel,
+                        double clip_x, double clip_y,
+                        double clip_width, double clip_height)
+{
+  if (ios_is_backgrounded ())
+    return;
+  EmacsUIView *v = ios_canvas;
+  if (v == nil || ctfont == NULL || glyphs == NULL || n <= 0)
+    return;
+
+  CGGlyph *g = malloc ((size_t) n * sizeof (CGGlyph));
+  CGPoint *p = malloc ((size_t) n * sizeof (CGPoint));
+  if (g == NULL || p == NULL)
+    {
+      free (g);
+      free (p);
+      return;
+    }
+  for (int i = 0; i < n; i++)
+    {
+      g[i] = (CGGlyph) glyphs[i];
+      p[i] = CGPointMake (xpos[i], baseline_y);
+    }
+
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindGlyphs;
+  cmd.ctFont = (CTFontRef) ctfont;
+  cmd.glyphData = [NSData dataWithBytes:g length:(NSUInteger) n * sizeof (CGGlyph)];
+  cmd.glyphPos  = [NSData dataWithBytes:p length:(NSUInteger) n * sizeof (CGPoint)];
+  cmd.fg = (uint32_t) (fg_pixel & 0xffffff);
+  cmd.clipX = clip_x;
+  cmd.clipY = clip_y;
+  cmd.clipWidth = clip_width;
+  cmd.clipHeight = clip_height;
+  free (g);
+  free (p);
   [v drawCommand:cmd];
 }
 

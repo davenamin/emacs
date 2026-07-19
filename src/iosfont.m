@@ -1,4 +1,4 @@
-/* iOS font driver shim for GNU Emacs.
+/* Core Text font driver for the iOS port of GNU Emacs.
    Copyright (C) 2026 Free Software Foundation, Inc.
 
 This file is part of GNU Emacs.
@@ -16,100 +16,287 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
-/* Minimal font driver for the iOS port.  Bridges UIFont's
-   monospaced system font to a struct font.  Only the hooks required
-   to keep init_frame_faces -> realize_basic_faces ->
-   realize_default_face from crashing are implemented; glyph
-   drawing is a no-op until the EmacsUIView in iosterm.m grows a
-   CALayer-backed renderer.  */
+/* A real font driver, built directly on Core Text -- the same API the
+   macOS macfont.m driver rides, minus the AppKit/NSFont and ScreenFont
+   machinery that only exists to bridge Emacs into AppKit's drawing and
+   screen-metrics model.  The iOS port paints into its own bitmap
+   context (iosterm.m / ios.m), so Core Text draws straight into it and
+   no bridge layer is needed.
+
+   Fonts are resolved through UIFont, which applies Apple's own font
+   matching for a family / weight / slant / spacing request; the
+   resolved face's PostScript name is stashed in the entity so open can
+   recreate the exact CTFontRef.  Glyph indices, advances, and bounding
+   boxes come from Core Text, so proportional fonts, multiple families,
+   and real (not synthesised) bold and italic all work.  */
 
 #include <config.h>
 
 #ifdef HAVE_IOS
 
 #import <UIKit/UIKit.h>
+#import <CoreText/CoreText.h>
 
 #include <math.h>
+#include <string.h>
+#include <strings.h>
 
 #include "lisp.h"
+#include "character.h"
 #include "frame.h"
 #include "font.h"
+#include "fontset.h"
+#include "composite.h"
 #include "iosterm.h"
 
-/* Forward declaration so open_font can store its address into
-   font->driver before the driver itself is defined below.  */
 extern struct font_driver ios_font_driver;
 extern void ios_launch_log (NSString *msg);
 
-/* Per-open-font extra data: the UIFont retained reference (needed
-   later to ask Core Text for glyph runs).  Lives after struct font
-   in the font-object vector so font_make_object's VECSIZE math
-   accounts for it.  */
+/* Entity extra-alist key under which list/match stash the resolved
+   face's PostScript name, so open can recreate the exact CTFontRef.  */
+static Lisp_Object Qios_psname;
+
+/* Per-open-font extra data: the retained CTFontRef and the spacing
+   class.  A struct font must come first so (struct ios_font_info *)
+   font casts work.  */
 struct ios_font_info
 {
   struct font font;
-  void *uifont; /* (__bridge_retained) UIFont * */
+  CTFontRef ctfont;     /* +1 retained; released in close.  */
+  int spacing;          /* FONT_SPACING_MONO or _PROPORTIONAL.  */
 };
 
-static UIFont *
-ios_font_default (CGFloat size)
+/* ------------------------------------------------------------------ */
+/* Small helpers.                                                     */
+/* ------------------------------------------------------------------ */
+
+/* Store the UTF-32 character C as one or two UTF-16 code units in
+   UNICHARS; return the count.  Mirrors macfont's helper.  */
+static CFIndex
+ios_utf32_to_utf16 (UTF32Char c, UniChar unichars[2])
 {
-  if (size <= 0)
+  if (c < 0x10000)
+    {
+      unichars[0] = (UniChar) c;
+      return 1;
+    }
+  c -= 0x10000;
+  unichars[0] = (UniChar) ((c >> 10) + 0xD800);
+  unichars[1] = (UniChar) ((c & 0x3FF) + 0xDC00);
+  return 2;
+}
+
+/* Emacs numeric styles: normal weight 80, bold 200; normal slant 100,
+   italic 200.  Treat semi-bold and up as bold, and any real oblique as
+   italic.  A missing property reads as -1, i.e. unspecified.  */
+static bool
+ios_spec_wants_bold (Lisp_Object spec)
+{
+  int w = FONT_WEIGHT_NUMERIC (spec);
+  return w >= 150;
+}
+
+static bool
+ios_spec_wants_italic (Lisp_Object spec)
+{
+  int s = FONT_SLANT_NUMERIC (spec);
+  return s >= 150;
+}
+
+static bool
+ios_spec_wants_mono (Lisp_Object spec)
+{
+  Lisp_Object sp = AREF (spec, FONT_SPACING_INDEX);
+  if (FIXNUMP (sp))
+    return XFIXNUM (sp) >= FONT_SPACING_MONO;
+  /* No spacing given: decide from the family.  A missing family, or a
+     generic "Monospace"/"fixed", means the fixed-pitch system font.  */
+  Lisp_Object fam = AREF (spec, FONT_FAMILY_INDEX);
+  if (!SYMBOLP (fam) || NILP (fam))
+    return true;
+  Lisp_Object name = SYMBOL_NAME (fam);
+  const char *s = SSDATA (name);
+  return (strcasecmp (s, "monospace") == 0
+          || strcasecmp (s, "fixed") == 0);
+}
+
+/* Turn a font spec/entity into a concrete UIFont, honouring family,
+   weight, slant, and spacing.  Never returns nil: falls back to the
+   monospaced system font so face realization always has a face.  */
+static UIFont *
+ios_resolve_uifont (Lisp_Object spec, CGFloat size)
+{
+  if (size < 1)
     size = 14;
-  UIFont *f = [UIFont monospacedSystemFontOfSize:size
-                                          weight:UIFontWeightRegular];
-  return f ? f : [UIFont systemFontOfSize:size];
+
+  bool wantBold = ios_spec_wants_bold (spec);
+  bool wantItalic = ios_spec_wants_italic (spec);
+  bool wantMono = ios_spec_wants_mono (spec);
+
+  Lisp_Object fam = AREF (spec, FONT_FAMILY_INDEX);
+  NSString *family = nil;
+  if (SYMBOLP (fam) && !NILP (fam))
+    {
+      const char *s = SSDATA (SYMBOL_NAME (fam));
+      /* Emacs's generic families do not name real iOS faces.  */
+      if (strcasecmp (s, "monospace") && strcasecmp (s, "fixed")
+          && strcasecmp (s, "sans serif") && strcasecmp (s, "sans-serif")
+          && strcasecmp (s, "sans"))
+        family = [NSString stringWithUTF8String:s];
+    }
+
+  UIFont *base = nil;
+  if (family)
+    /* A named family (e.g. Courier, Helvetica Neue).  fontWithName
+       accepts a family or PostScript name.  */
+    base = [UIFont fontWithName:family size:size];
+  if (base == nil)
+    {
+      UIFontWeight wt = wantBold ? UIFontWeightBold : UIFontWeightRegular;
+      base = wantMono
+        ? [UIFont monospacedSystemFontOfSize:size weight:wt]
+        : [UIFont systemFontOfSize:size weight:wt];
+    }
+  if (base == nil)
+    base = [UIFont systemFontOfSize:size];
+
+  /* Layer on bold/italic traits the base face may lack.  */
+  UIFontDescriptorSymbolicTraits want = 0;
+  if (wantBold)   want |= UIFontDescriptorTraitBold;
+  if (wantItalic) want |= UIFontDescriptorTraitItalic;
+  if (want)
+    {
+      UIFontDescriptor *d = base.fontDescriptor;
+      UIFontDescriptorSymbolicTraits tr = d.symbolicTraits | want;
+      UIFontDescriptor *d2 = [d fontDescriptorWithSymbolicTraits:tr];
+      if (d2)
+        {
+          UIFont *styled = [UIFont fontWithDescriptor:d2 size:size];
+          if (styled)
+            base = styled;
+        }
+    }
+  return base;
+}
+
+/* Create a +1 CTFontRef for the PostScript name NAME at SIZE.  */
+static CTFontRef
+ios_ctfont_create (NSString *name, CGFloat size)
+{
+  if (name == nil || size < 1)
+    return NULL;
+  return CTFontCreateWithName ((__bridge CFStringRef) name, size, NULL);
+}
+
+/* Build a font entity describing UIFont UIF, stashing its PostScript
+   name so open can recreate it.  */
+static Lisp_Object
+ios_uifont_entity (UIFont *uif)
+{
+  Lisp_Object entity = font_make_entity ();
+  UIFontDescriptor *d = uif.fontDescriptor;
+  UIFontDescriptorSymbolicTraits tr = d.symbolicTraits;
+
+  ASET (entity, FONT_TYPE_INDEX, Qios);
+  ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
+  ASET (entity, FONT_FAMILY_INDEX,
+        intern (uif.familyName.UTF8String));
+  ASET (entity, FONT_ADSTYLE_INDEX, Qnil);
+  ASET (entity, FONT_REGISTRY_INDEX, intern ("iso10646-1"));
+  /* Scalable: size 0 lets open substitute the requested pixel size.  */
+  ASET (entity, FONT_SIZE_INDEX, make_fixnum (0));
+  ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
+  ASET (entity, FONT_SPACING_INDEX,
+        make_fixnum ((tr & UIFontDescriptorTraitMonoSpace)
+                     ? FONT_SPACING_MONO : FONT_SPACING_PROPORTIONAL));
+  FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX,
+                  (tr & UIFontDescriptorTraitBold) ? Qbold : Qnormal);
+  FONT_SET_STYLE (entity, FONT_SLANT_INDEX,
+                  (tr & UIFontDescriptorTraitItalic) ? Qitalic : Qnormal);
+  FONT_SET_STYLE (entity, FONT_WIDTH_INDEX, Qnormal);
+
+  /* fontName is the PostScript name; recreate the exact face from it.  */
+  font_put_extra (entity, Qios_psname,
+                  build_string (uif.fontName.UTF8String));
+  return entity;
+}
+
+/* ------------------------------------------------------------------ */
+/* Metrics.                                                           */
+/* ------------------------------------------------------------------ */
+
+static int
+ios_glyph_advance (CTFontRef ctfont, CGGlyph glyph)
+{
+  double w = CTFontGetAdvancesForGlyphs (ctfont, kCTFontOrientationDefault,
+                                         &glyph, NULL, 1);
+  int iw = (int) lround (w);
+  return iw > 0 ? iw : 1;
 }
 
 static void
-ios_font_fill_metrics (struct font *font, UIFont *uif)
+ios_font_fill_metrics (struct font *font, CTFontRef ctfont, int spacing)
 {
-  CGFloat ascent  = uif.ascender;            /* positive */
-  CGFloat descent = -uif.descender;          /* descender is negative */
-  CGSize cell = [@"M" sizeWithAttributes:@{NSFontAttributeName: uif}];
-  int cw = (int) ceil (cell.width);
-  if (cw < 1) cw = 1;
-  int h = (int) ceil (ascent + descent);
-  if (h < 1) h = 1;
-  font->pixel_size = (int) ceil (uif.pointSize);
-  font->height = h;
-  font->ascent = (int) ceil (ascent);
-  font->descent = (int) ceil (descent);
-  font->space_width = cw;
-  font->average_width = cw;
-  font->min_width = cw;
-  font->max_width = cw;
-  font->underline_thickness = 1;
-  font->underline_position = font->descent / 2;
+  CGFloat ascent  = CTFontGetAscent (ctfont);
+  CGFloat descent = CTFontGetDescent (ctfont);
+  CGFloat leading = CTFontGetLeading (ctfont);
+
+  font->pixel_size = (int) lround (CTFontGetSize (ctfont));
+  font->ascent  = (int) (ascent + 0.5f);
+  font->descent = (int) (descent + leading + 0.5f);
+  font->height  = font->ascent + font->descent;
+  if (font->height < 1)
+    font->height = 1;
+
+  /* Space width, and average width over printable ASCII.  */
+  UniChar sp = ' ';
+  CGGlyph spg = 0;
+  int space_w = font->pixel_size;
+  if (CTFontGetGlyphsForCharacters (ctfont, &sp, &spg, 1) && spg)
+    space_w = ios_glyph_advance (ctfont, spg);
+  if (space_w < 1)
+    space_w = 1;
+  font->space_width = space_w;
+
+  long total = space_w;
+  int n = 1, i;
+  for (i = 1; i < 95; i++)
+    {
+      UniChar ch = (UniChar) (' ' + i);
+      CGGlyph g = 0;
+      if (!CTFontGetGlyphsForCharacters (ctfont, &ch, &g, 1) || !g)
+        continue;
+      total += ios_glyph_advance (ctfont, g);
+      n++;
+    }
+  font->average_width = (int) (total / n);
+  if (font->average_width < 1)
+    font->average_width = 1;
+
+  /* Core Text exposes no cheap min/max advance; monospace fonts have a
+     single width, and for proportional fonts the space width is a safe
+     conservative minimum (matches macfont's own compromise).  */
+  font->min_width = font->space_width;
+  font->max_width = (spacing == FONT_SPACING_MONO)
+                    ? font->space_width
+                    : font->average_width;
+
+  CGFloat up = CTFontGetUnderlinePosition (ctfont);
+  CGFloat ut = CTFontGetUnderlineThickness (ctfont);
+  font->underline_position = (int) (-up + 0.5f);
+  font->underline_thickness = (int) (ut + 0.5f);
+  if (font->underline_thickness < 1)
+    font->underline_thickness = 1;
+
   font->baseline_offset = 0;
   font->relative_compose = 0;
   font->default_ascent = 0;
   font->vertical_centering = 0;
 }
 
-static Lisp_Object
-ios_font_one_entity (void)
-{
-  Lisp_Object entity = font_make_entity ();
-  ASET (entity, FONT_TYPE_INDEX, Qios);
-  ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
-  ASET (entity, FONT_FAMILY_INDEX, intern ("Menlo"));
-  ASET (entity, FONT_ADSTYLE_INDEX, Qnil);
-  ASET (entity, FONT_REGISTRY_INDEX, intern ("iso10646-1"));
-  /* Size 0 marks the font as scalable so open_font uses pixel_size
-     from the spec / frame.  */
-  ASET (entity, FONT_SIZE_INDEX, make_fixnum (0));
-  ASET (entity, FONT_AVGWIDTH_INDEX, make_fixnum (0));
-  ASET (entity, FONT_SPACING_INDEX, make_fixnum (FONT_SPACING_MONO));
-  /* Use the symbolic Qnormal -> numeric style packing helper.
-     There are no FONT_*_NORMAL plain integer constants; weight/slant/
-     width style values are encoded in the upper byte of the property
-     by font_style_to_value applied to Qnormal.  */
-  FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX, Qnormal);
-  FONT_SET_STYLE (entity, FONT_SLANT_INDEX, Qnormal);
-  FONT_SET_STYLE (entity, FONT_WIDTH_INDEX, Qnormal);
-  return entity;
-}
+/* ------------------------------------------------------------------ */
+/* Driver hooks.                                                      */
+/* ------------------------------------------------------------------ */
 
 static Lisp_Object
 ios_font_get_cache (struct frame *f)
@@ -118,63 +305,78 @@ ios_font_get_cache (struct frame *f)
   return dpyinfo->name_list_element;
 }
 
+/* Resolve SPEC to one concrete face via UIFont (Apple's matcher) and
+   return a single entity for it.  We resolve rather than enumerate:
+   Apple's matcher already picks the best face for the requested family
+   and traits, so handing Emacs that one candidate opens exactly it.  */
 static Lisp_Object
 ios_font_list (struct frame *f, Lisp_Object font_spec)
 {
-  (void) f; (void) font_spec;
-  return list1 (ios_font_one_entity ());
+  (void) f;
+  UIFont *uif = ios_resolve_uifont (font_spec, 14);
+  if (uif == nil)
+    return Qnil;
+  return list1 (ios_uifont_entity (uif));
 }
 
 static Lisp_Object
 ios_font_match (struct frame *f, Lisp_Object font_spec)
 {
-  (void) f; (void) font_spec;
-  return ios_font_one_entity ();
+  (void) f;
+  UIFont *uif = ios_resolve_uifont (font_spec, 14);
+  if (uif == nil)
+    return Qnil;
+  return ios_uifont_entity (uif);
 }
 
 static Lisp_Object
 ios_font_list_family (struct frame *f)
 {
   (void) f;
-  return list1 (intern ("Menlo"));
+  Lisp_Object list = Qnil;
+  for (NSString *fam in [UIFont familyNames])
+    list = Fcons (intern (fam.UTF8String), list);
+  return list;
 }
 
 static Lisp_Object
 ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
 {
   int requested = pixel_size;
-  /* Degenerate sizes produce 1px-wide cells that collapse the whole
-     frame layout (a 1pt Menlo measures M at width 1, height 2, and
-     adjust_frame_size then computes cols == pixels).  Sizes this
-     small are never intentional on a 326+ dpi display -- they come
-     from size-less specs whose pixel field decodes as a tiny
-     integer.  Fall back to the frame's current size.  */
+  /* Degenerate sizes collapse the frame layout; a size-less spec whose
+     pixel field decodes tiny falls back to the frame font.  */
   if (pixel_size < 6)
     {
-      /* Size 0 is the normal "scalable entity, use the default
-         size" request from face realization with an unspecified
-         height -- every scalable-font driver substitutes a
-         default here.  Sizes 1..5 are anomalous (historically
-         produced by a dpi mismatch distorting the benign 0) and
-         worth a one-time log if they ever reappear.  */
       static bool logged = false;
       if (requested > 0 && !logged)
         {
           logged = true;
-          Lisp_Object entity_str
-            = Fprin1_to_string (font_entity, Qnil, Qnil);
           ios_launch_log ([NSString stringWithFormat:
-            @"ios_font_open: anomalous size=%d entity=%s",
-            requested,
-            STRINGP (entity_str) ? SSDATA (entity_str) : "(?)"]);
+            @"ios_font_open: anomalous size=%d", requested]);
         }
-      if (FRAME_FONT (f))
-        pixel_size = FRAME_FONT (f)->pixel_size;
-      else
-        pixel_size = 14;
+      pixel_size = (FRAME_FONT (f)) ? FRAME_FONT (f)->pixel_size : 14;
       if (pixel_size < 6)
         pixel_size = 14;
     }
+
+  /* Recreate the exact face from the stashed PostScript name; fall back
+     to resolving the entity afresh if it is missing (e.g. a fontset
+     fallback entity).  */
+  CTFontRef ctfont = NULL;
+  Lisp_Object val = assq_no_quit (Qios_psname,
+                                  AREF (font_entity, FONT_EXTRA_INDEX));
+  if (CONSP (val) && STRINGP (XCDR (val)))
+    {
+      NSString *name = [NSString stringWithUTF8String:SSDATA (XCDR (val))];
+      ctfont = ios_ctfont_create (name, pixel_size);
+    }
+  if (ctfont == NULL)
+    {
+      UIFont *uif = ios_resolve_uifont (font_entity, pixel_size);
+      ctfont = ios_ctfont_create (uif.fontName, pixel_size);
+    }
+  if (ctfont == NULL)
+    return Qnil;
 
   Lisp_Object font_object
     = font_make_object (VECSIZE (struct ios_font_info),
@@ -186,10 +388,12 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
   struct font *font = &info->font;
   font->driver = &ios_font_driver;
 
-  UIFont *uif = ios_font_default (pixel_size);
-  info->uifont = (__bridge_retained void *) uif;
+  Lisp_Object sp = AREF (font_entity, FONT_SPACING_INDEX);
+  info->spacing = (FIXNUMP (sp) && XFIXNUM (sp) >= FONT_SPACING_MONO)
+                  ? FONT_SPACING_MONO : FONT_SPACING_PROPORTIONAL;
+  info->ctfont = ctfont;   /* keep the +1 reference */
 
-  ios_font_fill_metrics (font, uif);
+  ios_font_fill_metrics (font, ctfont, info->spacing);
 
   font->props[FONT_NAME_INDEX] = Ffont_xlfd_name (font_object, Qnil, Qt);
   return font_object;
@@ -199,26 +403,39 @@ static void
 ios_font_close (struct font *font)
 {
   struct ios_font_info *info = (struct ios_font_info *) font;
-  if (info->uifont)
+  if (info->ctfont)
     {
-      UIFont *uif = (__bridge_transfer UIFont *) info->uifont;
-      (void) uif;
-      info->uifont = NULL;
+      CFRelease (info->ctfont);
+      info->ctfont = NULL;
     }
 }
 
 static int
 ios_font_has_char (Lisp_Object font, int c)
 {
-  (void) font;
-  return (c >= 0 && c <= 0xffff) ? 1 : 0;
+  if (c < 0 || c > MAX_UNICODE_CHAR)
+    return false;
+  /* On an entity we have no open face yet; let encode_char decide.  */
+  if (FONT_ENTITY_P (font))
+    return -1;
+  struct ios_font_info *info
+    = (struct ios_font_info *) XFONT_OBJECT (font);
+  UniChar u[2];
+  CGGlyph g[2];
+  CFIndex n = ios_utf32_to_utf16 ((UTF32Char) c, u);
+  return CTFontGetGlyphsForCharacters (info->ctfont, u, g, n) ? 1 : 0;
 }
 
 static unsigned
 ios_font_encode_char (struct font *font, int c)
 {
-  (void) font;
-  return (unsigned) c;
+  struct ios_font_info *info = (struct ios_font_info *) font;
+  UniChar u[2];
+  CGGlyph g[2] = { 0, 0 };
+  CFIndex n = ios_utf32_to_utf16 ((UTF32Char) c, u);
+  if (!CTFontGetGlyphsForCharacters (info->ctfont, u, g, n) || g[0] == 0)
+    return FONT_INVALID_CODE;
+  return g[0];
 }
 
 static void
@@ -226,15 +443,40 @@ ios_font_text_extents (struct font *font,
                        const unsigned *code, int nglyphs,
                        struct font_metrics *metrics)
 {
-  (void) code;
-  metrics->lbearing = 0;
-  metrics->rbearing = nglyphs * font->space_width;
-  metrics->width    = nglyphs * font->space_width;
-  metrics->ascent   = font->ascent;
-  metrics->descent  = font->descent;
+  struct ios_font_info *info = (struct ios_font_info *) font;
+  memset (metrics, 0, sizeof *metrics);
+  if (nglyphs <= 0)
+    return;
+
+  int width = 0, i;
+  for (i = 0; i < nglyphs; i++)
+    {
+      CGGlyph g = (CGGlyph) code[i];
+      CGRect bounds = CTFontGetBoundingRectsForGlyphs
+        (info->ctfont, kCTFontOrientationDefault, &g, NULL, 1);
+      int adv = ios_glyph_advance (info->ctfont, g);
+      int lb = (int) floor (CGRectGetMinX (bounds));
+      int rb = (int) ceil (CGRectGetMaxX (bounds));
+      int as = (int) ceil (CGRectGetMaxY (bounds));
+      int de = (int) ceil (-CGRectGetMinY (bounds));
+
+      if (width + lb < metrics->lbearing)
+        metrics->lbearing = width + lb;
+      if (width + rb > metrics->rbearing)
+        metrics->rbearing = width + rb;
+      if (as > metrics->ascent)
+        metrics->ascent = as;
+      if (de > metrics->descent)
+        metrics->descent = de;
+      width += adv;
+    }
+  metrics->width = width;
 }
 
 #ifdef HAVE_WINDOW_SYSTEM
+/* The RIF (ios_draw_glyph_string in iosterm.m) draws glyphs directly
+   into the backing store; nothing routes through the driver draw hook,
+   so it stays a stub.  */
 static int
 ios_font_draw (struct glyph_string *s, int from, int to,
                int x, int y, bool with_background)
@@ -244,6 +486,17 @@ ios_font_draw (struct glyph_string *s, int from, int to,
   return 0;
 }
 #endif
+
+/* Expose the retained CTFontRef backing FONT so the renderer in
+   iosterm.m can draw glyphs.  Returned as void * so the plain-C header
+   need not know Core Text; NULL for a font that is not ours.  */
+void *
+ios_font_ctfont (struct font *font)
+{
+  if (font == NULL || font->driver != &ios_font_driver)
+    return NULL;
+  return (void *) ((struct ios_font_info *) font)->ctfont;
+}
 
 struct font_driver ios_font_driver =
   {
@@ -266,9 +519,10 @@ struct font_driver ios_font_driver =
 void
 syms_of_iosfont (void)
 {
-  /* Qios is DEFSYM'd in iosterm.m; we just register the driver
-     here.  Frame-level (per-frame) registration happens later in
-     Fx_create_frame.  */
+  /* Entity extra key for the resolved PostScript name.  Interned, so
+     the obarray keeps it live; no staticpro needed.  */
+  Qios_psname = intern_c_string (":ios-psname");
+
   register_font_driver (&ios_font_driver, NULL);
 }
 

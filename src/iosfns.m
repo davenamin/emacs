@@ -199,19 +199,18 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
      activates every registered driver.  */
   font_update_drivers (f, Qt);
 
-  /* Call our driver's open_font hook directly, bypassing the
-     font_open_by_name matching machinery (which iterates registered
-     drivers and applies XLFD-style filtering that our minimal
-     entity does not satisfy out of the box).  We pass an entity
-     fabricated by our match hook -- the driver doesn't actually
-     consult its fields beyond passing pixel_size through.  */
-  Lisp_Object dummy_spec = Qnil;
-  Lisp_Object entity = ios_font_driver.match (f, dummy_spec);
-  Lisp_Object font_obj = ios_font_driver.open_font (f, entity, 14);
+  /* Open the default face's font directly, bypassing the
+     font_open_by_name matching machinery.  An empty spec resolves to
+     the fixed-pitch system font (ios_font_match / ios_resolve_uifont);
+     open then fills real Core Text metrics.  */
+  Lisp_Object spec = font_make_entity ();
+  Lisp_Object entity = ios_font_driver.match (f, spec);
+  Lisp_Object font_obj = NILP (entity) ? Qnil
+    : ios_font_driver.open_font (f, entity, 14);
   if (NILP (font_obj))
     {
       delete_frame (frame, Qnoelisp);
-      error ("ios: failed to open default Menlo font");
+      error ("ios: failed to open the default font");
     }
   /* Install the font into the frame directly (no set_new_font_hook
      wired up yet on iOS).  These assignments mirror the relevant

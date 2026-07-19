@@ -126,54 +126,6 @@ static int ios_input_head = 0, ios_input_tail = 0;
 static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_wake_pipe[2] = { -1, -1 };
 
-/* Decode a glyph string's char2b array (per-glyph code points; our
-   minimal font driver passes through plain Unicode codepoints) into
-   a UTF-8 char buffer.  Returns a newly-malloc'd string; caller frees.
-   Returns NULL on memory failure.  */
-static char *
-ios_glyph_string_to_utf8 (struct glyph_string *s)
-{
-  if (s == NULL || s->char2b == NULL || s->nchars <= 0)
-    return NULL;
-  /* Upper bound: each Unicode codepoint encodes to at most 4 UTF-8
-     bytes; plus one NUL.  */
-  size_t cap = (size_t) s->nchars * 4 + 1;
-  char *buf = xmalloc (cap);
-  size_t pos = 0;
-  for (int i = 0; i < s->nchars; i++)
-    {
-      unsigned cp = s->char2b[i];
-      if (cp == 0)
-        continue;
-      if (cp < 0x80)
-        buf[pos++] = (char) cp;
-      else if (cp < 0x800)
-        {
-          buf[pos++] = (char) (0xc0 | (cp >> 6));
-          buf[pos++] = (char) (0x80 | (cp & 0x3f));
-        }
-      else if (cp < 0x10000)
-        {
-          buf[pos++] = (char) (0xe0 | (cp >> 12));
-          buf[pos++] = (char) (0x80 | ((cp >> 6) & 0x3f));
-          buf[pos++] = (char) (0x80 | (cp & 0x3f));
-        }
-      else
-        {
-          buf[pos++] = (char) (0xf0 | (cp >> 18));
-          buf[pos++] = (char) (0x80 | ((cp >> 12) & 0x3f));
-          buf[pos++] = (char) (0x80 | ((cp >> 6) & 0x3f));
-          buf[pos++] = (char) (0x80 | (cp & 0x3f));
-        }
-    }
-  buf[pos] = '\0';
-  return buf;
-}
-
-/* Send a glyph string to the iOS canvas.  At this stage the font
-   driver passes Unicode codepoints through as "glyph ids", so we
-   reassemble them as UTF-8 and let the canvas render via Core Text.
-   The geometry comes straight from struct glyph_string.  */
 /* The canvas-side image sink lives in ios.m where UIKit is in
    scope; declared here so the IMAGE_GLYPH branch can call it.  */
 extern void ios_canvas_draw_image (double x, double y,
@@ -182,6 +134,11 @@ extern void ios_canvas_draw_image (double x, double y,
                                    double clip_x, double clip_y,
                                    double clip_width, double clip_height);
 
+/* RIF draw_glyph_string.  Fills the string's background, then hands the
+   real CGGlyph codes (from the Core Text driver's encode_char) and
+   their per-glyph x origins to the canvas, which paints them with
+   CTFontDrawGlyphs.  Images, stretch spaces, and glyphless characters
+   are handled first; underline / overline / strike follow the text.  */
 static void
 ios_draw_glyph_string (struct glyph_string *s)
 {
@@ -213,14 +170,15 @@ ios_draw_glyph_string (struct glyph_string *s)
                                (double) clip.height);
       return;
     }
-  double font_size = (s->font && s->font->pixel_size > 0)
-                     ? (double) s->font->pixel_size
-                     : 14.0;
+  struct font *font = s->font;
+  int line_h = FRAME_LINE_HEIGHT (s->f);
+
   /* background_width covers the area redisplay considers "owned"
      by this glyph string -- using width here would leave thin
      un-erased margins at line wraps.  */
   double w = (s->background_width > 0) ? s->background_width : s->width;
-  double h = (s->height > 0) ? s->height : (double) font_size;
+  double h = (s->height > 0) ? s->height : (double) line_h;
+
   /* Foreground/background pixels live on the face; defined_color_hook
      stores them as 0x00RRGGBB which is what the canvas expects.
      Fall back to black-on-white when no face is attached.  */
@@ -235,88 +193,85 @@ ios_draw_glyph_string (struct glyph_string *s)
      same fg/bg swap every other port performs.  */
   if (s->hl == DRAW_CURSOR)
     {
-      struct frame *f = s->f;
-      unsigned long cursor = f->output_data.ios->cursor_pixel;
+      unsigned long cursor = s->f->output_data.ios->cursor_pixel;
       fg = bg;
       bg = cursor;
     }
 
-  char *utf8 = ios_glyph_string_to_utf8 (s);
-  if (utf8 == NULL || *utf8 == '\0')
-    {
-      if (utf8) xfree (utf8);
-      /* No text, but the glyph string still owns its background:
-         stretch glyphs materialize `:align-to' spaces (tabulated
-         list header lines, mode-line-format-right-align), and
-         skipping them would leave stale pixels behind.  */
-      if (w > 0 && h > 0)
-        ios_canvas_draw_text ((double) s->x, (double) s->y, w, h,
-                              fg, bg, "", font_size, 0, 0,
-                              (double) clip.x, (double) clip.y,
-                              (double) clip.width, (double) clip.height);
-      return;
-    }
+  /* Fill the glyph string's background; glyphs paint on top.  Empty
+     text is the canvas's clear primitive and carries the clip.  Even a
+     run with no drawable glyphs (stretch spaces behind `:align-to',
+     glyphless characters) owns this rectangle, and skipping it would
+     leave stale pixels behind.  */
+  if (w > 0 && h > 0)
+    ios_canvas_draw_text ((double) s->x, (double) s->y, w, h,
+                          fg, bg, "", 0.0, 0, 0.0,
+                          (double) clip.x, (double) clip.y,
+                          (double) clip.width, (double) clip.height);
 
-  /* Translate face decorations into canvas flags.  Bold / italic
-     come from the font weight & slant; underline/overline/strike-
-     through come from the dedicated face bits.  */
-  unsigned deco = 0;
+  /* Stretch and glyphless strings own only their background.  */
+  if (s->first_glyph
+      && (s->first_glyph->type == STRETCH_GLYPH
+          || s->first_glyph->type == GLYPHLESS_GLYPH))
+    return;
+
+  /* Real glyphs: hand the CGGlyph codes and their per-glyph x origins
+     to Core Text.  Advances come from the widths redisplay assigned
+     each glyph, so a later single-cell repaint (cursor passage) lands
+     on exactly the same columns.  */
+  void *ctfont = font ? ios_font_ctfont (font) : NULL;
+  if (ctfont == NULL || s->char2b == NULL || s->nchars <= 0)
+    return;
+
+  int n = s->nchars, i, m = 0;
+  unsigned short *glyphs = xmalloc (n * sizeof *glyphs);
+  double *xpos = xmalloc (n * sizeof *xpos);
+  double penx = s->x;
+  bool char_glyph = s->first_glyph->type == CHAR_GLYPH;
+  for (i = 0; i < n; i++)
+    {
+      unsigned code = s->char2b[i];
+      double adv = char_glyph
+                   ? (double) s->first_glyph[i].pixel_width
+                   : (double) (s->width) / n;
+      if (code != 0 && code != FONT_INVALID_CODE)
+        {
+          glyphs[m] = (unsigned short) code;
+          xpos[m] = penx;
+          m++;
+        }
+      penx += adv;
+    }
+  if (m > 0)
+    ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m, (double) s->ybase, fg,
+                            (double) clip.x, (double) clip.y,
+                            (double) clip.width, (double) clip.height);
+  xfree (glyphs);
+  xfree (xpos);
+
+  /* Underline / overline / strike-through as thin foreground rects.
+     Positions come from the font metrics; wave and dashed underline
+     styles render as a plain line for now.  */
   if (s->face)
     {
-      switch (s->face->underline)
+      if (s->face->underline != FACE_NO_UNDERLINE)
         {
-        case FACE_UNDERLINE_SINGLE:
-        case FACE_UNDERLINE_DOUBLE_LINE:
-        case FACE_UNDERLINE_DOTS:
-        case FACE_UNDERLINE_DASHES:
-          deco |= IOS_DECO_UNDERLINE_SINGLE;
-          break;
-        case FACE_UNDERLINE_WAVE:
-          deco |= IOS_DECO_UNDERLINE_WAVE;
-          break;
-        default:
-          break;
+          int thick = (font && font->underline_thickness > 0)
+                      ? font->underline_thickness : 1;
+          int uy = s->ybase
+                   + ((font && font->underline_position > 0)
+                      ? font->underline_position : 1);
+          ios_canvas_clear_rect ((double) s->x, (double) uy, w,
+                                 (double) thick, fg);
         }
       if (s->face->overline_p)
-        deco |= IOS_DECO_OVERLINE;
+        ios_canvas_clear_rect ((double) s->x, (double) s->y, w, 1.0, fg);
       if (s->face->strike_through_p)
-        deco |= IOS_DECO_STRIKE_THROUGH;
+        {
+          int sy = s->ybase - (font ? font->ascent / 2 : (int) (h / 4));
+          ios_canvas_clear_rect ((double) s->x, (double) sy, w, 1.0, fg);
+        }
     }
-  if (s->font)
-    {
-      /* The FONT_*_NUMERIC accessors take the Lisp font object,
-         not the struct font pointer.  */
-      Lisp_Object font_obj;
-      XSETFONT (font_obj, s->font);
-      int slant = FONT_SLANT_NUMERIC (font_obj);
-      int weight = FONT_WEIGHT_NUMERIC (font_obj);
-      if (slant > 100)  deco |= IOS_DECO_ITALIC;
-      if (weight > 100) deco |= IOS_DECO_BOLD;
-    }
-
-  /* Position every character on the run's own integer cell width so
-     Core Text's fractional natural advance (e.g. 8.43pt for 14pt SF
-     Mono vs the ceil'd 9pt cell) can't misplace a glyph repainted on
-     its own, e.g. by cursor passage.  The width has to be the width
-     of THIS run's font, not the frame's: the backend opens only the
-     fixed-pitch system font, so the default face and its font-lock
-     bold/italic variants share the frame column width -- keeping them
-     on one grid stops a long keyword or comment run from drifting --
-     while a :height-scaled face (splash text, headings) has its own,
-     narrower or wider, cell, and snapping to that cell matches how
-     redisplay laid the row out.  min_width == max_width holds for
-     every font the backend opens; fall back to natural advances for a
-     proportional font, should one ever appear.  */
-  double cell_width = (s->font
-                       && s->font->min_width == s->font->max_width
-                       && s->font->max_width > 0)
-                      ? (double) s->font->max_width : 0.0;
-  ios_canvas_draw_text ((double) s->x, (double) s->y,
-                        w, h, fg, bg, utf8, font_size, deco,
-                        cell_width,
-                        (double) clip.x, (double) clip.y,
-                        (double) clip.width, (double) clip.height);
-  xfree (utf8);
 }
 
 static void
