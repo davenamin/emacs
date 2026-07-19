@@ -294,22 +294,29 @@ sed -e 's|^Libs:.*|Libs: -L${libdir} -lgnutls -lhogweed -lnettle -lgmp|' \
     "$pc" > "$pc.tmp"
 mv "$pc.tmp" "$pc"
 
-## Hide gnulib's hash_string / hash_lookup inside libgnutls.a.
-## GnuTLS bundles gnulib, whose hash.o exports those two symbols --
-## the same names Emacs's fns.c uses on the 30.x release series
-## (master renamed them to hash_find / hash_from_string).  Linking
-## the static archive into Emacs then fails with duplicate symbols.
-## They are private to gnutls, so partial-link the whole archive
-## into one object with the two symbols marked unexported (private
-## extern), which keeps gnutls's own internal references resolved
-## while removing the clash; then re-archive.  A no-op where the
-## names do not collide.
+## Hide GnuTLS's bundled gnulib symbols so they don't collide with
+## Emacs at the final static link.  GnuTLS statically links its own
+## gnulib copy, which exports the same names as Emacs's fns.c and
+## Emacs's own gnulib (lib/libgnu.a): hash_string / hash_lookup
+## (clash with fns.c on the 30.x release, which master renamed to
+## hash_find / hash_from_string) and c_strcasecmp and friends
+## (clash with lib/libgnu.a).  Android never sees this because it
+## links gnutls as a shared object, whose internal symbols are
+## hidden; a static archive exposes everything.
+##
+## Reproduce the shared-library visibility: partial-link the whole
+## archive into one object exporting ONLY the public gnutls_* API,
+## demoting every other defined symbol (all the bundled gnulib) to
+## private extern.  gnutls's own internal references resolve within
+## the combined object; nettle/gmp stay undefined and resolve from
+## their archives at the Emacs link.  Emacs calls only gnutls_*
+## symbols, so nothing it needs is hidden.
 symhide="$work/gnutls-symhide"
 rm -rf "$symhide"; mkdir -p "$symhide"
 ( cd "$symhide" && $AR x "$prefix/lib/libgnutls.a" )
-printf '_hash_string\n_hash_lookup\n' > "$symhide/unexport.sym"
+printf '_gnutls*\n' > "$symhide/export.sym"
 xcrun --sdk "$sdk" ld -r -arch "$arch" "$symhide"/*.o \
-  -unexported_symbols_list "$symhide/unexport.sym" \
+  -exported_symbols_list "$symhide/export.sym" \
   -o "$symhide/libgnutls-combined.o" >> "$log" 2>&1 \
   || build_failed "gnutls symbol-hide relink"
 rm -f "$prefix/lib/libgnutls.a"
