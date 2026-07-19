@@ -110,10 +110,10 @@ m4
 [32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m, [32mpkgconf[39m and [32mtexinfo[39m[0m
 ✔︎ Bottle Manifest m4 (1.4.21)
 ✔︎ Bottle autoconf (2.73)
-✔︎ Bottle m4 (1.4.21)
-✔︎ Bottle automake (1.18.1_1)
 ✔︎ Bottle pkgconf (3.0.3)
+✔︎ Bottle m4 (1.4.21)
 ✔︎ Bottle libtool (2.6.2)
+✔︎ Bottle automake (1.18.1_1)
 ✔︎ Bottle texinfo (7.3)
 [32m==>[0m [1mInstalling dependencies for automake:[0m [32mm4[39m and [32mautoconf[39m[0m
 [32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
@@ -175,7 +175,36 @@ You can now run './configure'.
 ===== TLS DEPS (gmp, nettle, gnutls) =====
 
 $ ios/build-deps.sh --sdk iphonesimulator --prefix /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
-build-deps.sh: /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator is already populated; nothing to do.
+build-deps.sh: sdk=iphonesimulator arch=arm64 min=15.0 prefix=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+build-deps.sh: full compile output in /Users/runner/work/emacs/emacs/ios-deps/build-iphonesimulator/build.log
+build-deps.sh: fetching https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+100 2045k  100 2045k    0     0  1663k      0  0:00:01  0:00:01 --:--:-- 1663k
+build-deps.sh: using a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898  /Users/runner/work/emacs/emacs/ios-deps/downloads/gmp-6.3.0.tar.xz
+build-deps.sh: building gmp-6.3.0
+build-deps.sh: fetching https://ftpmirror.gnu.org/nettle/nettle-3.10.1.tar.gz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0  0     0    0     0    0     0      0      0 --:--:--  0:00:01 --:--:--     0
+ 48 2581k   48 1247k    0     0   506k      0  0:00:05  0:00:02  0:00:03  506k100 2581k  100 2581k    0     0  1010k      0  0:00:02  0:00:02 --:--:-- 14.3M
+build-deps.sh: using b0fcdd7fc0cdea6e80dcf1dd85ba794af0d5b4a57e26397eee3bc193272d9132  /Users/runner/work/emacs/emacs/ios-deps/downloads/nettle-3.10.1.tar.gz
+build-deps.sh: building nettle-3.10.1
+build-deps.sh: fetching https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  6 6686k    6  468k    0     0   330k      0  0:00:20  0:00:01  0:00:19  330k100 6686k  100 6686k    0     0  3235k      0  0:00:02  0:00:02 --:--:-- 3236k
+build-deps.sh: using 69e113d802d1670c4d5ac1b99040b1f2d5c7c05daec5003813c049b5184820ed  /Users/runner/work/emacs/emacs/ios-deps/downloads/gnutls-3.8.9.tar.xz
+build-deps.sh: building gnutls-3.8.9
+build-deps.sh: fetching https://download.gnome.org/sources/libxml2/2.12/libxml2-2.12.9.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2581k  100 2581k    0     0  3192k      0 --:--:-- --:--:-- --:--:-- 3190k
+build-deps.sh: using 59912db536ab56a3996489ea0299768c7bcffe57169f0235e7f962a91f483590  /Users/runner/work/emacs/emacs/ios-deps/downloads/libxml2-2.12.9.tar.xz
+build-deps.sh: building libxml2-2.12.9
+build-deps.sh: done.
+build-deps.sh: configure Emacs with --with-ios-deps=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
 [exit=0]
 
 ===== CONFIGURE (iphonesimulator) =====
@@ -216,6 +245,9 @@ config.status: executing etc-refcards-emacsver.tex commands
 ===== MAKE IOS =====
 [make exit=2]
 --- last 25 lines of make-ios.out ---
+/Users/runner/work/emacs/emacs/src/iosvfs.c:103:1: warning: no previous prototype for function 'syms_of_iosvfs' [-Wmissing-prototypes]
+  103 | syms_of_iosvfs (void)
+      | ^
 /Users/runner/work/emacs/emacs/src/iosvfs.c:102:1: note: declare 'static' if the function is not intended to be used outside of this translation unit
   102 | void
       | ^
@@ -230,19 +262,16 @@ make[3]: Nothing to be done for `charscript.el'.
 /Applications/Xcode_26.5.app/Contents/Developer/usr/bin/make -C ../../admin/unidata emoji-zwj.el
 make[3]: Nothing to be done for `emoji-zwj.el'.
   CCLD     temacs
-duplicate symbol '_hash_string' in:
-    /Users/runner/work/emacs/emacs/build-ios-sim/cross/src/fns.o
-    /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator/lib/libgnutls.a[133](libgnu_la-hash.o)
-duplicate symbol '_hash_lookup' in:
-    /Users/runner/work/emacs/emacs/build-ios-sim/cross/src/fns.o
-    /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator/lib/libgnutls.a[133](libgnu_la-hash.o)
-ld: 2 duplicate symbols
+duplicate symbol '_c_strcasecmp' in:
+    /Users/runner/work/emacs/emacs/build-ios-sim/cross/lib/libgnu.a[17](c-strcasecmp.o)
+    /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator/lib/libgnutls.a[2](libgnutls-combined.o)
+ld: 1 duplicate symbols
 clang: error: linker command failed with exit code 1 (use -v to see invocation)
 make[2]: *** [temacs] Error 1
 make[1]: *** [src/emacs] Error 2
 make: *** [ios] Error 2
 --- make errors (if any) ---
-3022:clang: error: linker command failed with exit code 1 (use -v to see invocation)
+3019:clang: error: linker command failed with exit code 1 (use -v to see invocation)
 
 ===== (B) OUR BUNDLE: STRUCTURE =====
 
@@ -316,14 +345,33 @@ error: /Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.x
 ===== BOOT SIMULATOR =====
 devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
 No runtime specified, using 'iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5'
-device=641F2359-377F-4B06-AA8E-9E16A65BA29C
+device=AE8130E6-4961-40A5-B07D-CB5F360B4FF4
 
-$ xcrun simctl boot 641F2359-377F-4B06-AA8E-9E16A65BA29C
+$ xcrun simctl boot AE8130E6-4961-40A5-B07D-CB5F360B4FF4
 [exit=0]
 
-$ xcrun simctl bootstatus 641F2359-377F-4B06-AA8E-9E16A65BA29C -b
-Monitoring boot status for ci-diag-phone (641F2359-377F-4B06-AA8E-9E16A65BA29C).
-Device already booted, nothing to do.
+$ xcrun simctl bootstatus AE8130E6-4961-40A5-B07D-CB5F360B4FF4 -b
+Monitoring boot status for ci-diag-phone (AE8130E6-4961-40A5-B07D-CB5F360B4FF4).
+[2026-07-19 11:53:04 +0000] Status=4, isTerminal=NO, Elapsed=01:05.
+	Waiting on System App
+
+[2026-07-19 11:53:05 +0000] Status=4, isTerminal=NO, Elapsed=01:06.
+	Waiting on System App
+
+[2026-07-19 11:53:06 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
+	Waiting on System App
+
+[2026-07-19 11:53:07 +0000] Status=4, isTerminal=NO, Elapsed=01:07.
+	Waiting on System App
+
+[2026-07-19 11:53:08 +0000] Status=4, isTerminal=NO, Elapsed=01:09.
+	Waiting on System App
+
+[2026-07-19 11:53:10 +0000] Status=4, isTerminal=NO, Elapsed=01:10.
+	Waiting on System App
+
+[2026-07-19 11:53:18 +0000] Status=4294967295, isTerminal=YES, Elapsed=01:19.
+	Finished
 
 [exit=0]
 
@@ -355,12 +403,12 @@ ref-app/Hello.app/Info.plist
 [exit=0]
 --- install reference app (expect SUCCESS -- this is the control) ---
 
-$ xcrun simctl install 641F2359-377F-4B06-AA8E-9E16A65BA29C ref-app/Hello.app
+$ xcrun simctl install AE8130E6-4961-40A5-B07D-CB5F360B4FF4 ref-app/Hello.app
 [exit=0]
 
 ===== (B) INSTALL OUR BUNDLE (the real test) =====
 
-$ xcrun simctl install 641F2359-377F-4B06-AA8E-9E16A65BA29C build-ios-sim/ios/Emacs.app
+$ xcrun simctl install AE8130E6-4961-40A5-B07D-CB5F360B4FF4 build-ios-sim/ios/Emacs.app
 An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
 Simulator device failed to install the application.
 Unhandled error domain NSPOSIXErrorDomain, code 2
@@ -391,7 +439,7 @@ Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
 
 $ xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
 Detected file type from extension: PNG
-Note: No display specified. Defaulting to display: ADDD328A-F757-4FD6-B2A9-D31242189355 (screenID: 1, name: LCD)
+Note: No display specified. Defaulting to display: 32D6C19A-4B9F-4B65-A20D-4E98CD3E934B (screenID: 1, name: LCD)
 Wrote screenshot to: /Users/runner/work/emacs/emacs/ci-diag/sim-screenshot.png
 [exit=0]
 
@@ -417,8 +465,8 @@ Timestamp               Ty Process[PID:TID]
 --- unified log crash signatures ---
 
 --- crash reports ---
-  scanning /Users/runner/Library/Logs/CoreSimulator/641F2359-377F-4B06-AA8E-9E16A65BA29C/CrashReporter (recursive)
-  scanning /Users/runner/Library/Logs/CoreSimulator/641F2359-377F-4B06-AA8E-9E16A65BA29C (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/AE8130E6-4961-40A5-B07D-CB5F360B4FF4/CrashReporter (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/AE8130E6-4961-40A5-B07D-CB5F360B4FF4 (recursive)
   scanning /Users/runner/Library/Logs/CoreSimulator/CrashReporter/Standalone (recursive)
   scanning /Users/runner/Library/Logs/DiagnosticReports (recursive)
 
