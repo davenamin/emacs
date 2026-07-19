@@ -89,17 +89,33 @@ part.  On iOS they CANNOT be installed at runtime the usual way:
 treesit-install-language-grammar compiles a grammar with a C
 compiler (no subprocesses) and dlopens the result from
 ~/.emacs.d (the sandbox bars dlopen of a dylib outside the app
-bundle).  The one path that works is bundling: dlopen of a
-signed dylib INSIDE the app bundle is permitted.  So a grammar
-must be (1) cross-compiled to an iOS-arm64 .dylib against the
-target SDK, (2) placed in ios/Emacs.base/tree-sitter/ (the build
-copies *.dylib from there into Emacs.app/tree-sitter/, which
-treesit-extra-load-path points at) or dropped directly into the
-built bundle, and (3) signed -- the bundle step signs any
-tree-sitter/*.dylib inside-out before signing the bundle.  This
-bundled-grammar path is set up but has not been verified on a
-physical device; treat runtime grammar loading as experimental
-until confirmed on-device.
+bundle).  Grammars must instead be pre-built and bundled.  There
+are two levels of "bundled", and they are NOT equivalent:
+
+  * Development / personal-device / ad-hoc installs.  dyld will
+    dlopen a loose .dylib inside the app bundle as long as it is
+    code-signed with the same team.  So a grammar cross-compiled
+    to an iOS-arm64 .dylib, placed in ios/Emacs.base/tree-sitter/
+    (the build copies *.dylib into Emacs.app/tree-sitter/, which
+    treesit-extra-load-path points at) and signed (the bundle
+    step signs any tree-sitter/*.dylib inside-out) can load at
+    runtime.  This is the path the build sets up.  It has not yet
+    been verified on a physical device; treat it as experimental.
+
+  * App Store distribution.  This is NOT App-Store-compliant.
+    App Store ingestion requires dynamic libraries to ship as
+    signed .framework bundles under Frameworks/, and rejects
+    loose dylibs in arbitrary directories.  Worse, Emacs's
+    treesit loader searches treesit-extra-load-path for a file
+    literally named libtree-sitter-LANG.EXT (see
+    Vtreesit_str_libtree_sitter in src/treesit.c); a framework's
+    binary is Name.framework/Name, which the loader will not
+    find.  So App-Store grammar support needs BOTH framework
+    packaging AND a loader that can locate framework-packaged
+    grammars (a treesit change, or a naming/layout scheme), plus
+    on-device verification.  That work is not done here; for an
+    App Store build, ship the runtime without grammars, or plan
+    the framework path as follow-up.
 
 Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
 build host's Apple root-CA set into the bundle as
