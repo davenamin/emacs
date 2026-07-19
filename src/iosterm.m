@@ -135,6 +135,26 @@ extern void ios_canvas_draw_image (double x, double y,
                                    double clip_x, double clip_y,
                                    double clip_width, double clip_height);
 
+/* Fill a rectangle clipped to CLIP (unclipped when clip.width <= 0),
+   used for text decorations so they never spill past the window area
+   the glyph string owns -- e.g. onto the mode line under a partially
+   visible last row.  */
+static void
+ios_fill_clipped (double x, double y, double width, double height,
+                  NativeRectangle clip, unsigned long pixel)
+{
+  double x0 = x, y0 = y, x1 = x + width, y1 = y + height;
+  if (clip.width > 0)
+    {
+      if (x0 < clip.x) x0 = clip.x;
+      if (y0 < clip.y) y0 = clip.y;
+      if (x1 > clip.x + clip.width)  x1 = clip.x + clip.width;
+      if (y1 > clip.y + clip.height) y1 = clip.y + clip.height;
+    }
+  if (x1 > x0 && y1 > y0)
+    ios_canvas_clear_rect (x0, y0, x1 - x0, y1 - y0, pixel);
+}
+
 /* RIF draw_glyph_string.  Fills the string's background, then hands the
    real CGGlyph codes (from the Core Text driver's encode_char) and
    their per-glyph x origins to the canvas, which paints them with
@@ -271,16 +291,31 @@ ios_draw_glyph_string (struct glyph_string *s)
           penx += adv;
         }
       if (m > 0)
-        ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m, (double) s->ybase,
-                                fg, (double) clip.x, (double) clip.y,
-                                (double) clip.width, (double) clip.height);
+        {
+          ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m, (double) s->ybase,
+                                  fg, (double) clip.x, (double) clip.y,
+                                  (double) clip.width, (double) clip.height);
+          /* Overstrike synthesises bold for a face whose font has no
+             real bold cut: draw the run again shifted one pixel.  */
+          if (s->face && s->face->overstrike)
+            {
+              for (i = 0; i < m; i++)
+                xpos[i] += 1.0;
+              ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m,
+                                      (double) s->ybase, fg,
+                                      (double) clip.x, (double) clip.y,
+                                      (double) clip.width,
+                                      (double) clip.height);
+            }
+        }
       xfree (glyphs);
       xfree (xpos);
     }
 
-  /* Underline / overline / strike-through as thin foreground rects.
-     Positions come from the font metrics; wave and dashed underline
-     styles render as a plain line for now.  */
+  /* Underline / overline / strike-through as thin rects, clipped to the
+     window area (so a partial last row does not overpaint the mode
+     line) and in each decoration's own colour.  Wave and dashed
+     underline styles render as a plain line for now.  */
   if (s->face)
     {
       if (s->face->underline != FACE_NO_UNDERLINE)
@@ -290,15 +325,23 @@ ios_draw_glyph_string (struct glyph_string *s)
           int uy = s->ybase
                    + ((font && font->underline_position > 0)
                       ? font->underline_position : 1);
-          ios_canvas_clear_rect ((double) s->x, (double) uy, w,
-                                 (double) thick, fg);
+          unsigned long uc = s->face->underline_defaulted_p
+                             ? fg : s->face->underline_color;
+          ios_fill_clipped ((double) s->x, (double) uy, w,
+                            (double) thick, clip, uc);
         }
       if (s->face->overline_p)
-        ios_canvas_clear_rect ((double) s->x, (double) s->y, w, 1.0, fg);
+        {
+          unsigned long oc = s->face->overline_color_defaulted_p
+                             ? fg : s->face->overline_color;
+          ios_fill_clipped ((double) s->x, (double) s->y, w, 1.0, clip, oc);
+        }
       if (s->face->strike_through_p)
         {
           int sy = s->ybase - (font ? font->ascent / 2 : (int) (h / 4));
-          ios_canvas_clear_rect ((double) s->x, (double) sy, w, 1.0, fg);
+          unsigned long sc = s->face->strike_through_color_defaulted_p
+                             ? fg : s->face->strike_through_color;
+          ios_fill_clipped ((double) s->x, (double) sy, w, 1.0, clip, sc);
         }
     }
 }
