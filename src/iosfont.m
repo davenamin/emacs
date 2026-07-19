@@ -485,6 +485,180 @@ ios_font_text_extents (struct font *font,
   metrics->width = width;
 }
 
+/* ------------------------------------------------------------------ */
+/* Complex-text shaping via Core Text.                                */
+/* ------------------------------------------------------------------ */
+
+/* Shape LGSTRING with Core Text and fill its LGLYPH vector, returning
+   the glyph count used, or nil to let the caller fall back to the
+   unshaped per-character layout.  This is what turns ligatures and
+   complex scripts (Arabic, Indic) into correct glyph runs.  Adapted
+   from macfont's CTLine/CTRun shaper without the AppKit ScreenFont
+   path, and defensive throughout: any uncertainty returns nil rather
+   than a partial or wrong result, so a shaping miss never corrupts the
+   display -- it just renders unshaped.  */
+static Lisp_Object
+ios_font_shape (Lisp_Object lgstring, Lisp_Object direction)
+{
+  (void) direction;
+  Lisp_Object font_object = LGSTRING_FONT (lgstring);
+  if (!FONT_OBJECT_P (font_object))
+    return Qnil;
+  struct font *font = XFONT_OBJECT (font_object);
+  if (font->driver != &ios_font_driver)
+    return Qnil;
+  CTFontRef ctfont = ((struct ios_font_info *) font)->ctfont;
+  if (ctfont == NULL)
+    return Qnil;
+
+  ptrdiff_t glyph_len = LGSTRING_GLYPH_LEN (lgstring);
+  if (glyph_len <= 0)
+    return Qnil;
+
+  /* Leading run of real characters.  */
+  ptrdiff_t nchars = 0;
+  while (nchars < glyph_len && FIXNUMP (LGSTRING_CHAR (lgstring, nchars)))
+    nchars++;
+  if (nchars == 0)
+    return Qnil;
+
+  /* UTF-16 string plus a code-unit -> character-index map, so a glyph's
+     Core Text string index resolves back to the Emacs character.  */
+  UniChar *u16 = xmalloc (sizeof *u16 * nchars * 2);
+  ptrdiff_t *u16char = xmalloc (sizeof *u16char * nchars * 2);
+  CFIndex u16len = 0;
+  for (ptrdiff_t i = 0; i < nchars; i++)
+    {
+      UniChar tmp[2];
+      CFIndex k = ios_utf32_to_utf16 ((UTF32Char) XFIXNUM (LGSTRING_CHAR
+                                                           (lgstring, i)),
+                                      tmp);
+      for (CFIndex j = 0; j < k; j++)
+        {
+          u16[u16len] = tmp[j];
+          u16char[u16len] = i;
+          u16len++;
+        }
+    }
+
+  CFStringRef string = CFStringCreateWithCharacters (NULL, u16, u16len);
+  if (string == NULL)
+    {
+      xfree (u16);
+      xfree (u16char);
+      return Qnil;
+    }
+
+  /* This font, kerning off (Emacs owns positioning).  */
+  float zero = 0;
+  CFNumberRef kern = CFNumberCreate (NULL, kCFNumberFloatType, &zero);
+  CFStringRef keys[] = { kCTFontAttributeName, kCTKernAttributeName };
+  CFTypeRef vals[] = { ctfont, kern };
+  CFDictionaryRef attrs
+    = CFDictionaryCreate (NULL, (const void **) keys, (const void **) vals,
+                          2, &kCFTypeDictionaryKeyCallBacks,
+                          &kCFTypeDictionaryValueCallBacks);
+  CFAttributedStringRef astr
+    = attrs ? CFAttributedStringCreate (NULL, string, attrs) : NULL;
+  CTLineRef line = astr ? CTLineCreateWithAttributedString (astr) : NULL;
+  if (kern) CFRelease (kern);
+  if (attrs) CFRelease (attrs);
+  if (astr) CFRelease (astr);
+  CFRelease (string);
+  if (line == NULL)
+    {
+      xfree (u16);
+      xfree (u16char);
+      return Qnil;
+    }
+
+  CFArrayRef runs = CTLineGetGlyphRuns (line);
+  CFIndex nruns = runs ? CFArrayGetCount (runs) : 0;
+  ptrdiff_t out = 0;
+  bool ok = nruns > 0;
+  double total_advance = 0;
+
+  for (CFIndex r = 0; r < nruns && ok; r++)
+    {
+      CTRunRef run = CFArrayGetValueAtIndex (runs, r);
+      /* A run Core Text drew in a substitute font must fall back to the
+         fontset, not be shaped here.  */
+      CFDictionaryRef ra = CTRunGetAttributes (run);
+      CTFontRef rf = ra ? CFDictionaryGetValue (ra, kCTFontAttributeName)
+                        : NULL;
+      if (rf && !CFEqual (rf, ctfont))
+        {
+          ok = false;
+          break;
+        }
+
+      CFIndex gc = CTRunGetGlyphCount (run);
+      for (CFIndex gi = 0; gi < gc; gi++)
+        {
+          if (out >= glyph_len)
+            {
+              ok = false;
+              break;
+            }
+          CFRange one = CFRangeMake (gi, 1);
+          CGGlyph g = 0;
+          CGPoint pos = { 0, 0 };
+          CFIndex sidx = 0;
+          CTRunGetGlyphs (run, one, &g);
+          CTRunGetPositions (run, one, &pos);
+          CTRunGetStringIndices (run, one, &sidx);
+          double gadv = CTRunGetTypographicBounds (run, one, NULL, NULL, NULL);
+
+          double max_x = pos.x + gadv;
+          if (max_x < total_advance)
+            max_x = total_advance;
+          double advance_delta = pos.x - total_advance;
+          double advance = max_x - total_advance;
+          total_advance = max_x;
+
+          ptrdiff_t ci = (sidx >= 0 && sidx < u16len) ? u16char[sidx] : 0;
+          int c = XFIXNUM (LGSTRING_CHAR (lgstring, ci));
+
+          Lisp_Object lglyph = LGSTRING_GLYPH (lgstring, out);
+          if (NILP (lglyph))
+            {
+              lglyph = LGLYPH_NEW ();
+              LGSTRING_SET_GLYPH (lgstring, out, lglyph);
+            }
+          LGLYPH_SET_FROM (lglyph, ci);
+          LGLYPH_SET_TO (lglyph, ci);
+          LGLYPH_SET_CHAR (lglyph, c);
+          LGLYPH_SET_CODE (lglyph, g);
+
+          unsigned code = g;
+          struct font_metrics m;
+          ios_font_text_extents (font, &code, 1, &m);
+          LGLYPH_SET_WIDTH (lglyph, m.width);
+          LGLYPH_SET_LBEARING (lglyph, m.lbearing);
+          LGLYPH_SET_RBEARING (lglyph, m.rbearing);
+          LGLYPH_SET_ASCENT (lglyph, m.ascent);
+          LGLYPH_SET_DESCENT (lglyph, m.descent);
+
+          int xoff = (int) lround (advance_delta);
+          int yoff = (int) lround (-pos.y);
+          int wadjust = (int) lround (advance);
+          if (xoff != 0 || yoff != 0 || wadjust != m.width)
+            LGLYPH_SET_ADJUSTMENT (lglyph,
+                                   CALLN (Fvector, make_fixnum (xoff),
+                                          make_fixnum (yoff),
+                                          make_fixnum (wadjust)));
+          out++;
+        }
+    }
+
+  CFRelease (line);
+  xfree (u16);
+  xfree (u16char);
+  if (!ok || out == 0)
+    return Qnil;
+  return make_fixnum (out);
+}
+
 #ifdef HAVE_WINDOW_SYSTEM
 /* The RIF (ios_draw_glyph_string in iosterm.m) draws glyphs directly
    into the backing store; nothing routes through the driver draw hook,
@@ -523,6 +697,7 @@ struct font_driver ios_font_driver =
     .has_char        = ios_font_has_char,
     .encode_char     = ios_font_encode_char,
     .text_extents    = ios_font_text_extents,
+    .shape           = ios_font_shape,
 #ifdef HAVE_WINDOW_SYSTEM
     .draw            = ios_font_draw,
 #endif

@@ -45,6 +45,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "window.h"
 #include "dispextern.h"
 #include "font.h"
+#include "composite.h"
 #include "coding.h"
 
 /* Forward declaration so ios_launch_log can be called from this file.
@@ -215,39 +216,67 @@ ios_draw_glyph_string (struct glyph_string *s)
           || s->first_glyph->type == GLYPHLESS_GLYPH))
     return;
 
-  /* Real glyphs: hand the CGGlyph codes and their per-glyph x origins
-     to Core Text.  Advances come from the widths redisplay assigned
-     each glyph, so a later single-cell repaint (cursor passage) lands
-     on exactly the same columns.  */
   void *ctfont = font ? ios_font_ctfont (font) : NULL;
-  if (ctfont == NULL || s->char2b == NULL || s->nchars <= 0)
+  if (ctfont == NULL)
     return;
 
-  int n = s->nchars, i, m = 0;
-  unsigned short *glyphs = xmalloc (n * sizeof *glyphs);
-  double *xpos = xmalloc (n * sizeof *xpos);
-  double penx = s->x;
-  bool char_glyph = s->first_glyph->type == CHAR_GLYPH;
-  for (i = 0; i < n; i++)
+  if (s->first_glyph->type == COMPOSITE_GLYPH
+      && s->cmp_id >= 0 && s->first_glyph->u.cmp.automatic)
     {
-      unsigned code = s->char2b[i];
-      double adv = char_glyph
-                   ? (double) s->first_glyph[i].pixel_width
-                   : (double) (s->width) / n;
-      if (code != 0 && code != FONT_INVALID_CODE)
+      /* Automatic (shaped) compositions carry their glyph codes and
+         per-glyph offsets in the composition gstring, not char2b --
+         this is what the .shape hook produces for ligatures and
+         complex scripts.  Draw each glyph at its shaped position; a
+         per-glyph baseline handles combining marks above or below.  */
+      Lisp_Object gstring = composition_gstring_from_id (s->cmp_id);
+      double penx = s->x;
+      for (int gi = s->cmp_from; gi < s->cmp_to; gi++)
         {
-          glyphs[m] = (unsigned short) code;
-          xpos[m] = penx;
-          m++;
+          Lisp_Object glyph = LGSTRING_GLYPH (gstring, gi);
+          if (NILP (glyph))
+            break;
+          unsigned short g = (unsigned short) LGLYPH_CODE (glyph);
+          bool adj = VECTORP (LGLYPH_ADJUSTMENT (glyph));
+          double gx = penx + (adj ? LGLYPH_XOFF (glyph) : 0);
+          double gy = (double) s->ybase - (adj ? LGLYPH_YOFF (glyph) : 0);
+          ios_canvas_draw_glyphs (ctfont, &g, &gx, 1, gy, fg,
+                                  (double) clip.x, (double) clip.y,
+                                  (double) clip.width, (double) clip.height);
+          penx += adj ? LGLYPH_WADJUST (glyph) : LGLYPH_WIDTH (glyph);
         }
-      penx += adv;
     }
-  if (m > 0)
-    ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m, (double) s->ybase, fg,
-                            (double) clip.x, (double) clip.y,
-                            (double) clip.width, (double) clip.height);
-  xfree (glyphs);
-  xfree (xpos);
+  else if (s->char2b != NULL && s->nchars > 0)
+    {
+      /* Real glyphs: hand the CGGlyph codes and their per-glyph x
+         origins to Core Text.  Advances come from the widths redisplay
+         assigned each glyph, so a later single-cell repaint (cursor
+         passage) lands on exactly the same columns.  */
+      int n = s->nchars, i, m = 0;
+      unsigned short *glyphs = xmalloc (n * sizeof *glyphs);
+      double *xpos = xmalloc (n * sizeof *xpos);
+      double penx = s->x;
+      bool char_glyph = s->first_glyph->type == CHAR_GLYPH;
+      for (i = 0; i < n; i++)
+        {
+          unsigned code = s->char2b[i];
+          double adv = char_glyph
+                       ? (double) s->first_glyph[i].pixel_width
+                       : (double) (s->width) / n;
+          if (code != 0 && code != FONT_INVALID_CODE)
+            {
+              glyphs[m] = (unsigned short) code;
+              xpos[m] = penx;
+              m++;
+            }
+          penx += adv;
+        }
+      if (m > 0)
+        ios_canvas_draw_glyphs (ctfont, glyphs, xpos, m, (double) s->ybase,
+                                fg, (double) clip.x, (double) clip.y,
+                                (double) clip.width, (double) clip.height);
+      xfree (glyphs);
+      xfree (xpos);
+    }
 
   /* Underline / overline / strike-through as thin foreground rects.
      Positions come from the font metrics; wave and dashed underline
