@@ -233,11 +233,13 @@ Results land in ~/ios-test-results.txt; one line per test."
 
   (ios-test-deftest char-coverage-cjk
     "a CJK ideograph is displayable through the script fontset fallback"
-    (cl-assert (char-displayable-p ?\N{CJK UNIFIED IDEOGRAPH-6F22})))
+    ;; U+6F22 (Han "kan"); hex escape avoids non-ASCII source bytes.
+    (cl-assert (char-displayable-p ?\x6f22)))
 
   (ios-test-deftest char-coverage-emoji
     "an emoji is displayable through the Apple Color Emoji fallback"
-    (cl-assert (char-displayable-p ?\N{GRINNING FACE})))
+    ;; U+1F600 GRINNING FACE.
+    (cl-assert (char-displayable-p ?\x1f600)))
 
   ;;; --- Drag-n-drop handler ---------------------------------------
 
