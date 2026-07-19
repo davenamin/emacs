@@ -599,6 +599,7 @@ OPTION_DEFAULT_ON([xinput2],[don't use version 2 of the X Input Extension for in
 OPTION_DEFAULT_OFF([small-ja-dic],[generate a smaller-size Japanese dictionary])
 OPTION_DEFAULT_OFF([android],[cross-compile Android application package])
 OPTION_DEFAULT_ON([android-debug],[don't build Emacs as a debug package on Android])
+OPTION_DEFAULT_OFF([ios],[cross-compile iOS application bundle])
 
 # Find out of Android support is enabled and mailutils has defaulted
 # to `yes-unless-android'.  Disable it if so.
@@ -1390,6 +1391,250 @@ if test "$ANDROID" = "yes"; then
 
   # zlib is available in android.
 fi
+
+dnl ---------------------------------------------------------------
+dnl iOS cross-configure: when --with-ios is given on a macOS host,
+dnl re-invoke configure with XCONFIGURE=ios and the Apple toolchain
+dnl resolved by cross/xcode-build/xcode-toolchain.sh.  The pattern
+dnl mirrors the Android block above; see commentary near
+dnl `IOS_OBJ' below for the architecture rationale.
+dnl ---------------------------------------------------------------
+
+dnl Value-taking iOS options.  Declared unconditionally (autoconf
+dnl option parsing must see them regardless of --with-ios) but only
+dnl consumed inside the iOS blocks.  Values may also arrive through
+dnl the environment (IOS_DEPLOYMENT_TARGET / IOS_BUNDLE_ID), which
+dnl the recursive XCONFIGURE=ios pass relies on.
+AC_ARG_WITH([ios-deployment-target],
+  [AS_HELP_STRING([--with-ios-deployment-target=VERSION],
+    [minimum iOS version the app supports (default 15.0)])],
+  [IOS_DEPLOYMENT_TARGET=$withval])
+AC_ARG_WITH([ios-bundle-id],
+  [AS_HELP_STRING([--with-ios-bundle-id=ID],
+    [CFBundleIdentifier for the iOS app (default org.gnu.emacs).
+     Device and App Store builds must use an identifier registered
+     to the signing team's Apple Developer account])],
+  [IOS_BUNDLE_ID=$withval])
+AC_ARG_WITH([ios-app-name],
+  [AS_HELP_STRING([--with-ios-app-name=NAME],
+    [name the iOS app shows under its icon and in system UI
+     (CFBundleDisplayName / CFBundleName; default Emacs).  Does not
+     change the bundle directory (Emacs.app) or the executable])],
+  [IOS_APP_NAME=$withval])
+AC_ARG_WITH([ios-deps],
+  [AS_HELP_STRING([--with-ios-deps=DIR],
+    [prefix holding cross-compiled iOS dependency libraries
+     (currently the GnuTLS stack) produced by ios/build-deps.sh.
+     Must match the SDK being targeted (iphoneos vs
+     iphonesimulator).  When absent, Emacs builds without TLS])],
+  [IOS_DEPS=$withval])
+
+if test "$with_ios" = "yes"; then
+  # Default the deployment target before the toolchain helper consumes
+  # it.  The AC_SUBST happens later (near the other iOS substitutions)
+  # but the value needs to exist now.
+  AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
+
+  AS_IF([test "$XCONFIGURE" = "ios"], [],
+    [AC_MSG_NOTICE([Configuring iOS cross-compile via XCONFIGURE=ios.])
+
+     # Normalize --with-ios-deps to an absolute path before the
+     # recursive pass consumes it (its value gets baked into
+     # LIBGNUTLS_LIBS -L flags) and fail early when it does not
+     # look like a prefix produced by ios/build-deps.sh.
+     AS_IF([test -n "$IOS_DEPS"],
+       [case "$IOS_DEPS" in
+          /*) ;;
+          *) IOS_DEPS=`pwd`/$IOS_DEPS ;;
+        esac
+        AS_IF([test -f "$IOS_DEPS/lib/pkgconfig/gnutls.pc"], [],
+          [AC_MSG_ERROR([--with-ios-deps: no lib/pkgconfig/gnutls.pc under
+$IOS_DEPS.  Build the TLS dependency stack first:
+
+  $srcdir/ios/build-deps.sh --sdk ${IOS_SDK:-iphoneos} --prefix $IOS_DEPS
+
+(and make sure the --sdk used there matches this build's IOS_SDK).])])])
+
+     # Sanity-check the toolchain in a subshell.  The helper aborts
+     # cleanly if we are not on macOS, if xcrun is missing, or if
+     # the SDK cannot be located.  We deliberately do NOT source
+     # the helper into the outer shell -- the iOS CC/CFLAGS/LDFLAGS
+     # must not leak into outer-pass probes, which are host-targeted.
+     # The recursive XCONFIGURE=ios run below sources the helper for
+     # real inside its own shell.
+     AS_IF([(IOS_DEPLOYMENT_TARGET=$IOS_DEPLOYMENT_TARGET \
+             . "$srcdir/cross/xcode-build/xcode-toolchain.sh") \
+           >/dev/null 2>&1], [],
+       [AC_MSG_ERROR([--with-ios requires macOS with Xcode installed.
+The cross/xcode-build/xcode-toolchain.sh helper could not resolve the
+Apple toolchain.  Run
+
+  IOS_DEPLOYMENT_TARGET=$IOS_DEPLOYMENT_TARGET \\
+    . $srcdir/cross/xcode-build/xcode-toolchain.sh
+
+by hand to see the underlying error.])])
+
+     # Save confdefs.h and config.log so the recursive run gets a
+     # clean slate; restore them after it returns.
+     mv -f confdefs.h _confdefs.h
+     mv -f config.log _config.log
+     trap "rm -rf _confdefs.h _config.log" 0
+
+     # Build the passthrough list.  iOS is even more restrictive than
+     # Android: no fork/exec, no dynamic loading of arbitrary code,
+     # so nearly every optional feature is disabled.  Only options
+     # the user explicitly cares about (cache file, lisp-object-type
+     # check) need to make it through.
+     ios_passthrough="--with-ios"
+     AS_IF([test -n "$cache_file" && test "$cache_file" != "/dev/null"],
+       [ios_passthrough="$ios_passthrough --cache-file=$cache_file.1"])
+     ios_passthrough="$ios_passthrough --enable-check-lisp-object-type=$enable_check_lisp_object_type"
+
+     # The recursive invocation gets only the iOS toolchain *inputs*
+     # (SDK, arch, deployment target).  CC/CFLAGS/LDFLAGS are resolved
+     # by xcode-toolchain.sh inside the recursive shell.  This mirrors
+     # the Android branch above, which passes ANDROID_CC/android_abi/
+     # android_ndk_path rather than the resolved CC.
+     #
+     # ac_cv_func_pipe2=no preempts an autoconf/gnulib mismatch on the
+     # iphonesimulator SDK 26+: AC_CHECK_FUNCS([pipe2]) sees a pipe2
+     # prototype, sets HAVE_PIPE2=1, but inside gnulib's lib/pipe2.c
+     # the prototype is gated by feature-test macros and isn't
+     # actually visible at compile time -- so the call goes through
+     # clang's typo-correction, lands on pipe(int[2]), and fails with
+     # "too many arguments to function call" at lib/pipe2.c:57.
+     # Forcing the cache var to "no" makes gnulib fall through to its
+     # pipe()+fcntl() fallback, which compiles cleanly on every
+     # Apple SDK.  The iphoneos SDK reports pipe2 as unavailable on
+     # its own so this override is also harmless there.
+     AS_IF([XCONFIGURE=ios \
+            IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
+            IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
+            IOS_BUNDLE_ID="$IOS_BUNDLE_ID" \
+            IOS_DEPS="$IOS_DEPS" \
+            ac_cv_func_pipe2=no \
+            $CONFIG_SHELL $0 $ios_passthrough], [],
+       [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
+
+     # Move the generated cross artifacts aside so the outer host
+     # pass can produce its own Makefiles into the same paths.  The
+     # list mirrors $android_makefiles -- crucially it includes
+     # lib/gnulib.mk, which cross/Makefile consumes alongside the
+     # other *.ios files when building lib/libgnu.a.
+     for makefile in lib/Makefile lib/gnulib.mk lib-src/Makefile src/Makefile; do
+       AS_IF([test -f "$makefile"], [mv -f "$makefile" "$makefile.ios"])
+     done
+     AS_IF([test -f src/config.h], [mv -f src/config.h src/config.h.ios])
+
+     REALLY_IOS=yes
+
+     # Restore the outer-pass state.  Note: IOS is NOT set here --
+     # the outer pass continues as a plain host build, which is what
+     # produces ios/Makefile and ios/Emacs.base/Info.plist with host
+     # tools.  Only the recursive pass sets IOS=yes.
+     mv -f _confdefs.h confdefs.h
+     mv -f config.log config.log.ios
+     mv -f _config.log config.log])
+fi
+
+if test "$XCONFIGURE" = "ios"; then
+  IOS=yes
+  # Source the Apple toolchain helper *inside* the recursive shell so
+  # CC/CXX/AR/RANLIB/CFLAGS/OBJCFLAGS/LDFLAGS are set before
+  # AC_PROG_CC fires later in configure.ac.
+  . "$srcdir/cross/xcode-build/xcode-toolchain.sh"
+  # Force cross_compiling on so AC_TRY_RUN tests fall back to
+  # AC_TRY_LINK semantics.
+  cross_compiling=yes
+fi
+
+AC_SUBST([REALLY_IOS])
+
+if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
+  # iOS, like Android, disables nearly every optional feature.
+  # Apply the disables both in the outer host pass (so the bridging
+  # host build is minimal) and the inner cross pass.
+  with_xpm=no
+  with_png=no
+  with_webp=no
+  with_gif=no
+  with_jpeg=no
+  with_sqlite3=no
+  with_tiff=no
+  with_selinux=no
+  with_modules=no
+  with_tree_sitter=no
+  with_imagemagick=no
+  with_lcms2=no
+  with_mailutils=no
+  with_pop=no
+  with_harfbuzz=no
+  with_native_compilation=no
+  with_threads=no
+  with_rsvg=no
+  with_libsystemd=no
+  with_cairo=no
+  with_xft=no
+  with_libotf=no
+  with_gpm=no
+  with_dbus=no
+  with_gsettings=no
+  with_ns=no
+  with_x=no
+  with_pgtk=no
+
+  # GnuTLS is the one optional library the iOS port supports, via a
+  # cross-compiled static stack (ios/build-deps.sh) -- the same
+  # feature the Android port provides through its ndk-build ports
+  # of gnutls/gmp/nettle (java/INSTALL, section GNUTLS).  Enable it
+  # only in the inner cross pass, and only when --with-ios-deps
+  # points at a prefix that has it; the outer pass stays minimal
+  # (it exists to build host tools and bootstrap-emacs), and
+  # builds without deps behave exactly as before.  Restricting
+  # PKG_CONFIG_LIBDIR to the deps prefix keeps Homebrew's host
+  # libraries from leaking into the cross link.
+  #
+  # libxml2 (HTML/XML parsing: libxml-parse-html-region, used by
+  # eww / shr and feed readers) is cross-compiled into the same
+  # deps prefix by ios/build-deps.sh; enable it under the same
+  # gate.  The Android port bundles libxml2 the same way
+  # (java/INSTALL, section LIBXML2).
+  if test "$XCONFIGURE" = "ios" && test -n "$IOS_DEPS"; then
+    with_gnutls=yes
+    with_xml2=yes
+    PKG_CONFIG_LIBDIR="$IOS_DEPS/lib/pkgconfig"
+    export PKG_CONFIG_LIBDIR
+  else
+    with_gnutls=no
+    with_xml2=no
+  fi
+
+  # Force the dumping strategy to "none" for the iOS cross pass
+  # only.  The recursive XCONFIGURE=ios cross-build can't run
+  # temacs on the host to produce a pdmp file (the binary targets
+  # iOS), so it skips build-time dumping entirely; the resulting
+  # emacs binary bootstraps Lisp from source on every startup
+  # (slower but correct).  with_pdumper / HAVE_PDUMPER / DUMPING
+  # are all overridden here even though the early dumping block at
+  # ~line 455 has already run -- the values these variables hold
+  # at AC_OUTPUT are what get substituted into the Makefiles.
+  #
+  # The OUTER host pass keeps the default pdumper strategy: the
+  # ios target builds host bootstrap-emacs + bootstrap-emacs.pdmp
+  # to generate the bundle's autoload files, and forcing
+  # DUMPING=none there would leave src/Makefile without the
+  # bootstrap-emacs.pdmp rule while also making every batch
+  # invocation of bootstrap-emacs pay a full source-form loadup.
+  if test "$XCONFIGURE" = "ios"; then
+    with_dumping=none
+    with_pdumper=no
+    HAVE_PDUMPER=no
+    DUMPING=none
+  fi
+fi
+
+# CROSS_SUFFIX is computed later (after REALLY_ANDROID is set), see
+# the AC_SUBST([CROSS_SUFFIX]) block near the iOS substitutions.
 
 dnl This used to use changequote, but, apart from 'changequote is evil'
 dnl per the autoconf manual, we can speed up autoconf somewhat by quoting
@@ -2622,6 +2867,19 @@ ANDROID_LIBS=
 # the cross-compiler.
 ANDROID_BUILD_CFLAGS=
 REALLY_ANDROID=
+# iOS substitutions.  IOS itself is *not* reset here: by the time we
+# reach this line the recursive XCONFIGURE=ios path has already set
+# IOS=yes (and the outer host pass left it empty), so resetting it
+# would mask the cross pass and prevent HAVE_IOS / IOS_*_OBJ from being
+# defined.  The remaining variables are computed below inside the
+# AS_IF([test "$IOS" = "yes"], ...) block and are safe to clear.
+# IOS_OBJC_OBJ lists Objective-C objects (every src/ios*.m); IOS_C_OBJ
+# lists C objects (src/iosvfs.c).  Split because src/Makefile.in feeds
+# them through different suffix substitutions into GLOBAL_SOURCES.
+IOS_OBJC_OBJ=
+IOS_C_OBJ=
+IOS_LIBS=
+IOS_BUILD_CFLAGS=
 CM_OBJ="cm.o"
 
 AS_IF([test "$ANDROID" = "yes"],[
@@ -2693,6 +2951,67 @@ AC_SUBST([ANDROID_LDFLAGS])
 AC_SUBST([ANDROID_BUILD_CFLAGS])
 AC_SUBST([ANDROID_SHARED_USER_ID])
 AC_SUBST([ANDROID_SHARED_USER_NAME])
+
+# CROSS_SUFFIX names which set of *.<suffix> cross-configure artifacts
+# the cross/ harness should consume.  Set whenever a cross-build was
+# requested; left empty for plain host builds so cross/Makefile is a
+# no-op.  Consumed by cross/Makefile.in.
+CROSS_SUFFIX=
+AS_IF([test "$REALLY_ANDROID" = "yes"], [CROSS_SUFFIX=android])
+AS_IF([test "$REALLY_IOS" = "yes"], [CROSS_SUFFIX=ios])
+AC_SUBST([CROSS_SUFFIX])
+
+# iOS-specific objects, linker flags, and build-time CFLAGS.  The
+# pattern follows the Android port: the outer --with-ios invocation
+# (a host build that produces no iOS code by itself) is responsible
+# for recursively re-invoking configure with XCONFIGURE=ios and the
+# Apple toolchain.  Only the recursive cross-configure run sets
+# IOS=yes; on that pass the iOS translation units (src/ios.m,
+# iosterm.m, etc.) are pulled into IOS_OBJ and the iOS-specific
+# macros are defined.
+
+AS_IF([test "$IOS" = "yes"],[
+  window_system=ios
+  no_x=yes
+  IOS_OBJC_OBJ="iosterm.o iosfns.o iosmenu.o iosselect.o iosfont.o iosimage.o ios.o"
+  IOS_C_OBJ="iosvfs.o"
+  IOS_LIBS="-framework UIKit -framework Foundation"
+  IOS_LIBS="$IOS_LIBS -framework CoreText -framework CoreGraphics"
+  # ImageIO + MobileCoreServices for CGImageSource format identification
+  # used by iosimage.m.
+  IOS_LIBS="$IOS_LIBS -framework ImageIO -framework MobileCoreServices"
+  # UTType constants used by the document picker in iosfns.m.
+  IOS_LIBS="$IOS_LIBS -framework UniformTypeIdentifiers"
+  # Embed the bundle's Info.plist into the Mach-O's __TEXT,__info_plist
+  # section.  Real Xcode-built iOS apps always carry this; the modern
+  # iOS toolchain's IXPlaceholder (the install-coordination component
+  # in CoreSimulator / MobileInstallation) reads bundle metadata from
+  # this section, not from the file on disk, and a bundle without it
+  # is rejected with a misleading "Missing bundle ID" error.
+  #
+  # pwd at configure time is the build directory.  The same absolute
+  # path is reachable from the cross src/ directory at link time
+  # because we resolve it here (not at make-time).  Both the outer
+  # host pass and the inner XCONFIGURE=ios pass run config.status,
+  # which generates ios/Emacs.base/Info.plist with identical
+  # IOS_PLATFORM_DISPLAY values (both derived from $IOS_SDK), so
+  # whichever pass writes last gives the binary the right plist.
+  IOS_LIBS="$IOS_LIBS -Wl,-sectcreate,__TEXT,__info_plist,`pwd`/ios/Emacs.base/Info.plist"
+  IOS_BUILD_CFLAGS="-fPIC -fvisibility=hidden -fobjc-arc"
+
+  AC_DEFINE([HAVE_IOS], [1], [Define to 1 if Emacs is being built
+with iOS support])
+  AC_DEFINE([HAVE_NATIVE_IMAGE_API], [1],
+    [Define to use ImageIO/CoreGraphics for image decoding on iOS.])
+  NATIVE_IMAGE_API="yes (iOS)"
+  AC_DEFINE([NS_IMPL_IOS], [1], [Define to 1 to compile the NS-shared
+font and image code (nsfont.m, nsimage.m) in iOS mode])])
+
+AC_SUBST([IOS])
+AC_SUBST([IOS_OBJC_OBJ])
+AC_SUBST([IOS_C_OBJ])
+AC_SUBST([IOS_LIBS])
+AC_SUBST([IOS_BUILD_CFLAGS])
 
 # Check for pw_gecos in struct passwd; this is known to be missing on
 # Android.
@@ -3213,6 +3532,9 @@ dnl use the toolkit if we have gtk, or X11R5 or newer.
   ;;
   android )
     term_header=androidterm.h
+  ;;
+  ios )
+    term_header=iosterm.h
   ;;
 esac
 
@@ -7198,6 +7520,56 @@ AC_SUBST([ns_applibexecdir])
 AC_SUBST([ns_applibdir])
 AC_SUBST([ns_appresdir])
 AC_SUBST([ns_appsrc])
+
+## iOS bundle output path.  Defaults to ios/Emacs.app under the build
+## directory; ios/Makefile assembles the bundle template plus the
+## cross-compiled emacs binary into this location.
+AS_IF([test -z "$ios_appdir"], [ios_appdir=`pwd`/ios/Emacs.app])
+AC_SUBST([ios_appdir])
+
+## Minimum supported iOS version (passed into ios/Emacs.base/Info.plist
+## and, via cross/xcode-build/xcode-toolchain.sh, into the
+## -mios-version-min CFLAG of the XCONFIGURE=ios cross-compile).
+AS_IF([test -z "$IOS_DEPLOYMENT_TARGET"], [IOS_DEPLOYMENT_TARGET=15.0])
+AC_SUBST([IOS_DEPLOYMENT_TARGET])
+
+## Bundle identifier for ios/Emacs.base/Info.plist.  org.gnu.emacs is
+## fine for the Simulator (no signing) but device / App Store builds
+## must use an App ID registered to the signing team, supplied via
+## --with-ios-bundle-id= (or the IOS_BUNDLE_ID environment variable,
+## which is how the recursive XCONFIGURE=ios pass receives it).
+AS_IF([test -z "$IOS_BUNDLE_ID"], [IOS_BUNDLE_ID=org.gnu.emacs])
+AC_SUBST([IOS_BUNDLE_ID])
+
+## User-visible app name for ios/Emacs.base/Info.plist
+## (CFBundleDisplayName, the label under the home-screen icon, and
+## CFBundleName, the short name system UI uses -- Apple recommends
+## 15 characters or fewer for the latter).  The bundle directory
+## stays Emacs.app and the executable stays emacs regardless;
+## neither is user-visible on device.
+AS_IF([test -z "$IOS_APP_NAME"], [IOS_APP_NAME=Emacs])
+AC_SUBST([IOS_APP_NAME])
+
+## Platform identity for ios/Emacs.base/Info.plist.  CoreSimulator's
+## install path (IXPlaceholder) and MobileInstallation on device both
+## validate CFBundleSupportedPlatforms before reading the bundle ID;
+## a bundle that lacks it is rejected with a misleading "Missing
+## bundle ID" error.  Real Xcode-built apps always carry this key
+## plus DTPlatformName, with values that differ between device and
+## simulator builds -- so derive them from $IOS_SDK (the same
+## environment variable the cross-configure pass forwards to
+## xcode-toolchain.sh).  Empty / unset means a device build.
+case "$IOS_SDK" in
+  iphonesimulator)
+    IOS_PLATFORM_DISPLAY=iPhoneSimulator
+    IOS_PLATFORM_SDK=iphonesimulator ;;
+  *)
+    IOS_PLATFORM_DISPLAY=iPhoneOS
+    IOS_PLATFORM_SDK=iphoneos ;;
+esac
+AC_SUBST([IOS_PLATFORM_DISPLAY])
+AC_SUBST([IOS_PLATFORM_SDK])
+
 AC_SUBST([GNU_OBJC_CFLAGS])
 AC_SUBST([OTHER_FILES])
 
@@ -7785,12 +8157,13 @@ dnl config.status treats $srcdir specially, so I think this is ok...
 ARCH_INDEPENDENT_CONFIG_FILES([$srcdir/doc/man/emacs.1])
 
 AC_CONFIG_FILES([lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile
-                 lwlib/Makefile nextstep/Makefile nt/Makefile])
+                 lwlib/Makefile nextstep/Makefile nt/Makefile ios/Makefile
+                 ios/Emacs.base/Info.plist:ios/Emacs.base/Info.plist.in])
 ARCH_INDEPENDENT_CONFIG_FILES([doc/emacs/Makefile doc/misc/Makefile
                                doc/lispintro/Makefile doc/lispref/Makefile
 			       lisp/Makefile leim/Makefile])
 
-SUBDIR_MAKEFILES="lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile lwlib/Makefile nextstep/Makefile nt/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile lisp/Makefile leim/Makefile"
+SUBDIR_MAKEFILES="lib/Makefile lib-src/Makefile oldXMenu/Makefile src/Makefile lwlib/Makefile nextstep/Makefile nt/Makefile ios/Makefile doc/emacs/Makefile doc/misc/Makefile doc/lispintro/Makefile doc/lispref/Makefile lisp/Makefile leim/Makefile"
 
 dnl The test/ directory is missing if './make-dist --no-tests' was used.
 opt_makefile=test/Makefile
@@ -7909,10 +8282,12 @@ if test "$XCONFIGURE" != "android"; then
   dnl machine.
   AS_MKDIR_P([cross/etc])
 
-  AS_IF([test "x$with_android" != "xno"], [
+  AS_IF([test "x$with_android" != "xno" || test "$with_ios" = "yes"], [
     dnl Link gnulib files to cross/lib as well.  af_alg.h and
     dnl lib/save-cwd.h are copied manually from gnulib, and as such
-    dnl aren't specified in gl_FILE_LIST.
+    dnl aren't specified in gl_FILE_LIST.  Same set of files for
+    dnl Android and iOS -- both cross-targets consume the same gnulib
+    dnl gnulib.mk, which lists the same .o files.
     emacs_files='gl_FILE_LIST lib/af_alg.h lib/save-cwd.h'
     dnl These files are specific to Emacs.
     emacs_files="$emacs_files lib/fingerprint.c lib/fingerprint.h \

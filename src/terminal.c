@@ -474,6 +474,8 @@ return values.  */)
       return Qhaiku;
     case output_android:
       return Qandroid;
+    case output_ios:
+      return Qios;
     default:
       emacs_abort ();
     }

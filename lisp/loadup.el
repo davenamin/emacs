@@ -320,6 +320,12 @@
       (load "term/common-win")
       (load "term/android-win")))
 
+(if (featurep 'ios)
+    (progn
+      (load "touch-screen")
+      (load "term/common-win")
+      (load "term/ios-win")))
+
 (if (or (eq system-type 'windows-nt)
         (featurep 'w32))
     (progn
@@ -369,6 +375,23 @@
 ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
 ;; which happens while processing 'elisp-flymake-byte-compile', when
 ;; elisp-mode.elc is outdated.
+;; iOS port: preempt the autoload of `flymake-log' before elisp-mode.el
+;; is loaded.  The autoload entry in ldefs-boot.el is marked `t' (macro),
+;; so when elisp-mode.el's eager macroexp encounters the
+;; `(flymake-log :warning ...)' calls inside elisp-flymake-byte-compile,
+;; it triggers a load of flymake.el -- which on iOS fails part-way
+;; through `(require 'project)' / its dependents with a
+;; `(wrong-type-argument stringp nil)' signal (a downstream effect of
+;; the still-stubby HOME / files / cwd state during loadup).  Defining
+;; a no-op `flymake-log' macro here overrides the autoload, so the
+;; expansion proceeds without dragging flymake.el in.  flymake remains
+;; usable at runtime via its own autoload trigger after Emacs has
+;; finished bringing up its sandboxed environment; this only patches
+;; the loadup-time path.
+(when (featurep 'ios)
+  (defmacro flymake-log (_level _msg &rest _args)
+    "Stub for use only during loadup on iOS; see loadup.el for rationale."
+    nil))
 (load "progmodes/elisp-mode")
 
 ;; Preload some constants and floating point functions.
@@ -562,8 +585,16 @@ directory got moved.  This is set to be a pair in the form of:
 ;; Avoid error if user loads some more libraries now.
 (setq purify-flag nil)
 
-;; Make sure we will attempt bidi reordering henceforth.
-(setq redisplay--inhibit-bidi nil)
+;; Make sure we will attempt bidi reordering henceforth -- but only
+;; if the Unicode property tables loaded.  charprop.el is GENERATED
+;; after temacs is built (during dump) and is missing for cross-
+;; builds that don't dump (notably the iOS bring-up), so flipping
+;; this unconditionally aborts bidi_initialize inside the first
+;; redisplay tick.  Keep redisplay--inhibit-bidi t until the tables
+;; exist; bidi can be turned on at runtime later if/when iOS grows
+;; a charprop equivalent.
+(when (featurep 'charprop)
+  (setq redisplay--inhibit-bidi nil))
 
 
 

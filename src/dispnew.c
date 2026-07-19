@@ -7283,6 +7283,19 @@ init_display_interactive (void)
     }
 #endif
 
+#ifdef HAVE_IOS
+  /* iOS is always a GUI app -- there is no controlling tty and no
+     interactive ncurses fallback that would make sense.  Take the
+     window-system path unconditionally and let ios_term_init wire
+     up the terminal.  */
+  if (!inhibit_window_system)
+    {
+      Vinitial_window_system = Qios;
+      ios_term_init ();
+      return;
+    }
+#endif
+
 #ifdef HAVE_NTGUI
   if (!inhibit_window_system)
     {

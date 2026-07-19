@@ -1565,7 +1565,7 @@ If FRAME is nil, the current FRAME is used."
 	    match (cond ((eq req 'type)
 			 (or (memq (window-system frame) options)
 			     (and (memq 'graphic options)
-				  (memq (window-system frame) '(x w32 ns pgtk)))
+				  (memq (window-system frame) '(x w32 ns pgtk ios)))
 			     ;; FIXME: This should be revisited to use
 			     ;; display-graphic-p, provided that the
 			     ;; color selection depends on the number

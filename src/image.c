@@ -150,6 +150,32 @@ typedef struct ns_bitmap_record Bitmap_Record;
 typedef struct pgtk_bitmap_record Bitmap_Record;
 #endif /* HAVE_PGTK */
 
+#ifdef HAVE_IOS
+#include "iosterm.h"
+
+/* iOS renders images through the native image API
+   (ios_load_image / CGImage); the XImage-style pixel hooks below
+   satisfy image.c's compile-time references but are never used at
+   runtime.  */
+typedef struct ios_bitmap_record Bitmap_Record;
+
+#define GET_PIXEL(ximg, x, y)        ((unsigned long) 0)
+#define PUT_PIXEL(ximg, x, y, pixel) ((void) 0)
+#define NO_PIXMAP                    0
+
+#define PIX_MASK_RETAIN	0
+#define PIX_MASK_DRAW	1
+
+#define RGB_TO_ULONG(r, g, b) (((r) << 16) | ((g) << 8) | (b))
+#define RED_FROM_ULONG(color)	(((color) >> 16) & 0xff)
+#define GREEN_FROM_ULONG(color)	(((color) >> 8) & 0xff)
+#define BLUE_FROM_ULONG(color)	((color) & 0xff)
+#define RED16_FROM_ULONG(color)		(RED_FROM_ULONG (color) * 0x101)
+#define GREEN16_FROM_ULONG(color)	(GREEN_FROM_ULONG (color) * 0x101)
+#define BLUE16_FROM_ULONG(color)	(BLUE_FROM_ULONG (color) * 0x101)
+
+#endif /* HAVE_IOS */
+
 #if (defined HAVE_X_WINDOWS \
      && ! (defined HAVE_NTGUI || defined USE_CAIRO || defined HAVE_NS))
 /* W32_TODO : Color tables on W32.  */
@@ -6962,7 +6988,7 @@ image_to_emacs_colors (struct frame *f, struct image *img, bool rgb_p)
   for (y = 0; y < img->height; ++y)
     {
 #if !defined USE_CAIRO && !defined HAVE_NS && !defined HAVE_HAIKU	\
-  && !defined HAVE_ANDROID
+  && !defined HAVE_ANDROID && !defined HAVE_IOS
       Emacs_Color *row = p;
       for (x = 0; x < img->width; ++x, ++p)
 	p->pixel = GET_PIXEL (ximg, x, y);
@@ -6970,7 +6996,7 @@ image_to_emacs_colors (struct frame *f, struct image *img, bool rgb_p)
         {
           FRAME_TERMINAL (f)->query_colors (f, row, img->width);
         }
-#else  /* USE_CAIRO || HAVE_NS || HAVE_HAIKU || HAVE_ANDROID */
+#else  /* USE_CAIRO || HAVE_NS || HAVE_HAIKU || HAVE_ANDROID || HAVE_IOS */
       for (x = 0; x < img->width; ++x, ++p)
 	{
 	  p->pixel = GET_PIXEL (ximg, x, y);
@@ -7306,15 +7332,19 @@ image_disable_image (struct frame *f, struct image *img)
   if (n_planes < 2 || cross_disabled_images)
     {
 #ifndef HAVE_NTGUI
-#ifndef HAVE_NS  /* TODO: NS support, however this not needed for toolbars */
+#if !defined HAVE_NS && !defined HAVE_IOS
+/* TODO: NS support, however this not needed for toolbars; iOS skipped
+   here because image_pixmap_draw_cross isn't defined when neither
+   HAVE_X_WINDOWS nor USE_CAIRO nor HAVE_HAIKU nor HAVE_ANDROID is set
+   (see the conditional just above the function definition).  */
 
 #if !defined USE_CAIRO && !defined HAVE_HAIKU && !defined HAVE_ANDROID
 #define CrossForeground(f) BLACK_PIX_DEFAULT (f)
 #define MaskForeground(f)  WHITE_PIX_DEFAULT (f)
-#else  /* USE_CAIRO || HAVE_HAIKU */
+#else  /* USE_CAIRO || HAVE_HAIKU || HAVE_ANDROID */
 #define CrossForeground(f) 0
 #define MaskForeground(f)  PIX_MASK_DRAW
-#endif	/* USE_CAIRO || HAVE_HAIKU */
+#endif	/* USE_CAIRO || HAVE_HAIKU || HAVE_ANDROID */
 
 #if !defined USE_CAIRO && !defined HAVE_HAIKU
       image_sync_to_pixmaps (f, img);
@@ -7324,7 +7354,7 @@ image_disable_image (struct frame *f, struct image *img)
       if (img->mask)
 	image_pixmap_draw_cross (f, img->mask, 0, 0, img->width, img->height,
 				 MaskForeground (f));
-#endif /* !HAVE_NS */
+#endif /* !HAVE_NS && !HAVE_IOS */
 #else
       HDC hdc, bmpdc;
       HGDIOBJ prev;
@@ -7869,6 +7899,8 @@ image_can_use_native_api (Lisp_Object type)
   return ns_can_use_native_image_api (type);
 # elif defined HAVE_HAIKU
   return haiku_can_use_native_image_api (type);
+# elif defined HAVE_IOS
+  return ios_can_use_native_image_api (type);
 # else
   return false;
 # endif
@@ -7945,6 +7977,9 @@ native_image_load (struct frame *f, struct image *img)
 # elif defined HAVE_HAIKU
   return haiku_load_image (f, img, image_file,
 			   image_spec_value (img->spec, QCdata, NULL));
+# elif defined HAVE_IOS
+  return ios_load_image (f, img, image_file,
+                         image_spec_value (img->spec, QCdata, NULL));
 # else
   return 0;
 # endif

@@ -5189,6 +5189,7 @@ tty_display_dimension (Lisp_Object frame, int *width, int *height)
     case output_pgtk:
     case output_haiku:
     case output_android:
+    case output_ios:
     default:
       emacs_abort ();
       break;

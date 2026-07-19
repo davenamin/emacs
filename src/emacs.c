@@ -38,6 +38,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "androidterm.h"
 #endif
 
+#ifdef HAVE_IOS
+#include "iosterm.h"
+#endif
+
 #if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
 #include "sfntfont.h"
 #endif
@@ -1316,9 +1320,12 @@ maybe_load_seccomp (int argc, char **argv)
 
 #endif  /* SECCOMP_USABLE */
 
-#if !defined HAVE_ANDROID || defined ANDROID_STUBIFY
+#if (!defined HAVE_ANDROID || defined ANDROID_STUBIFY) && !defined HAVE_IOS
 int
 main (int argc, char **argv)
+#elif defined HAVE_IOS
+int
+ios_emacs_init (int argc, char **argv, char *dump_file)
 #else
 int
 android_emacs_init (int argc, char **argv, char *dump_file)
@@ -1328,7 +1335,8 @@ android_emacs_init (int argc, char **argv, char *dump_file)
      for pointers.  */
   void *stack_bottom_variable;
   int old_argc;
-#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)
+#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY) \
+  && !defined HAVE_IOS
   char *dump_file;
 
   /* This is just a dummy argument used to avoid extra defines.  */
@@ -2459,6 +2467,16 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_sfntfont_android ();
 #endif /* !ANDROID_STUBIFY */
 #endif /* HAVE_ANDROID */
+
+#ifdef HAVE_IOS
+      syms_of_iosterm ();
+      syms_of_iosfns ();
+      syms_of_iosmenu ();
+      syms_of_iosselect ();
+      syms_of_iosfont ();
+      syms_of_iosvfs ();
+      syms_of_fontset ();
+#endif /* HAVE_IOS */
 
       syms_of_gnutls ();
 
