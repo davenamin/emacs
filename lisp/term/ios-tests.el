@@ -220,6 +220,25 @@ Results land in ~/ios-test-results.txt; one line per test."
     ;; expect a string; a font object here signals wrong-type-argument.
     (cl-assert (stringp (frame-parameter nil 'font))))
 
+  (ios-test-deftest font-families-multiple
+    "the Core Text driver lists more than one font family"
+    ;; The old shim returned a single monospaced family; the real
+    ;; driver enumerates UIFont.familyNames.
+    (cl-assert (> (length (font-family-list)) 5)))
+
+  (ios-test-deftest font-bold-italic-real
+    "bold and italic resolve to actual fonts, not synthesised flags"
+    (cl-assert (find-font (font-spec :weight 'bold)))
+    (cl-assert (find-font (font-spec :slant 'italic))))
+
+  (ios-test-deftest char-coverage-cjk
+    "a CJK ideograph is displayable through the script fontset fallback"
+    (cl-assert (char-displayable-p ?\N{CJK UNIFIED IDEOGRAPH-6F22})))
+
+  (ios-test-deftest char-coverage-emoji
+    "an emoji is displayable through the Apple Color Emoji fallback"
+    (cl-assert (char-displayable-p ?\N{GRINNING FACE})))
+
   ;;; --- Drag-n-drop handler ---------------------------------------
 
   (ios-test-deftest drag-n-drop-handler-bound

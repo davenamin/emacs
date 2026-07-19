@@ -66,11 +66,36 @@ UIKit's `traitCollectionDidChange:'.  Default binding refreshes
         (setq frame-background-mode mode)
         (mapc #'frame-set-background-mode (frame-list))))))
 
+(defun ios--setup-fontset-fallbacks ()
+  "Map non-Latin scripts and emoji to iOS system font families.
+The default face uses the monospaced system font, which covers
+Latin and punctuation but not CJK, emoji, or most complex scripts.
+Core Text draws a fixed glyph run, so unlike the old string-reshape
+path it does not substitute a covering font automatically; naming a
+family per script lets the fontset pick one the driver can open."
+  (dolist (entry '((han       . "PingFang SC")
+                   (kana      . "Hiragino Sans")
+                   (cjk-misc  . "PingFang SC")
+                   (bopomofo  . "PingFang TC")
+                   (hangul    . "Apple SD Gothic Neo")
+                   (thai      . "Thonburi")
+                   (arabic    . "Geeza Pro")
+                   (hebrew    . "Arial Hebrew")
+                   (devanagari . "Kohinoor Devanagari")
+                   (tamil     . "Tamil Sangam MN")
+                   (emoji     . "Apple Color Emoji")
+                   (symbol    . "Apple Symbols")))
+    (ignore-errors
+      (set-fontset-font t (car entry)
+                        (font-spec :family (cdr entry))
+                        nil 'prepend))))
+
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
 WINDOW-SYSTEM is `ios'.  DISPLAY is ignored."
   (create-default-fontset)
+  (ios--setup-fontset-fallbacks)
   ;; Seed frame-background-mode from the OS-wide appearance so the
   ;; default theme picks dark or light accordingly.
   (when (fboundp 'ios-system-appearance)

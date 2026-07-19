@@ -147,9 +147,21 @@ ios_resolve_uifont (Lisp_Object spec, CGFloat size)
 
   UIFont *base = nil;
   if (family)
-    /* A named family (e.g. Courier, Helvetica Neue).  fontWithName
-       accepts a family or PostScript name.  */
-    base = [UIFont fontWithName:family size:size];
+    {
+      /* A named family (e.g. Courier, PingFang SC).  fontWithName
+         accepts a PostScript or full name; for a bare family name it
+         can return nil, so fall back to a family-attribute descriptor,
+         which is how the script-fallback fonts (CJK, emoji) resolve.  */
+      base = [UIFont fontWithName:family size:size];
+      if (base == nil)
+        {
+          UIFontDescriptor *fd = [UIFontDescriptor
+            fontDescriptorWithFontAttributes:
+              @{ UIFontDescriptorFamilyAttribute : family }];
+          if (fd)
+            base = [UIFont fontWithDescriptor:fd size:size];
+        }
+    }
   if (base == nil)
     {
       UIFontWeight wt = wantBold ? UIFontWeightBold : UIFontWeightRegular;
