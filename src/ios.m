@@ -1181,7 +1181,9 @@ ios_emit_function_key (UIKey *key)
                                                cmd.height - 1));
           break;
         case EmacsDrawKindCursorBar:
-          CGContextFillRect (cg, CGRectMake (cmd.x, by, 2, cmd.height));
+          CGContextFillRect (cg, CGRectMake (cmd.x, by,
+                                             cmd.width > 0 ? cmd.width : 2,
+                                             cmd.height));
           break;
         case EmacsDrawKindCursorHBar:
           CGContextFillRect (cg, CGRectMake (cmd.x, by, cmd.width, 2));

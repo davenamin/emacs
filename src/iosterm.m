@@ -465,67 +465,103 @@ ios_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
                              int x, int y, enum text_cursor_kinds cursor_type,
                              int cursor_width, bool on_p, bool active_p)
 {
-  (void) active_p;
+  (void) x; (void) y; (void) active_p;
   if (w == NULL || glyph_row == NULL)
     return;
   struct frame *f = XFRAME (WINDOW_FRAME (w));
   if (!FRAME_IOS_P (f))
     return;
 
+  /* Turning the cursor off needs no work here.  display_and_set_cursor
+     calls erase_phys_cursor before this hook whenever the cursor moves
+     or blinks off, and that redraws the underlying glyph -- and clears
+     the cell for a hollow box -- straight into the backing store.  */
   if (!on_p)
-    /* Erasure is handled generically: erase_phys_cursor redraws
-       the underlying glyph through draw_glyph_string, which our
-       overpaint list renders on top of the stale cursor.  Nothing
-       port-specific to do here.  */
     return;
 
-  /* erase_phys_cursor consults w->phys_cursor_on_p and returns
-     without erasing when it is false; without these assignments
-     cursor motion without a text change (C-f, C-n, blink) leaves
-     stale cursor marks behind.  Mirrors
-     android_draw_window_cursor.  */
+  /* erase_phys_cursor and notice_overwritten_cursor consult this
+     bookkeeping.  phys_cursor_width must be set for every cursor kind:
+     notice_overwritten_cursor uses it to decide whether a row repaint
+     already covered the cursor, and a stale value there can clear
+     phys_cursor_on_p prematurely, which then skips the erase and leaves
+     the old cursor drawn at its former position.  Mirrors
+     android_draw_window_cursor, which sets it in each branch (directly
+     for a bar, via get_phys_cursor_geometry for a box or hbar, and via
+     draw_phys_cursor_glyph for a filled box).  */
   w->phys_cursor_type = cursor_type;
   w->phys_cursor_on_p = true;
 
-  if (cursor_type == NO_CURSOR)
-    return;
-
-  /* Translate window-relative (x,y) into frame-relative pixel
-     coordinates so the canvas receives the same coordinate space
-     as draw_glyph_string.  */
-  int abs_x = WINDOW_LEFT_EDGE_X (w) + x;
-  int abs_y = WINDOW_TOP_EDGE_Y (w) + glyph_row->y;
-  int w_px  = cursor_width > 0
-              ? cursor_width
-              : FRAME_COLUMN_WIDTH (f);
-  int h_px  = glyph_row->height > 0
-              ? glyph_row->height
-              : FRAME_LINE_HEIGHT (f);
-  unsigned long pixel = f->output_data.ios->cursor_pixel;
-
-  /* Clamp to the window's text area: on a partially visible last
-     row the cursor must not paint over the mode line below.  */
-  int text_bottom = WINDOW_TOP_EDGE_Y (w) + window_text_bottom_y (w);
-  if (abs_y + h_px > text_bottom)
-    h_px = text_bottom - abs_y;
-  if (h_px <= 0)
-    return;
-
-  if (cursor_type == FILLED_BOX_CURSOR)
+  /* A cursor past the end of a line that exactly fills the window width
+     belongs in the fringe, as the other ports draw it; erase_phys_cursor
+     clears it back through the fringe bitmap.  */
+  if (glyph_row->exact_window_width_line_p
+      && (glyph_row->reversed_p
+          ? (w->phys_cursor.hpos < 0)
+          : (w->phys_cursor.hpos >= glyph_row->used[TEXT_AREA])))
     {
-      /* Draw the character in cursor colors rather than hiding it
-         under an opaque rectangle: route through the generic
-         helper, which re-enters draw_glyph_string with
-         hl == DRAW_CURSOR (handled there by swapping to the
-         cursor face colors).  */
-      draw_phys_cursor_glyph (w, glyph_row, DRAW_CURSOR);
+      glyph_row->cursor_in_fringe_p = true;
+      draw_fringe_bitmap (w, glyph_row, glyph_row->reversed_p);
       return;
     }
 
-  /* enum text_cursor_kinds: FILLED_BOX=0, HOLLOW_BOX=1, BAR=2, HBAR=3.  */
-  ios_canvas_draw_cursor ((double) abs_x, (double) abs_y,
-                          (double) w_px, (double) h_px,
-                          pixel, (int) cursor_type);
+  unsigned long pixel = f->output_data.ios->cursor_pixel;
+
+  switch (cursor_type)
+    {
+    case NO_CURSOR:
+      w->phys_cursor_width = 0;
+      return;
+
+    case FILLED_BOX_CURSOR:
+      /* Draw the character in cursor colors rather than hiding it under
+         an opaque rectangle: draw_phys_cursor_glyph re-enters
+         draw_glyph_string with hl == DRAW_CURSOR and also sets
+         phys_cursor_width.  */
+      draw_phys_cursor_glyph (w, glyph_row, DRAW_CURSOR);
+      return;
+
+    case HOLLOW_BOX_CURSOR:
+    case HBAR_CURSOR:
+      {
+        struct glyph *cursor_glyph = get_phys_cursor_glyph (w);
+        int gx, gy, gh;
+
+        if (cursor_glyph == NULL)
+          return;
+        /* Sets w->phys_cursor_width and clamps the box to the row so
+           it never overpaints the mode line on a partial last row.  */
+        get_phys_cursor_geometry (w, glyph_row, cursor_glyph, &gx, &gy, &gh);
+        ios_canvas_draw_cursor ((double) gx, (double) gy,
+                                (double) w->phys_cursor_width, (double) gh,
+                                pixel, (int) cursor_type);
+      }
+      return;
+
+    case BAR_CURSOR:
+      {
+        struct glyph *cursor_glyph = get_phys_cursor_glyph (w);
+        int width, bx, by;
+
+        if (cursor_glyph == NULL)
+          return;
+        width = (cursor_width < 0) ? FRAME_CURSOR_WIDTH (f) : cursor_width;
+        width = min (cursor_glyph->pixel_width, width);
+        w->phys_cursor_width = width;
+
+        bx = WINDOW_TEXT_TO_FRAME_PIXEL_X (w, w->phys_cursor.x);
+        by = WINDOW_TO_FRAME_PIXEL_Y (w, w->phys_cursor.y);
+        /* On an R2L glyph the bar sits at the glyph's right edge.  */
+        if ((cursor_glyph->resolved_level & 1) != 0)
+          bx += cursor_glyph->pixel_width - width;
+        ios_canvas_draw_cursor ((double) bx, (double) by,
+                                (double) width, (double) glyph_row->height,
+                                pixel, (int) BAR_CURSOR);
+      }
+      return;
+
+    default:
+      return;
+    }
 }
 
 /* Separator between side-by-side windows (C-x 3): a one-pixel
