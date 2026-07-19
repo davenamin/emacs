@@ -192,6 +192,20 @@ Results land in ~/ios-test-results.txt; one line per test."
       (let ((dom (libxml-parse-html-region (point-min) (point-max))))
         (cl-assert (eq 'html (car dom))))))
 
+  (ios-test-deftest sqlite-available
+    "sqlite3 is linked and an in-memory round-trip works"
+    ;; libsqlite3 comes from the iOS SDK (no cross-compiled dep);
+    ;; enables M-x sqlite and packages using the built-in DB.
+    (cl-assert (sqlite-available-p))
+    (let ((db (sqlite-open)))
+      (unwind-protect
+          (progn
+            (sqlite-execute db "CREATE TABLE t (x INTEGER);")
+            (sqlite-execute db "INSERT INTO t VALUES (42);")
+            (cl-assert (equal '((42))
+                              (sqlite-select db "SELECT x FROM t;"))))
+        (sqlite-close db))))
+
   (ios-test-deftest font-parameter-is-string
     "the `font' frame parameter is a name string, not a font object"
     ;; set-frame-font, frameset/desktop save, and describe-font all

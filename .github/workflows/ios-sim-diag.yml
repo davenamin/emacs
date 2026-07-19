@@ -85,6 +85,8 @@ jobs:
             build-ios-sim/configure.out >> "$OUT" 2>&1
           grep -c 'Does Emacs use -lxml2?.*yes' \
             build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lsqlite3?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
 
           log ""
           log "===== MAKE IOS ====="

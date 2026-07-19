@@ -72,6 +72,14 @@ the icu4c / C++ toolchain the Android build avoids the same way.
 libxml2 enables eww, shr, and HTML/XML parsing generally
 (libxml-parse-html-region).
 
+sqlite3 needs no entry in the deps prefix: the iOS SDK ships
+libsqlite3, so it is enabled for every iOS build (even without
+--with-ios-deps) and -lsqlite3 resolves against the SDK sysroot.
+It provides the built-in database (M-x sqlite, sqlite-open, and
+packages such as org-roam / forge that use it).  Extension
+loading via arbitrary dylibs is a separate matter the sandbox
+restricts, but the core database is fully functional.
+
 Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
 build host's Apple root-CA set into the bundle as
 etc/ca-bundle.pem (security find-certificate -a -p against
@@ -430,7 +438,7 @@ Works:
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
   * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): twenty-two probes covering sandbox
+    ios-run-self-tests): twenty-three probes covering sandbox
     identity, file round-trip, clipboard, geometry, appearance,
     image load, face attributes, color-name resolution, theme
     face-spec matching, frame parameters, frame-background-mode,
