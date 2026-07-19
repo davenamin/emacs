@@ -1404,6 +1404,20 @@ AC_ARG_WITH([ios-app-name],
      (CFBundleDisplayName / CFBundleName; default Emacs).  Does not
      change the bundle directory (Emacs.app) or the executable])],
   [IOS_APP_NAME=$withval])
+AC_ARG_WITH([ios-app-version],
+  [AS_HELP_STRING([--with-ios-app-version=VERSION],
+    [CFBundleShortVersionString, the user-visible app version
+     (one to three dot-separated integers, e.g. 1.0.3).  Defaults
+     to the Emacs version.  This is the "Version" shown on the App
+     Store])],
+  [IOS_APP_VERSION=$withval])
+AC_ARG_WITH([ios-app-build],
+  [AS_HELP_STRING([--with-ios-app-build=BUILD],
+    [CFBundleVersion, the build number (one to three dot-separated
+     integers).  Defaults to the Emacs version.  App Store uploads
+     require this to be unique and monotonically increasing for a
+     given app version, so set it explicitly when submitting])],
+  [IOS_APP_BUILD=$withval])
 AC_ARG_WITH([ios-deps],
   [AS_HELP_STRING([--with-ios-deps=DIR],
     [prefix holding cross-compiled iOS dependency libraries
@@ -1490,10 +1504,17 @@ by hand to see the underlying error.])])
      # pipe()+fcntl() fallback, which compiles cleanly on every
      # Apple SDK.  The iphoneos SDK reports pipe2 as unavailable on
      # its own so this override is also harmless there.
+     # The inner pass also generates ios/Emacs.base/Info.plist and
+     # embeds it into the binary's __info_plist section, so the
+     # bundle-metadata vars must reach it too, not just the outer
+     # pass that writes the bundle's on-disk Info.plist.
      AS_IF([XCONFIGURE=ios \
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
             IOS_BUNDLE_ID="$IOS_BUNDLE_ID" \
+            IOS_APP_NAME="$IOS_APP_NAME" \
+            IOS_APP_VERSION="$IOS_APP_VERSION" \
+            IOS_APP_BUILD="$IOS_APP_BUILD" \
             IOS_DEPS="$IOS_DEPS" \
             ac_cv_func_pipe2=no \
             $CONFIG_SHELL $0 $ios_passthrough], [],
@@ -7539,6 +7560,16 @@ AC_SUBST([IOS_BUNDLE_ID])
 ## neither is user-visible on device.
 AS_IF([test -z "$IOS_APP_NAME"], [IOS_APP_NAME=Emacs])
 AC_SUBST([IOS_APP_NAME])
+
+## User-visible app version (CFBundleShortVersionString) and build
+## number (CFBundleVersion) for ios/Emacs.base/Info.plist.  Both
+## default to the Emacs version; App Store submissions should set
+## --with-ios-app-build to a value that increases with every upload
+## (Apple rejects a re-used build number for the same version).
+AS_IF([test -z "$IOS_APP_VERSION"], [IOS_APP_VERSION=$version])
+AC_SUBST([IOS_APP_VERSION])
+AS_IF([test -z "$IOS_APP_BUILD"], [IOS_APP_BUILD=$version])
+AC_SUBST([IOS_APP_BUILD])
 
 ## Platform identity for ios/Emacs.base/Info.plist.  CoreSimulator's
 ## install path (IXPlaceholder) and MobileInstallation on device both

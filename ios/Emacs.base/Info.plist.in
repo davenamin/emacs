@@ -17,9 +17,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>@version@</string>
+	<string>@IOS_APP_VERSION@</string>
 	<key>CFBundleVersion</key>
-	<string>@version@</string>
+	<string>@IOS_APP_BUILD@</string>
 	<key>CFBundleSupportedPlatforms</key>
 	<array>
 		<string>@IOS_PLATFORM_DISPLAY@</string>

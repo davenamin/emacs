@@ -354,6 +354,17 @@ App Store submission requirements this port already carries
     are internal and unaffected.  Note the App Store product name
     shown on the store page is set in App Store Connect, not in
     the bundle.
+  * App version and build number.  Pass
+    --with-ios-app-version=VERSION (CFBundleShortVersionString,
+    the user-visible "Version" on the App Store) and
+    --with-ios-app-build=BUILD (CFBundleVersion, the build
+    number).  Each is one to three dot-separated integers and
+    both default to the Emacs version.  App Store uploads require
+    CFBundleVersion to be unique and to increase for a given
+    app version, so bump --with-ios-app-build on every submission
+    (e.g. 1, 2, 3 ...) even when the app version is unchanged.
+    Both the bundle's Info.plist and the copy embedded in the
+    binary are set, so they agree.
   * Bundle identifier.  Pass --with-ios-bundle-id= at configure
     time; the App Store re-signs on ingestion and the published
     app carries no embedded provisioning profile (TN3125).
