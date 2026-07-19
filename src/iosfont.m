@@ -52,10 +52,6 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 extern struct font_driver ios_font_driver;
 extern void ios_launch_log (NSString *msg);
 
-/* Entity extra-alist key under which list/match stash the resolved
-   face's PostScript name, so open can recreate the exact CTFontRef.  */
-static Lisp_Object Qios_psname;
-
 /* Per-open-font extra data: the retained CTFontRef and the spacing
    class.  A struct font must come first so (struct ios_font_info *)
    font casts work.  */
@@ -207,32 +203,37 @@ ios_resolve_uifont (Lisp_Object spec, CGFloat size)
   return base;
 }
 
-/* Create a +1 CTFontRef for the PostScript name NAME at SIZE.  */
+/* A +1 CTFontRef faithfully recreating UIFont UIF at SIZE.  Going
+   through the descriptor (toll-free bridged to CTFontDescriptorRef)
+   rather than the PostScript name preserves the weight: a system font's
+   name does not encode its weight axis, so name-based recreation of the
+   bold monospaced system font would come back regular.  */
 static CTFontRef
-ios_ctfont_create (NSString *name, CGFloat size)
+ios_ctfont_from_uifont (UIFont *uif, CGFloat size)
 {
-  if (name == nil || size < 1)
+  if (uif == nil)
     return NULL;
-  return CTFontCreateWithName ((__bridge CFStringRef) name, size, NULL);
+  if (size < 1)
+    size = uif.pointSize > 0 ? uif.pointSize : 14;
+  return CTFontCreateWithFontDescriptor
+    ((__bridge CTFontDescriptorRef) uif.fontDescriptor, size, NULL);
 }
 
-/* Build a font entity describing UIFont UIF resolved for SPEC, stashing
-   its PostScript name so open can recreate it.  */
+/* Build a font entity describing UIFont UIF resolved for SPEC.  */
 static Lisp_Object
 ios_uifont_entity (UIFont *uif, Lisp_Object spec)
 {
   Lisp_Object entity = font_make_entity ();
 
-  /* Describe what the font ACTUALLY is, read through Core Text.  The
-     UIFontDescriptor is opaque for Apple's system fonts (it reports no
-     weight axis and no Bold/MonoSpace symbolic trait), but
-     CTFontCopyTraits -- the call macfont.m uses -- does expose the
-     numeric weight and slant, so the bold monospaced system font is
-     labelled bold and find-font accepts a bold spec.  */
+  /* Describe what the font ACTUALLY is, read through Core Text off a
+     CTFont rebuilt from the descriptor (which, unlike the PostScript
+     name, preserves the weight axis).  CTFontCopyTraits -- the call
+     macfont.m uses -- then exposes the numeric weight and slant, so the
+     bold monospaced system font is labelled bold and find-font accepts
+     a bold spec.  */
   bool isBold = false, isItalic = false, isMono = false;
-  CTFontRef ct = CTFontCreateWithName ((__bridge CFStringRef) uif.fontName,
-                                       uif.pointSize > 0 ? uif.pointSize : 14,
-                                       NULL);
+  CTFontRef ct = ios_ctfont_from_uifont (uif, uif.pointSize > 0
+                                         ? uif.pointSize : 14);
   if (ct)
     {
       CFDictionaryRef traits = CTFontCopyTraits (ct);
@@ -277,10 +278,6 @@ ios_uifont_entity (UIFont *uif, Lisp_Object spec)
   FONT_SET_STYLE (entity, FONT_WEIGHT_INDEX, isBold ? Qbold : Qnormal);
   FONT_SET_STYLE (entity, FONT_SLANT_INDEX, isItalic ? Qitalic : Qnormal);
   FONT_SET_STYLE (entity, FONT_WIDTH_INDEX, Qnormal);
-
-  /* fontName is the PostScript name; recreate the exact face from it.  */
-  font_put_extra (entity, Qios_psname,
-                  build_string (uif.fontName.UTF8String));
   return entity;
 }
 
@@ -422,22 +419,12 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
         pixel_size = 14;
     }
 
-  /* Recreate the exact face from the stashed PostScript name; fall back
-     to resolving the entity afresh if it is missing (e.g. a fontset
-     fallback entity).  */
-  CTFontRef ctfont = NULL;
-  Lisp_Object val = assq_no_quit (Qios_psname,
-                                  AREF (font_entity, FONT_EXTRA_INDEX));
-  if (CONSP (val) && STRINGP (XCDR (val)))
-    {
-      NSString *name = [NSString stringWithUTF8String:SSDATA (XCDR (val))];
-      ctfont = ios_ctfont_create (name, pixel_size);
-    }
-  if (ctfont == NULL)
-    {
-      UIFont *uif = ios_resolve_uifont (font_entity, pixel_size);
-      ctfont = ios_ctfont_create (uif.fontName, pixel_size);
-    }
+  /* Re-resolve the entity to a UIFont and recreate the CTFont through
+     its descriptor, so the weight survives (a system font's name does
+     not encode it).  ios_resolve_uifont is deterministic, so this opens
+     the same face list/match described.  */
+  UIFont *uif = ios_resolve_uifont (font_entity, pixel_size);
+  CTFontRef ctfont = ios_ctfont_from_uifont (uif, pixel_size);
   if (ctfont == NULL)
     return Qnil;
 
@@ -626,15 +613,30 @@ ios_ct_shape (CTFontRef font, CFStringRef string,
           CFRange string_range, comp_range, range;
           CFIndex *permutation;
 
-          /* A run drawn in a substitute font is left for the fontset;
-             give up and let redisplay lay it out unshaped.  */
+          /* A run drawn in a genuinely different font is left for the
+             fontset; give up and let redisplay lay it out unshaped.
+             Compare PostScript names rather than the CTFontRef, since
+             Core Text hands back a distinct CTFont instance per run --
+             CFEqual on the instances reports inequality even for the
+             same face, which would wrongly abandon multi-run scripts
+             (Indic reordering) and leave orphaned matras with dotted
+             circles.  */
           CFDictionaryRef ra = CTRunGetAttributes (ctrun);
           CTFontRef rf = ra ? CFDictionaryGetValue (ra, kCTFontAttributeName)
                             : NULL;
-          if (rf && !CFEqual (rf, font))
+          if (rf && rf != font)
             {
-              ok = false;
-              break;
+              CFStringRef n1 = CTFontCopyPostScriptName (rf);
+              CFStringRef n2 = CTFontCopyPostScriptName (font);
+              bool same = (n1 && n2
+                           && CFStringCompare (n1, n2, 0) == kCFCompareEqualTo);
+              if (n1) CFRelease (n1);
+              if (n2) CFRelease (n2);
+              if (!same)
+                {
+                  ok = false;
+                  break;
+                }
             }
           if (glyph_count == 0)
             continue;
@@ -933,10 +935,6 @@ struct font_driver ios_font_driver =
 void
 syms_of_iosfont (void)
 {
-  /* Entity extra key for the resolved PostScript name.  Interned, so
-     the obarray keeps it live; no staticpro needed.  */
-  Qios_psname = intern_c_string (":ios-psname");
-
   register_font_driver (&ios_font_driver, NULL);
 }
 
