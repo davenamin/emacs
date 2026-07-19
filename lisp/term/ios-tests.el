@@ -241,6 +241,32 @@ Results land in ~/ios-test-results.txt; one line per test."
     ;; U+1F600 GRINNING FACE.
     (cl-assert (char-displayable-p ?\x1f600)))
 
+  (ios-test-deftest char-coverage-bengali
+    "Bengali resolves through the script fontset fallback"
+    (cl-assert (char-displayable-p ?\x0985)))     ; BENGALI LETTER A
+
+  (ios-test-deftest char-coverage-telugu
+    "Telugu resolves through the script fontset fallback"
+    (cl-assert (char-displayable-p ?\x0c05)))     ; TELUGU LETTER A
+
+  (ios-test-deftest font-named-family-opens
+    "a named family (Courier) resolves to a real font"
+    (cl-assert (find-font (font-spec :family "Courier"))))
+
+  (ios-test-deftest font-default-is-fixed-pitch
+    "the default face renders fixed-pitch: i and W measure the same"
+    ;; Exercises the monospaced text-extents fast path end to end.
+    (cl-assert (= (string-pixel-width "iiiiiiii")
+                  (string-pixel-width "WWWWWWWW"))))
+
+  (ios-test-deftest font-variable-pitch-is-proportional
+    "variable-pitch renders proportional: W is wider than i"
+    ;; Proves real per-glyph Core Text advances, not a monospace cell.
+    (cl-assert (> (string-pixel-width
+                   (propertize "WWWWWWWW" 'face 'variable-pitch))
+                  (string-pixel-width
+                   (propertize "iiiiiiii" 'face 'variable-pitch)))))
+
   ;;; --- Drag-n-drop handler ---------------------------------------
 
   (ios-test-deftest drag-n-drop-handler-bound
