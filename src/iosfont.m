@@ -216,30 +216,28 @@ ios_ctfont_create (NSString *name, CGFloat size)
   return CTFontCreateWithName ((__bridge CFStringRef) name, size, NULL);
 }
 
-/* Build a font entity describing UIFont UIF, stashing its PostScript
-   name so open can recreate it.  */
+/* Build a font entity describing UIFont UIF resolved for SPEC, stashing
+   its PostScript name so open can recreate it.  */
 static Lisp_Object
-ios_uifont_entity (UIFont *uif)
+ios_uifont_entity (UIFont *uif, Lisp_Object spec)
 {
   Lisp_Object entity = font_make_entity ();
   UIFontDescriptor *d = uif.fontDescriptor;
   UIFontDescriptorSymbolicTraits tr = d.symbolicTraits;
 
-  /* The system fonts express weight on the weight axis, not through
-     the Bold symbolic trait, so read the axis and OR in the trait for
-     named families that do use it.  Without this the bold monospaced
-     system font is mislabelled normal and find-font rejects it.  */
-  double waxis = 0;
-  NSDictionary *td = [d objectForKey:UIFontDescriptorTraitsAttribute];
-  if (td)
-    {
-      id wv = [td objectForKey:UIFontWeightTrait];
-      if ([wv isKindOfClass:[NSNumber class]])
-        waxis = [(NSNumber *) wv doubleValue];
-    }
-  bool isBold = (tr & UIFontDescriptorTraitBold) || waxis >= 0.25;
-  bool isItalic = (tr & UIFontDescriptorTraitItalic) != 0;
-  bool isMono = (tr & UIFontDescriptorTraitMonoSpace) != 0;
+  /* Label from the request first.  Apple's system-font descriptors are
+     opaque: the bold monospaced system font exposes neither its weight
+     axis nor a Bold or MonoSpace symbolic trait, so the resolved UIFont
+     cannot be trusted to report what it is, and a normal-labelled
+     entity makes find-font reject a bold spec.  OR in the descriptor
+     traits so a named family (Courier, ...) is still described
+     truthfully when the spec left a property unset.  */
+  bool isBold = ios_spec_wants_bold (spec)
+                || (tr & UIFontDescriptorTraitBold);
+  bool isItalic = ios_spec_wants_italic (spec)
+                  || (tr & UIFontDescriptorTraitItalic);
+  bool isMono = ios_spec_wants_mono (spec)
+                || (tr & UIFontDescriptorTraitMonoSpace);
 
   ASET (entity, FONT_TYPE_INDEX, Qios);
   ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
@@ -357,7 +355,7 @@ ios_font_list (struct frame *f, Lisp_Object font_spec)
   UIFont *uif = ios_resolve_uifont (font_spec, 14);
   if (uif == nil)
     return Qnil;
-  return list1 (ios_uifont_entity (uif));
+  return list1 (ios_uifont_entity (uif, font_spec));
 }
 
 static Lisp_Object
@@ -367,7 +365,7 @@ ios_font_match (struct frame *f, Lisp_Object font_spec)
   UIFont *uif = ios_resolve_uifont (font_spec, 14);
   if (uif == nil)
     return Qnil;
-  return ios_uifont_entity (uif);
+  return ios_uifont_entity (uif, font_spec);
 }
 
 static Lisp_Object
