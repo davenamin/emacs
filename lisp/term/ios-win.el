@@ -228,6 +228,8 @@ minibuffer exit is unconditional once shown by this hook."
 ;; subdirectory or the load fails with "No such file" on first use.
 (autoload 'ios-run-self-tests "term/ios-tests"
   "Run the iOS port's functional self-tests." t)
+(autoload 'ios-show-font-demo "term/ios-tests"
+  "Show a buffer of shaped and non-Latin text for CI screenshots." t)
 
 (provide 'ios-win)
 

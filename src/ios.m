@@ -1846,6 +1846,17 @@ ios_auto_input_thread (void *unused)
   const char *cmd = "\x1bxios-run-self-tests\r";
   for (const char *p = cmd; *p; p++)
     ios_enqueue_key ((int) (unsigned char) *p);
+
+  /* Leave the font demo on screen for the workflow's screenshot: it
+     shows shaped Arabic / Devanagari / Tamil, RTL Hebrew, CJK, emoji,
+     and the proportional / bold / italic faces, so the captured image
+     can be eyeballed for shaping and coverage the self-tests can't
+     grade.  The screenshot fires ~35s after launch, well after this.  */
+  sleep (3);
+  ios_launch_log (@"auto-input(thread): M-x ios-show-font-demo RET");
+  const char *demo = "\x1bxios-show-font-demo\r";
+  for (const char *p = demo; *p; p++)
+    ios_enqueue_key ((int) (unsigned char) *p);
   return NULL;
 }
 

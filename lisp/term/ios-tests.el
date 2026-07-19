@@ -307,5 +307,50 @@ Results land in ~/ios-test-results.txt; one line per test."
       (insert (mapconcat #'identity (nreverse ios-test--out) "")))
     (message "ios-run-self-tests: wrote %s" path)))
 
+;;; --- Font demo (visual, for CI screenshots) ----------------------
+;;
+;; The self-test battery grades things a screenshot cannot -- but
+;; shaping and coverage are the reverse: only visible to the eye.
+;; ios-show-font-demo fills a buffer with text that exercises Core
+;; Text shaping (Arabic joining, Devanagari/Tamil conjuncts and vowel
+;; reordering), script coverage (CJK, emoji), and the proportional /
+;; bold / italic faces, so the simulator screenshot the workflow
+;; captures can be eyeballed for correctness.  Strings are built from
+;; explicit code points to keep this source pure ASCII.
+
+(defun ios-show-font-demo ()
+  "Display a buffer of shaped and non-Latin text for CI screenshots."
+  (interactive)
+  (let ((buf (get-buffer-create "*iOS Font Demo*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert "iOS font rendering demo\n\n")
+      ;; SF Mono has no coding ligatures, so these stay discrete; a
+      ;; ligature-carrying font would join them.
+      (insert "Ligatures: -> => != >= <= === =~ |>\n")
+      ;; Arabic: letters must join into cursive forms (shaping).
+      (insert (format "Arabic:     %s\n"
+                      (string #x627 #x644 #x639 #x631 #x628 #x64a #x629)))
+      ;; Hebrew: right-to-left, no joining.
+      (insert (format "Hebrew:     %s\n"
+                      (string #x5e2 #x5d1 #x5e8 #x5d9 #x5ea)))
+      ;; Devanagari "namaste": virama forms the s-t conjunct.
+      (insert (format "Devanagari: %s\n"
+                      (string #x928 #x92e #x938 #x94d #x924 #x947)))
+      ;; Tamil: the i vowel sign reorders before its consonant.
+      (insert (format "Tamil:      %s\n"
+                      (string #xba4 #xbae #xbbf #xbb4 #xbcd)))
+      (insert (format "CJK:        %s\n"
+                      (string #x6f22 #x5b57 #x4e2d #x6587)))
+      (insert (format "Emoji:      %s\n"
+                      (string #x1f600 #x1f389 #x2764)))
+      (insert "\n")
+      (insert (propertize "variable-pitch proportional text\n"
+                          'face 'variable-pitch))
+      (insert (propertize "bold weight\n" 'face 'bold))
+      (insert (propertize "italic slant\n" 'face 'italic))
+      (goto-char (point-min)))
+    (switch-to-buffer buf)))
+
 (provide 'ios-tests)
 ;;; ios-tests.el ends here
