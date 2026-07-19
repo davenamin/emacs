@@ -75,6 +75,8 @@ jobs:
           tail -60 configure.out
           grep -q 'Does Emacs use -lgnutls?[[:space:]]*yes' configure.out || {
             echo '::error::iOS configure did not enable GnuTLS'; exit 1; }
+          grep -q 'Does Emacs use -lxml2?[[:space:]]*yes' configure.out || {
+            echo '::error::iOS configure did not enable libxml2'; exit 1; }
 
       - name: make ios
         id: make

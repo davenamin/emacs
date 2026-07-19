@@ -180,6 +180,18 @@ Results land in ~/ios-test-results.txt; one line per test."
     (dolist (p '(menu-bar-lines tab-bar-lines tool-bar-lines))
       (cl-assert (numberp (frame-parameter nil p)))))
 
+  (ios-test-deftest libxml-available
+    "libxml2 HTML/XML parsing primitives are present"
+    ;; Enabled via the cross-compiled libxml2 in --with-ios-deps;
+    ;; eww / shr / feed readers need libxml-parse-html-region.
+    (cl-assert (fboundp 'libxml-parse-html-region))
+    (cl-assert (fboundp 'libxml-parse-xml-region))
+    ;; Parse a trivial document to confirm the library actually links.
+    (with-temp-buffer
+      (insert "<html><body><p>hi</p></body></html>")
+      (let ((dom (libxml-parse-html-region (point-min) (point-max))))
+        (cl-assert (eq 'html (car dom))))))
+
   (ios-test-deftest font-parameter-is-string
     "the `font' frame parameter is a name string, not a font object"
     ;; set-frame-font, frameset/desktop save, and describe-font all

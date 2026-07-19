@@ -51,7 +51,7 @@ cross-compile the GnuTLS stack first and point configure at it:
   make ios
 
 build-deps.sh fetches, cross-compiles, and installs static GMP,
-Nettle, and GnuTLS for the requested SDK (pass --sdk
+Nettle, GnuTLS, and libxml2 for the requested SDK (pass --sdk
 iphonesimulator for simulator builds -- the deps prefix must match
 the SDK the Emacs build targets).  It needs pkg-config on the host
 (see "Host tools" below).  Tarballs are downloaded from
@@ -61,11 +61,16 @@ your threat model requires it.  The script prints the SHA-256 of
 every tarball it uses.
 
 This mirrors the Android port, which bundles cross-compiled
-GnuTLS, GMP, Nettle, libtasn1, and p11-kit built with its
-ndk-build harness (see java/INSTALL, section GNUTLS).  The iOS
-stack is smaller: libtasn1 and unistring are built into GnuTLS
-(--with-included-*) and PKCS#11 support is off, so p11-kit is not
-needed.
+GnuTLS, GMP, Nettle, libtasn1, p11-kit, and libxml2 built with
+its ndk-build harness (see java/INSTALL, sections GNUTLS and
+LIBXML2).  The iOS GnuTLS stack is smaller: libtasn1 and
+unistring are built into GnuTLS (--with-included-*) and PKCS#11
+support is off, so p11-kit is not needed.  libxml2 is built with
+its optional dependencies (iconv, icu, zlib, lzma) off, since
+Emacs feeds it already-decoded UTF-8 buffer text; this also drops
+the icu4c / C++ toolchain the Android build avoids the same way.
+libxml2 enables eww, shr, and HTML/XML parsing generally
+(libxml-parse-html-region).
 
 Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
 build host's Apple root-CA set into the bundle as
@@ -425,7 +430,7 @@ Works:
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
   * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): twenty-one probes covering sandbox
+    ios-run-self-tests): twenty-two probes covering sandbox
     identity, file round-trip, clipboard, geometry, appearance,
     image load, face attributes, color-name resolution, theme
     face-spec matching, frame parameters, frame-background-mode,

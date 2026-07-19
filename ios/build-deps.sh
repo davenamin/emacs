@@ -1,5 +1,5 @@
 #!/bin/sh
-### build-deps.sh --- cross-compile the TLS stack for the iOS port
+### build-deps.sh --- cross-compile native deps for the iOS port
 
 ## Copyright (C) 2026 Free Software Foundation, Inc.
 
@@ -20,15 +20,15 @@
 
 ### Commentary:
 
-## Build GnuTLS and its dependencies (GMP, Nettle) as static
+## Build GnuTLS (with GMP and Nettle) and libxml2 as static
 ## libraries for iOS, producing an install prefix that
 ## configure --with-ios-deps=PREFIX consumes.  This is the iOS
-## counterpart of the Android port's arrangement, where GnuTLS,
-## libgmp, nettle etc. are cross-compiled and bundled with the app
-## (java/INSTALL, section GNUTLS).  Android needs specially
-## repackaged ndk-build sources; iOS is an ordinary autoconf cross
-## target, so the packages' own configure scripts work with --host
-## and the Apple toolchain.
+## counterpart of the Android port's arrangement, where these same
+## libraries are cross-compiled and bundled with the app
+## (java/INSTALL, sections GNUTLS and LIBXML2).  Android needs
+## specially repackaged ndk-build sources; iOS is an ordinary
+## autoconf cross target, so the packages' own configure scripts
+## work with --host and the Apple toolchain.
 ##
 ## Usage:
 ##   ios/build-deps.sh [--sdk iphoneos|iphonesimulator]
@@ -39,7 +39,8 @@
 ## --prefix $PWD/ios-deps/<sdk>, --jobs = hw.ncpu.
 ##
 ## The script is a fast no-op when PREFIX already contains
-## lib/pkgconfig/gnutls.pc (so CI can cache the prefix).  Source
+## lib/pkgconfig/libxml-2.0.pc (the last artifact built), so CI
+## can cache the prefix.  Source
 ## tarballs are fetched from the projects' official release hosts
 ## into PREFIX/../downloads; drop independently verified tarballs
 ## there beforehand if you want to avoid the network fetch --
@@ -47,14 +48,15 @@
 ## everything used are printed for the build log.
 ##
 ## Licensing: GnuTLS is LGPLv2.1+; Nettle is dual GPLv2+/LGPLv3+;
-## GMP is dual GPLv2+/LGPLv3+.  All are compatible with linking
-## into GPLv3+ Emacs.
+## GMP is dual GPLv2+/LGPLv3+; libxml2 is MIT.  All are compatible
+## with linking into GPLv3+ Emacs.
 
 set -e
 
 GMP_VERSION=6.3.0
 NETTLE_VERSION=3.10.1
 GNUTLS_VERSION=3.8.9
+LIBXML2_VERSION=2.12.9
 
 ## Download locations, tried in order.  ftpmirror.gnu.org is the
 ## GNU project's geo mirror redirector and is the recommended
@@ -67,6 +69,7 @@ NETTLE_URLS="https://ftpmirror.gnu.org/nettle/nettle-$NETTLE_VERSION.tar.gz
              https://ftp.gnu.org/gnu/nettle/nettle-$NETTLE_VERSION.tar.gz"
 GNUTLS_URLS="https://www.gnupg.org/ftp/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz
              https://mirrors.dotsrc.org/gcrypt/gnutls/v${GNUTLS_VERSION%.*}/gnutls-$GNUTLS_VERSION.tar.xz"
+LIBXML2_URLS="https://download.gnome.org/sources/libxml2/${LIBXML2_VERSION%.*}/libxml2-$LIBXML2_VERSION.tar.xz"
 
 sdk=iphoneos
 arch=arm64
@@ -104,8 +107,8 @@ case "$prefix" in
 esac
 test -n "$jobs" || jobs=`sysctl -n hw.ncpu 2>/dev/null || echo 4`
 
-if [ -f "$prefix/lib/pkgconfig/gnutls.pc" ]; then
-  echo "build-deps.sh: $prefix already contains gnutls.pc; nothing to do."
+if [ -f "$prefix/lib/pkgconfig/libxml-2.0.pc" ]; then
+  echo "build-deps.sh: $prefix is already populated; nothing to do."
   exit 0
 fi
 
@@ -288,6 +291,36 @@ echo "build-deps.sh: building gnutls-$GNUTLS_VERSION"
 ## link command.
 pc="$prefix/lib/pkgconfig/gnutls.pc"
 sed -e 's|^Libs:.*|Libs: -L${libdir} -lgnutls -lhogweed -lnettle -lgmp|' \
+    "$pc" > "$pc.tmp"
+mv "$pc.tmp" "$pc"
+
+## ---- libxml2 ----------------------------------------------------
+## HTML/XML parsing for eww, shr, and feed readers.  Emacs feeds
+## libxml2 already-decoded UTF-8 buffer text, so the optional
+## dependencies (iconv, icu, zlib, lzma, python, http) are all
+## disabled: that keeps the static archive self-contained (no
+## external symbols to satisfy at the Emacs link) and drops the
+## icu4c / C++ toolchain pull-in, the same trim the Android port
+## makes (java/INSTALL, section LIBXML2).
+fetch $LIBXML2_URLS
+unpack "libxml2-$LIBXML2_VERSION.tar.xz" "libxml2-$LIBXML2_VERSION"
+echo "build-deps.sh: building libxml2-$LIBXML2_VERSION"
+( cd "$work/libxml2-$LIBXML2_VERSION" \
+  && ./configure --host=$host_triple --prefix="$prefix" \
+       --enable-static --disable-shared \
+       --without-python --without-iconv --without-icu \
+       --without-lzma --without-zlib --without-http \
+       --without-modules --without-catalog --without-debug \
+       ac_cv_type_uid_t=yes \
+       CC="$CC" AR="$AR" RANLIB="$RANLIB" STRIP="$STRIP" \
+       CFLAGS="$target_cflags" \
+  && make -j"$jobs" && make install ) >> "$log" 2>&1 \
+  || build_failed "libxml2-$LIBXML2_VERSION"
+
+## Fold the (now minimal) dependency closure into the public Libs
+## line: Emacs queries pkg-config without --static.
+pc="$prefix/lib/pkgconfig/libxml-2.0.pc"
+sed -e 's|^Libs:.*|Libs: -L${libdir} -lxml2 -lm|' \
     "$pc" > "$pc.tmp"
 mv "$pc.tmp" "$pc"
 

@@ -1559,7 +1559,6 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_webp=no
   with_gif=no
   with_jpeg=no
-  with_xml2=no
   with_sqlite3=no
   with_tiff=no
   with_selinux=no
@@ -1594,12 +1593,20 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   # builds without deps behave exactly as before.  Restricting
   # PKG_CONFIG_LIBDIR to the deps prefix keeps Homebrew's host
   # libraries from leaking into the cross link.
+  #
+  # libxml2 (HTML/XML parsing: libxml-parse-html-region, used by
+  # eww / shr and feed readers) is cross-compiled into the same
+  # deps prefix by ios/build-deps.sh; enable it under the same
+  # gate.  The Android port bundles libxml2 the same way
+  # (java/INSTALL, section LIBXML2).
   if test "$XCONFIGURE" = "ios" && test -n "$IOS_DEPS"; then
     with_gnutls=yes
+    with_xml2=yes
     PKG_CONFIG_LIBDIR="$IOS_DEPS/lib/pkgconfig"
     export PKG_CONFIG_LIBDIR
   else
     with_gnutls=no
+    with_xml2=no
   fi
 
   # Force the dumping strategy to "none" for the iOS cross pass
