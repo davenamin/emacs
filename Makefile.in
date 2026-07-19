@@ -383,6 +383,66 @@ bootstrap-all:
 
 actual-all: ${SUBDIR} info $(gsettings_SCHEMAS:.xml=.valid) src-depending-on-lisp
 
+## Convenience target for assembling the iOS application bundle.
+## Requires --with-ios was passed to configure.  Drives the cross-
+## build harness in cross/ (which consumes the *.ios Makefile and
+## config.h produced by the recursive XCONFIGURE=ios pass), then
+## hands off to ios/Makefile to assemble and codesign Emacs.app.
+## Mirrors how nextstep/Makefile is invoked indirectly via `make
+## install' on macOS.
+.PHONY: ios ios-bundle ios-ipa
+ios ios-bundle:
+	@stale=""; \
+	for pair in \
+	  "$(srcdir)/src/Makefile.in:src/Makefile.ios" \
+	  "$(srcdir)/src/config.in:src/config.h.ios" \
+	  "$(srcdir)/lib/Makefile.in:lib/Makefile.ios" \
+	  "$(srcdir)/lib/gnulib.mk.in:lib/gnulib.mk.ios"; do \
+	  in=$${pair%%:*}; out=$${pair##*:}; \
+	  if test -f "$$out" && test "$$in" -nt "$$out"; then \
+	    stale="$$stale $$out"; \
+	  fi; \
+	done; \
+	if test -n "$$stale"; then \
+	  echo "*** Stale iOS cross-build artifacts:$$stale"; \
+	  echo "*** These are produced only by the recursive"; \
+	  echo "*** XCONFIGURE=ios pass, so pulling changes to the"; \
+	  echo "*** corresponding *.in files leaves them outdated and"; \
+	  echo "*** the cross build fails in confusing ways (e.g."; \
+	  echo "*** 'No rule to make target ...m, needed by gl-stamp')."; \
+	  echo "*** Fix: re-run configure --with-ios (same arguments),"; \
+	  echo "*** then make ios again."; \
+	  exit 1; \
+	fi
+## The app bundle ships the source lisp/ tree, and loadup falls
+## back to the outdated ldefs-boot.el when the generated autoload
+## files (lisp/loaddefs.el, cl-loaddefs.el, ...) are absent,
+## leaving every newer autoload undefined at runtime.  Generating
+## them requires a runnable host Emacs, so build the host
+## bootstrap binary first -- the same arrangement the Android port
+## uses, where the host build byte-compiles the lisp shipped in
+## the APK.  bootstrap-emacs builds host lib/ and lib-src/ tools
+## through its own prerequisites.
+	$(MAKE) -C src bootstrap-emacs$(EXEEXT) bootstrap-emacs.pdmp
+	$(MAKE) -C lisp autoloads EMACS="../src/bootstrap-emacs$(EXEEXT)"
+## The Info manuals are also generated artifacts the bundle ships
+## (into <srcdir>/info, like the autoload files).
+	$(MAKE) info
+	$(MAKE) -C cross all
+## DOC must be generated from the iOS object list -- the cross
+## build skips it (its emacs target is just a temacs copy), and a
+## host DOC would lack the iOS-specific built-ins.  The rule runs
+## the host make-docfile over the cross objects.
+	$(MAKE) -C cross/src ../etc/DOC
+	$(MAKE) -C ios all
+
+## Package the (signed) bundle as an .ipa for TestFlight / App
+## Store upload.  Signing variables are forwarded so a one-shot
+## `make ios-ipa CODESIGN_IDENTITY=... PROVISIONING_PROFILE=...
+## DEVICE_ENTITLEMENTS=...` builds, signs, and packages.
+ios-ipa: ios
+	$(MAKE) -C ios ipa
+
 # ADVICE-ON-FAILURE-BEGIN:all
 # You could try to:
 # - run "make bootstrap", which might fix the problem
@@ -1028,7 +1088,7 @@ mostlyclean: $(mostlyclean_dirs:=_mostlyclean)
 ###      with them.
 ###
 ###      Delete '.dvi' files here if they are not part of the distribution.
-clean_dirs = $(mostlyclean_dirs) java cross nextstep admin/charsets \
+clean_dirs = $(mostlyclean_dirs) java cross nextstep ios admin/charsets \
   admin/unidata
 
 $(foreach dir,$(clean_dirs),$(eval $(call submake_template,$(dir),clean)))

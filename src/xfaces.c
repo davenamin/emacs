@@ -258,6 +258,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #ifdef HAVE_ANDROID
 #define GCGraphicsExposures 0
 #endif /* HAVE_ANDROID */
+
+#ifdef HAVE_IOS
+#define GCGraphicsExposures 0
+#endif /* HAVE_IOS */
 #endif /* HAVE_WINDOW_SYSTEM */
 
 #include "buffer.h"
@@ -590,6 +594,29 @@ x_free_gc (struct frame *f, Emacs_GC *gc)
   xfree (gc);
 }
 #endif  /* HAVE_NS */
+
+#ifdef HAVE_IOS
+/* iOS emulation of GCs.  Same shape as the NS/Haiku versions: an
+   Emacs_GC is just a holder for foreground/background pixel values
+   that the iOS drawing code consults when filling/stroking via
+   Core Graphics.  No backing UIKit object.  */
+
+static Emacs_GC *
+x_create_gc (struct frame *f,
+	     unsigned long mask,
+	     Emacs_GC *egc)
+{
+  Emacs_GC *gc = xmalloc (sizeof *gc);
+  *gc = *egc;
+  return gc;
+}
+
+static void
+x_free_gc (struct frame *f, Emacs_GC *gc)
+{
+  xfree (gc);
+}
+#endif  /* HAVE_IOS */
 
 #ifdef HAVE_PGTK
 /* PGTK emulation of GCs */

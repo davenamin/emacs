@@ -1,0 +1,83 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<!-- Privacy manifest, required by App Store Connect ingestion since
+     May 1, 2024 for any app using Apple's "required reason" APIs
+     (developer.apple.com/documentation/bundleresources/
+     describing-use-of-required-reason-api).  Lives at the bundle
+     root on iOS, next to Info.plist.
+
+     Emacs neither tracks users nor collects data, so the first
+     three keys are false/empty.  The declared API categories map
+     to concrete Emacs behavior:
+
+     - FileTimestamp: stat/fstat/lstat throughout the core.
+       C617.1 = timestamps of files inside the app container
+       (HOME is the sandboxed Documents directory); 3B52.1 =
+       files the user granted access to via the document picker
+       (ios-pick-file / share-sheet open-in-place); DDA9.1 =
+       timestamps displayed to the user (dired, ls-lisp).
+       Timestamps are not transmitted off device by Emacs itself.
+
+     - DiskSpace: statvfs via the file-system-info primitive
+       (lib/fsusage.c).  85F4.1 = free space displayed to the
+       user (dired's "available" header via get-free-disk-space).
+
+     - UserDefaults: NSUserDefaults in src/ios.m persists
+       security-scoped bookmarks so Files-app documents stay
+       readable across launches.  CA92.1 = data accessible only
+       to this app.
+
+     - SystemBootTime: ios.m timestamps input events with
+       clock_gettime (CLOCK_MONOTONIC), which on Darwin counts
+       from boot and sits in the API family Apple audits under
+       this category.  35F9.1 = measuring elapsed time between
+       events (click-count detection); the values never leave
+       the device.  (filelock.c's boot-time lookup goes through
+       sysctl KERN_BOOTTIME, which is not on Apple's list.)  -->
+<dict>
+	<key>NSPrivacyTracking</key>
+	<false/>
+	<key>NSPrivacyTrackingDomains</key>
+	<array/>
+	<key>NSPrivacyCollectedDataTypes</key>
+	<array/>
+	<key>NSPrivacyAccessedAPITypes</key>
+	<array>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryFileTimestamp</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>C617.1</string>
+				<string>3B52.1</string>
+				<string>DDA9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryDiskSpace</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>85F4.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategorySystemBootTime</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>35F9.1</string>
+			</array>
+		</dict>
+		<dict>
+			<key>NSPrivacyAccessedAPIType</key>
+			<string>NSPrivacyAccessedAPICategoryUserDefaults</string>
+			<key>NSPrivacyAccessedAPITypeReasons</key>
+			<array>
+				<string>CA92.1</string>
+			</array>
+		</dict>
+	</array>
+</dict>
+</plist>

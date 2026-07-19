@@ -253,6 +253,8 @@ See also `frame-live-p'.  */)
       return Qhaiku;
     case output_android:
       return Qandroid;
+    case output_ios:
+      return Qios;
     default:
       emacs_abort ();
     }
@@ -5417,7 +5419,7 @@ gui_display_get_resource (Display_Info *dpyinfo, Lisp_Object attribute,
   *nz++ = '.';
   lispstpcpy (nz, attribute);
 
-#ifndef HAVE_ANDROID
+#if !defined HAVE_ANDROID && !defined HAVE_IOS
   const char *value
     = dpyinfo->terminal->get_string_resource_hook (&dpyinfo->rdb,
 						   name_key,
@@ -6346,6 +6348,7 @@ syms_of_frame (void)
   DEFSYM (Qpgtk, "pgtk");
   DEFSYM (Qhaiku, "haiku");
   DEFSYM (Qandroid, "android");
+  DEFSYM (Qios, "ios");
   DEFSYM (Qvisible, "visible");
   DEFSYM (Qbuffer_predicate, "buffer-predicate");
   DEFSYM (Qbuffer_list, "buffer-list");

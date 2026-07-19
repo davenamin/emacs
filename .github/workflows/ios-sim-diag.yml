@@ -1,0 +1,329 @@
+name: iOS simulator-install diagnostic
+
+# Triggered on any push to claude/ios-port-30.2 and via manual dispatch.
+# The earlier version had a paths: filter restricted to the workflow
+# file itself, which never fired -- GitHub Actions did not trigger
+# this workflow even on the commit that introduced it.  The simpler,
+# unfiltered push trigger matches the working ios-build.yml workflow
+# (which DID run on the same push).  This workflow is expensive (~20
+# min full cross-build), so push it sparingly.
+on:
+  push:
+    branches:
+      - claude/ios-port-30.2
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diag:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/ios-port-30.2
+
+      # Cached cross-compiled TLS stack (gmp, nettle, gnutls) for
+      # the simulator SDK; the build step inside the diagnostics
+      # script is a fast no-op on a cache hit.
+      - name: Cache iOS TLS deps
+        uses: actions/cache@v4
+        with:
+          path: ios-deps
+          key: ios-deps-iphonesimulator-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
+      - name: Run diagnostics
+        if: always()
+        run: |
+          set +e
+          OUT=ci-diag/sim-install.txt
+          mkdir -p ci-diag
+          : > "$OUT"
+          log() { echo "$@" | tee -a "$OUT"; }
+          run() {
+            echo "" >> "$OUT"
+            echo "\$ $*" >> "$OUT"
+            "$@" >> "$OUT" 2>&1
+            echo "[exit=$?]" >> "$OUT"
+          }
+
+          log "===== ENVIRONMENT ====="
+          run sw_vers
+          run xcodebuild -version
+          run xcrun --sdk iphonesimulator --show-sdk-path
+          run xcrun --sdk iphonesimulator --show-sdk-version
+          run xcrun simctl list runtimes
+
+          log ""
+          log "===== BUILD DEPS ====="
+          run brew update
+          run brew install automake autoconf libtool pkg-config texinfo
+
+          log ""
+          log "===== REGENERATE configure ====="
+          run ./autogen.sh
+
+          log ""
+          log "===== TLS DEPS (gmp, nettle, gnutls) ====="
+          run ios/build-deps.sh --sdk iphonesimulator \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphonesimulator"
+
+          log ""
+          log "===== CONFIGURE (iphonesimulator) ====="
+          mkdir -p build-ios-sim
+          ( cd build-ios-sim && \
+            IOS_SDK=iphonesimulator IOS_ARCH=arm64 IOS_DEPLOYMENT_TARGET=15.0 \
+              ../configure --with-ios \
+                --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphonesimulator" \
+                > configure.out 2>&1 )
+          echo "[configure exit=$?]" >> "$OUT"
+          tail -30 build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lgnutls?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lxml2?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+
+          log ""
+          log "===== MAKE IOS ====="
+          ( cd build-ios-sim && make ios > make-ios.out 2>&1 )
+          echo "[make exit=$?]" >> "$OUT"
+          echo "--- last 25 lines of make-ios.out ---" >> "$OUT"
+          tail -25 build-ios-sim/make-ios.out >> "$OUT" 2>&1
+          echo "--- make errors (if any) ---" >> "$OUT"
+          grep -nE 'error:|fatal:' build-ios-sim/make-ios.out >> "$OUT" 2>&1
+
+          APP=build-ios-sim/ios/Emacs.app
+
+          log ""
+          log "===== (B) OUR BUNDLE: STRUCTURE ====="
+          run find "$APP"
+          run ls -la "$APP"
+
+          log ""
+          log "===== (B) OUR BUNDLE: Info.plist (root) ====="
+          run /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleSupportedPlatforms" "$APP/Info.plist"
+          run plutil -lint "$APP/Info.plist"
+          run file "$APP/Info.plist"
+          run head -c 64 "$APP/Info.plist"
+
+          log ""
+          log "===== (B) OUR BUNDLE: binary ====="
+          run file "$APP/emacs"
+          run sh -c "otool -l '$APP/emacs' | grep -A4 LC_BUILD_VERSION"
+
+          log ""
+          log "===== (B) OUR BUNDLE: codesign BEFORE ====="
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+          log "--- ad-hoc re-sign the bundle ---"
+          run codesign --force --sign - "$APP"
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+
+          log ""
+          log "===== (B) OUR BUNDLE: embedded __info_plist contents ====="
+          # Extract the section's hex bytes and decode back to plist.
+          run sh -c "otool -X -s __TEXT __info_plist '$APP/emacs' | awk '{for(i=2;i<=NF;i++) printf \"%s\", \$i; print \"\"}' | tr -d ' ' | xxd -r -p > /tmp/embedded.plist 2>/dev/null && plutil -p /tmp/embedded.plist 2>&1 | head -25"
+
+          log ""
+          log "===== BOOT SIMULATOR ====="
+          # Pick the first iPhone device type that exists on this runner.
+          DEVTYPE=$(xcrun simctl list devicetypes 2>/dev/null | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]+' | head -1)
+          echo "devicetype=$DEVTYPE" >> "$OUT"
+          DEV=$(xcrun simctl create ci-diag-phone "$DEVTYPE" 2>>"$OUT")
+          log "device=$DEV"
+          run xcrun simctl boot "$DEV"
+          run xcrun simctl bootstatus "$DEV" -b
+
+          log ""
+          log "===== (A) MINIMAL REFERENCE APP ====="
+          REF=ref-app/Hello.app
+          mkdir -p ref-app
+          rm -rf "$REF"; mkdir -p "$REF"
+          # Write main.m via printf (avoids heredoc indentation pitfalls).
+          printf '%s\n' \
+            '#import <UIKit/UIKit.h>' \
+            'int main(int argc, char *argv[]) {' \
+            '  @autoreleasepool { return UIApplicationMain(argc, argv, nil, nil); }' \
+            '}' > ref-app/main.m
+          SIMSDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          run xcrun --sdk iphonesimulator clang -arch arm64 \
+              -mios-simulator-version-min=15.0 -isysroot "$SIMSDK" \
+              -framework UIKit -framework Foundation \
+              -o "$REF/Hello" ref-app/main.m
+          # Write Info.plist via printf so there is NO leading whitespace
+          # on <?xml -- a parser requirement an indented heredoc would violate.
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>CFBundleExecutable</key><string>Hello</string>' \
+            '  <key>CFBundleIdentifier</key><string>org.gnu.hello</string>' \
+            '  <key>CFBundleName</key><string>Hello</string>' \
+            '  <key>CFBundlePackageType</key><string>APPL</string>' \
+            '  <key>CFBundleShortVersionString</key><string>1.0</string>' \
+            '  <key>CFBundleVersion</key><string>1</string>' \
+            '  <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>' \
+            '  <key>DTPlatformName</key><string>iphonesimulator</string>' \
+            '  <key>MinimumOSVersion</key><string>15.0</string>' \
+            '  <key>LSRequiresIPhoneOS</key><true/>' \
+            '  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>' \
+            '</dict>' \
+            '</plist>' > "$REF/Info.plist"
+          run plutil -lint "$REF/Info.plist"
+          run codesign --force --sign - "$REF"
+          run sh -c "codesign -dvvv '$REF' 2>&1 | grep -iE 'Identifier|flags'"
+          run find "$REF"
+          log "--- install reference app (expect SUCCESS -- this is the control) ---"
+          run xcrun simctl install "$DEV" "$REF"
+
+          log ""
+          log "===== (B) INSTALL OUR BUNDLE (the real test) ====="
+          run xcrun simctl install "$DEV" "$APP"
+
+          log ""
+          log "===== STRUCTURED DIFF: reference vs ours (Info.plist keys) ====="
+          run sh -c "plutil -convert json -o - '$REF/Info.plist' 2>&1"
+          run sh -c "plutil -convert json -o - '$APP/Info.plist' 2>&1"
+
+          log ""
+          log "===== LAUNCH OUR APP AND CAPTURE LOGS ====="
+          # Launch in the background -- simctl launch returns once
+          # springboard has spawned the process.  Then sleep so Emacs
+          # init has a chance to run, terminate the app, and read its
+          # in-sandbox log files.  If the app crashed before opening
+          # Documents/, the cat commands will report "(missing)" and
+          # the unified-log fallback may still have NSLog output.
+          # SIMCTL_CHILD_* variables are forwarded into the app's
+          # environment; EMACS_IOS_AUTO_INPUT enables the demo
+          # keystroke driver that is compiled in but inert for
+          # normal user launches.
+          # The bring-up screenshot is far more useful when the
+          # launch log and title strip are visible, so flip
+          # EMACS_IOS_DEBUG_LOG alongside the auto-input driver.
+          run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
+                  SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
+            xcrun simctl launch booted org.gnu.emacs
+          log "--- sleeping 30s for Emacs init + self-tests to do something ---"
+          sleep 35
+          log "--- capturing simulator screenshot ---"
+          mkdir -p ci-diag
+          run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
+          run xcrun simctl terminate booted org.gnu.emacs
+
+          # Retrieve the app's data container path AFTER launch, so
+          # iOS has created it.
+          DATA_CONTAINER=$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>>"$OUT")
+          log "data_container=$DATA_CONTAINER"
+          if [ -n "$DATA_CONTAINER" ] && [ -d "$DATA_CONTAINER" ]; then
+            log "--- Documents/ listing ---"
+            ls -la "$DATA_CONTAINER/Documents/" >> "$OUT" 2>&1
+            for f in ci-roundtrip.txt ios-test-results.txt emacs-launch.log emacs-stdout.log; do
+              log ""
+              log "--- $f ---"
+              if [ -f "$DATA_CONTAINER/Documents/$f" ]; then
+                cat "$DATA_CONTAINER/Documents/$f" >> "$OUT" 2>&1
+              else
+                echo "(missing)" >> "$OUT"
+              fi
+            done
+          else
+            log "(data container not present -- app may have failed before main)"
+          fi
+
+          # Self-test gate: any FAIL line in ios-test-results.txt
+          # fails the workflow.  Absent file is acceptable for older
+          # commits but flagged as a soft warning here so the
+          # diagnostic still shows.
+          RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
+          if [ -f "$RESULTS" ]; then
+            log ""
+            log "--- self-test summary ---"
+            grep -c '^PASS ' "$RESULTS" >> "$OUT" || true
+            if grep -q '^FAIL ' "$RESULTS"; then
+              log "self-tests failed:"
+              grep '^FAIL ' "$RESULTS" >> "$OUT" || true
+              FAILED_SELFTESTS=1
+            fi
+          else
+            log "(self-test results file absent)"
+          fi
+
+          # Fall back to the unified log for NSLog output -- captures
+          # the case where the file logger never ran.
+          log ""
+          log "--- unified log (process=emacs, last 2m) ---"
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR senderImagePath CONTAINS "emacs"' --last 2m --style compact 2>>"$OUT" \
+            | head -500 >> "$OUT" 2>&1
+
+          # Crash signatures in the unified log (signals, aborts, asserts).
+          log ""
+          log "--- unified log crash signatures ---"
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR eventMessage CONTAINS[c] "emacs"' --last 2m --style compact 2>/dev/null \
+            | grep -iE 'crash|signal|abort|assert|fatal|terminating|exception|killed|SIG' >> "$OUT" 2>&1
+
+          # CrashReporter directories on the host -- iOS sim writes
+          # .ips crash reports here when an app crashes.  Catch both
+          # the per-device CoreSimulator path and the user-level
+          # DiagnosticReports path.  Print the most recent emacs* one.
+          log ""
+          log "--- crash reports ---"
+          for d in \
+            "$HOME/Library/Logs/CoreSimulator/$DEV/CrashReporter" \
+            "$HOME/Library/Logs/CoreSimulator/$DEV" \
+            "$HOME/Library/Logs/CoreSimulator/CrashReporter/Standalone" \
+            "$HOME/Library/Logs/DiagnosticReports"; do
+            log "  scanning $d (recursive)"
+            if [ -d "$d" ]; then
+              find "$d" -maxdepth 3 -name 'emacs*' -type f 2>/dev/null \
+                | head -5 >> "$OUT"
+              last=$(find "$d" -maxdepth 3 -name 'emacs*.ips' -type f \
+                       2>/dev/null | head -1)
+              if [ -n "$last" ]; then
+                log "  >>> most recent emacs report: $last"
+                head -240 "$last" >> "$OUT" 2>&1
+              fi
+            fi
+          done
+
+          echo "" >> "$OUT"
+          echo "===== END =====" >> "$OUT"
+          # Diagnostics are committed even on failure (next step is
+          # if: always()), but FAILED_SELFTESTS still surfaces the
+          # red X so the cycle is visibly broken.
+          if [ -n "$FAILED_SELFTESTS" ]; then
+            echo "::error::iOS self-tests reported FAIL lines; see ci-diag/sim-install.txt"
+            exit 1
+          fi
+          true
+
+      - name: Commit diagnostics back to branch
+        if: always()
+        run: |
+          set +e
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # The Emacs pre-commit hook rejects trailing whitespace in
+          # the staged file (the diagnostic output captures lines from
+          # configure/make stdout that legitimately have spaces at EOL).
+          # Strip them defensively before adding.  The screenshot is
+          # binary so no whitespace concerns.
+          if [ -f ci-diag/sim-install.txt ]; then
+            sed -i '' -E 's/[[:space:]]+$//' ci-diag/sim-install.txt 2>/dev/null \
+              || sed -i -E 's/[[:space:]]+$//' ci-diag/sim-install.txt
+          fi
+          git add ci-diag/sim-install.txt
+          if [ -f ci-diag/sim-screenshot.png ]; then
+            git add ci-diag/sim-screenshot.png
+          fi
+          git commit -m "ci-diag: simulator-install diagnostic results [skip ci]" || {
+            echo "nothing to commit"; exit 0; }
+          for i in 1 2 3 4; do
+            git pull --rebase origin claude/ios-port-30.2 && git push origin HEAD:claude/ios-port-30.2 && break
+            sleep $((i*2))
+          done
+          true

@@ -1,0 +1,473 @@
+iOS port of GNU Emacs
+=====================
+
+This directory contains the iOS-specific scaffolding for building
+Emacs as an iOS application bundle distributable through the App
+Store.  The C-side terminal driver, font and pasteboard bridges
+live under src/ios*.{m,h,c} and src/iosvfs.c, with Lisp-side
+initialization in lisp/term/ios-win.el.  This directory holds:
+
+  Emacs.base/                Bundle template (Info.plist template and
+                             launch screen), assembled into the
+                             output .app at build time.
+  Emacs/                     Objective-C app shell (main.m,
+                             AppDelegate, SceneDelegate).  These are
+                             linked into the same Mach-O as the Emacs
+                             core, and call into ios_main() from
+                             src/ios.m once UIKit has finished
+                             launching.
+  Makefile.in                Bundle-assembly orchestration; mirrors
+                             nextstep/Makefile.in's tar + copy +
+                             codesign approach.
+
+Building
+--------
+
+On a macOS host with Xcode:
+
+  ./autogen.sh
+  ./configure --with-ios
+  make ios
+
+produces the simulator Emacs.app; install and launch with
+
+  xcrun simctl install booted build-ios-sim/ios/Emacs.app
+  xcrun simctl launch booted org.gnu.emacs
+
+See .github/workflows/ios-cross.yml and ios-sim-diag.yml for the
+exact CI invocations, including the install / launch / screenshot
+smoke test that runs on every push.
+
+TLS (GnuTLS)
+------------
+
+Without further preparation the build carries no TLS, so anything
+that opens an https connection (package refresh against GNU ELPA,
+url.el, network streams with :type tls) fails.  To include TLS,
+cross-compile the GnuTLS stack first and point configure at it:
+
+  ios/build-deps.sh --sdk iphoneos --prefix "$PWD/ios-deps/iphoneos"
+  ./configure --with-ios --with-ios-deps="$PWD/ios-deps/iphoneos"
+  make ios
+
+build-deps.sh fetches, cross-compiles, and installs static GMP,
+Nettle, GnuTLS, and libxml2 for the requested SDK (pass --sdk
+iphonesimulator for simulator builds -- the deps prefix must match
+the SDK the Emacs build targets).  It needs pkg-config on the host
+(see "Host tools" below).  Tarballs are downloaded from
+ftp.gnu.org / www.gnupg.org over TLS into <prefix>/../downloads;
+pre-seed that directory with independently verified tarballs if
+your threat model requires it.  The script prints the SHA-256 of
+every tarball it uses.
+
+This mirrors the Android port, which bundles cross-compiled
+GnuTLS, GMP, Nettle, libtasn1, p11-kit, and libxml2 built with
+its ndk-build harness (see java/INSTALL, sections GNUTLS and
+LIBXML2).  The iOS GnuTLS stack is smaller: libtasn1 and
+unistring are built into GnuTLS (--with-included-*) and PKCS#11
+support is off, so p11-kit is not needed.  libxml2 is built with
+its optional dependencies (iconv, icu, zlib, lzma) off, since
+Emacs feeds it already-decoded UTF-8 buffer text; this also drops
+the icu4c / C++ toolchain the Android build avoids the same way.
+libxml2 enables eww, shr, and HTML/XML parsing generally
+(libxml-parse-html-region).
+
+Trust anchors: iOS has no /etc/ssl, so ios/Makefile exports the
+build host's Apple root-CA set into the bundle as
+etc/ca-bundle.pem (security find-certificate -a -p against
+SystemRootCertificates.keychain), and lisp/term/ios-win.el points
+gnutls-trustfiles at it.
+
+Licensing: GnuTLS is LGPLv2.1+; Nettle and GMP are dual
+GPLv2+/LGPLv3+.  All are compatible with GPLv3+ Emacs.  For App
+Store submissions, note that shipping TLS does not change the
+export-compliance picture materially: standard HTTPS falls under
+the usual exemption categories, but the ITSAppUsesNonExemptEncryption
+declaration (see below) remains the submitter's call.
+
+Host tools (Homebrew or Nix)
+----------------------------
+
+Xcode is required either way: the iOS SDKs and the codesigning
+machinery come only from Apple, so no package manager replaces it
+(and the Command Line Tools alone are not enough -- check that
+xcode-select -p points into Xcode.app).  The build needs four
+host tools beyond Xcode: autoconf, automake, texinfo (for
+makeinfo), and pkg-config.
+
+Homebrew:
+
+  brew install autoconf automake texinfo pkg-config
+
+Nix: prefer `nix shell', which only puts the tools on PATH:
+
+  nix shell nixpkgs#autoconf nixpkgs#automake \
+            nixpkgs#texinfo nixpkgs#pkg-config
+
+Avoid building from a `nix-shell -p' / stdenv dev shell: those
+export CC, CXX, LDFLAGS, and NIX_CFLAGS_COMPILE pointing at Nix's
+own clang wrapper and SDK, and the outer (host) configure pass
+would pick them up in preference to the Xcode toolchain.  If you
+must work inside such a shell, unset CC CXX LD CPPFLAGS CFLAGS
+LDFLAGS NIX_CFLAGS_COMPILE NIX_LDFLAGS before running configure.
+The cross side is pinned regardless: ios/build-deps.sh resolves
+clang, ar, ranlib, and strip through xcrun, and the recursive
+XCONFIGURE=ios pass gets CC/CXX/AR/RANLIB the same way from
+cross/xcode-build/xcode-toolchain.sh, so Nix toolchains on PATH
+cannot leak into the iOS binaries; the same applies to
+pkg-config, which only ever
+reads the .pc files inside the --with-ios-deps prefix
+(PKG_CONFIG_LIBDIR is forced there, so a Nix store pkg-config
+cannot pull host libraries into the cross link).
+
+Installing on a physical device
+-------------------------------
+
+`xcrun simctl install booted ...` is simulator-only.  For a real
+device you cross-configure against the iphoneos SDK, sign with a
+provisioning-profile-matched entitlements plist, and install with
+`xcrun devicectl` (Xcode 15+).  The Makefile has three optional
+variables that together drive this:
+
+  CODESIGN_IDENTITY    name of the signing identity in the keychain
+  PROVISIONING_PROFILE path to a .mobileprovision file
+  DEVICE_ENTITLEMENTS  path to the entitlements plist for codesign
+
+End-to-end recipe:
+
+  # 1. Cross-configure for the iphoneos SDK (not iphonesimulator).
+  #    The bundle id MUST be one registered to your Apple Developer
+  #    team -- you cannot sign org.gnu.emacs with your own
+  #    certificates.
+  IOS_SDK=iphoneos ./configure --with-ios \
+    --with-ios-deployment-target=15.0 \
+    --with-ios-bundle-id=com.yourteam.emacs
+
+  # 2. Extract the profile's Entitlements dict as your starting
+  #    entitlements file.  The Makefile target shells out to
+  #    `security cms -D -i` (QA1798) and PlistBuddy.
+  make -C ios device-entitlements-template \
+    PROVISIONING_PROFILE=~/Library/MobileDevice/Provisioning\ Profiles/UUID.mobileprovision \
+    > device.entitlements
+
+  # 3. Build, embed the profile, sign in one shot.
+  make ios \
+    CODESIGN_IDENTITY="Apple Development: NAME (TEAMID)" \
+    PROVISIONING_PROFILE=~/Library/MobileDevice/Provisioning\ Profiles/UUID.mobileprovision \
+    DEVICE_ENTITLEMENTS=$PWD/device.entitlements
+
+  # 4. Install and launch on the device.
+  xcrun devicectl device install app --device <UDID> \
+    build-ios/ios/Emacs.app
+  xcrun devicectl device process launch --console --device <UDID> \
+    org.gnu.emacs
+
+`IOS_SDK=iphoneos` makes configure.ac substitute iPhoneOS into
+Info.plist's `CFBundleSupportedPlatforms` / `DTPlatformName`;
+the device rejects bundles whose Info.plist still says
+iPhoneSimulator.
+
+Three on-device prerequisites that are easy to miss:
+
+  * Settings -> Privacy & Security -> Developer Mode must be
+    toggled on (iOS 16+; restart and passcode confirm).  Without
+    it, devicectl install fails with "Developer Mode disabled".
+  * Settings -> General -> VPN & Device Management -> Trust your
+    team.  Required once per signing certificate the device has
+    never seen, for both free Personal Team and paid Developer
+    Program certs.
+  * The device's UDID must be in the profile's
+    `ProvisionedDevices` and the signing cert must be in its
+    `DeveloperCertificates`.
+
+What the build system actually does, with citations:
+
+  * Profile is copied to `$(ios_appdir)/embedded.mobileprovision`
+    BEFORE codesign runs.  Apple's published signing engine
+    (apple-oss-distributions/Security, libsecurity_codesigning,
+    bundlediskrep.cpp `defaultResourceRules`) seals every bundle
+    file under a V2 catch-all rule; modifying the profile after
+    signing invalidates the seal.
+  * codesign is invoked with `--entitlements $(DEVICE_ENTITLEMENTS)`
+    when set.  The same engine source (signer.cpp `prepare` /
+    `populate` / `cookEntitlements`) writes that plist verbatim
+    into slot 5 plus a DER copy in slot 7.  No merging with the
+    profile happens; the profile is never opened by codesign.
+  * The plist must be a subset of the profile's `Entitlements`
+    dict (Apple TN3125's allowlist rule).  The
+    device-entitlements-template target gives you the profile's
+    dict as a starting point; for a minimal app it is also the
+    final file.
+
+Support framing.  This is the same approach every off-Xcode iOS
+toolchain (Unity, Unreal, Flutter, Godot, Qt) uses, for the same
+reason -- the codesign + security + devicectl primitives are
+individually Apple-documented, but Apple does not publish an
+iOS-specific end-to-end recipe.  Apple's documented stance
+(Quinn DTS, forum thread 797751: "Investigating Third-Party IDE
+Code-Signing Problems") is that DTS does not support third-party
+toolchains for iOS signing; the supported path is to wrap the
+build in an Xcode project and use `xcodebuild archive` +
+`xcodebuild -exportArchive -exportOptionsPlist`.
+
+Diagnostic recipe if devicectl install fails.  The error wraps
+`com.apple.dt.CoreDeviceError Code=3002` around a
+`MobileInstallationService` code in its underlyingError:
+
+  0xe8008015  UDID not in profile, profile expired, or
+              application-identifier mismatch
+  0xe8008016  entitlement claimed by binary is not in profile
+              allowlist
+  0xe800801a  profile signature invalid / untrusted
+  0xe800801c  no code signature found
+
+Inspect the signed entitlements with `codesign -d --entitlements
+:- App.app` and the profile with `security cms -D -i
+App.app/embedded.mobileprovision`; compare `application-identifier`,
+`TeamIdentifier`, `ProvisionedDevices`, and every entitlement key.
+
+If codesign itself fails with errSecInternalComponent, the
+Security framework could not use the signing key: the login
+keychain is locked (typical after a reboot, and always over SSH)
+or the key's access control does not authorize codesign
+non-interactively.  Unlock with
+
+  security unlock-keychain login.keychain-db
+
+and, if it recurs, authorize the key permanently:
+
+  security set-key-partition-list -S apple-tool:,apple: \
+    -k <login-password> login.keychain-db
+
+devicectl needs Xcode 15+ and iOS 17+.  Older targets need
+ios-deploy (abandoned for iOS 17+) or pymobiledevice3.  The
+`--console` flag for streaming the app's stdout/stderr requires
+Xcode 16; with Xcode 15 use `log stream --device <UDID>` or
+Console.app instead.
+
+Packaging an .ipa for TestFlight / App Store upload
+---------------------------------------------------
+
+  make ios-ipa \
+    CODESIGN_IDENTITY="Apple Distribution: NAME (TEAMID)" \
+    PROVISIONING_PROFILE=path/to/AppStoreProfile.mobileprovision \
+    DEVICE_ENTITLEMENTS=$PWD/dist.entitlements
+
+writes build-ios/ios/Emacs.ipa -- a ditto-produced zip whose top
+level is Payload/Emacs.app, the container App Store Connect
+ingestion expects.  For store submission the signing identity
+must be an Apple Distribution certificate and the profile an App
+Store profile (their Entitlements dicts carry no get-task-allow
+and do carry beta-reports-active, which is what enables
+TestFlight -- QA1830; the device-entitlements-template target
+works on them the same way).
+
+Apple's documented upload paths (App Store Connect Help, "Upload
+builds"): the Transporter app, xcrun altool --upload-app (still
+supported for uploads; only its notarization role was retired in
+favor of notarytool), xcodebuild -exportArchive with an upload
+destination (Xcode 15+), or the App Store Connect "Build
+uploads" REST API.
+
+App Store submission requirements this port already carries
+------------------------------------------------------------
+
+  * Privacy manifest.  PrivacyInfo.xcprivacy ships in the bundle
+    template and lands at the bundle root.  Mandatory since
+    May 1, 2024 for apps using Apple's "required reason" APIs
+    (developer.apple.com/documentation/bundleresources/
+    describing-use-of-required-reason-api); ingestion rejects
+    submissions with undeclared use.  Emacs declares three
+    categories: FileTimestamp (stat/fstat everywhere; reasons
+    C617.1 container files, 3B52.1 picker-granted files, DDA9.1
+    dired display), DiskSpace (statvfs via file-system-info;
+    85F4.1, dired's free-space header), UserDefaults (bookmark
+    persistence; CA92.1).  If you add code touching a new
+    required-reason API category, extend the manifest.
+  * Launch screen.  UILaunchStoryboardName + storyboard, required
+    for all submissions since mid-2020.
+  * App icon.  NOT shipped -- Apple requires original artwork.
+    Either drop a 1024x1024 PNG at
+    ios/Emacs.base/Assets.xcassets/AppIcon.appiconset/AppIcon.png
+    or keep the artwork outside the tree and pass its path on the
+    make command line:
+
+      make ios IOS_APP_ICON=$HOME/art/emacs-icon.png
+
+    Both routes compile the icon with actool (single-size asset
+    catalog, auto-scaled variants) and merge CFBundleIconName /
+    CFBundleIcons into Info.plist.  The PNG must be exactly
+    1024x1024 and fully opaque (no alpha channel) for App Store
+    acceptance.  Store validation rejects icon-less binaries
+    (ITMS-90704 family); Simulator / device development works
+    fine without.
+  * App name.  Pass --with-ios-app-name=NAME at configure time to
+    set the label under the home-screen icon
+    (CFBundleDisplayName) and the short name system UI uses
+    (CFBundleName; keep it 15 characters or fewer).  Defaults to
+    Emacs.  The bundle directory (Emacs.app) and executable name
+    are internal and unaffected.  Note the App Store product name
+    shown on the store page is set in App Store Connect, not in
+    the bundle.
+  * Bundle identifier.  Pass --with-ios-bundle-id= at configure
+    time; the App Store re-signs on ingestion and the published
+    app carries no embedded provisioning profile (TN3125).
+
+Review-policy risks to weigh before submitting:
+
+  * Downloaded code (guideline 2.5.2).  package-install fetches
+    Emacs Lisp from ELPA and executes it, and eval runs anything
+    the user types.  Apple's guideline permits self-contained
+    apps and carves out limited room for educational and
+    development tools; interpreter apps exist on the store under
+    that reading, but acceptance is reviewer-dependent.  Framing
+    the app as a text editor / development environment, keeping
+    package installation strictly user-initiated (it is), and
+    being ready to appeal are the practical mitigations; the
+    fallback is disabling package-install in a store build.
+  * UIKit scene lifecycle.  The app uses the legacy
+    UIApplicationDelegate launch path (no
+    UIApplicationSceneManifest).  Apple has announced that a
+    future SDK will require the UIScene lifecycle; when the
+    Xcode toolchain in use starts enforcing it, the delegate
+    bring-up in src/ios.m needs porting to a scene delegate.
+    Not a rejection today, but a known horizon.
+  * Reviewer interaction: commands that would spawn subprocesses
+    (M-x shell, compile) signal a clean Lisp error on device
+    rather than crashing, which is what guideline 2.1 cares
+    about.
+
+Handled mechanically by the build (no action needed): privacy
+manifest covering FileTimestamp, DiskSpace, UserDefaults, and
+SystemBootTime; DT* / BuildMachineOSBuild toolchain-provenance
+keys App Store ingestion expects from non-Xcode uploads; compiled
+launch storyboard; UIDeviceFamily; asset-catalog icon wiring; and
+a payload free of symlinks and stray executables (both are
+ingestion rejections).
+
+Submission items that remain YOUR decision:
+
+  * Export compliance.  ITSAppUsesNonExemptEncryption is not set
+    in Info.plist, so App Store Connect will walk you through the
+    export-compliance questionnaire on each upload.  With the
+    GnuTLS stack included, the app uses encryption in the
+    standard HTTPS sense Apple's "Complying with Encryption
+    Export Regulations" describes as exempt from documentation
+    requirements, but the declaration is a legal statement the
+    submitter must make.
+  * Licensing.  GNU Emacs is GPLv3.  The FSF's position on App
+    Store terms led to the removal of GNU Go (2010) and VLC's
+    original takedown.  Nothing technical in this port changes
+    that calculus; TestFlight and personal-device installs are
+    unaffected.
+
+Every launch bootstraps the Lisp environment from the bundled
+sources (the cross build cannot pre-dump, and no dump is written
+on device); startup takes a few seconds depending on hardware.
+Caching a pdumper image in the sandbox on first launch is the
+natural future optimization.
+
+Runtime / threading model
+-------------------------
+
+Emacs runs on a dedicated pthread with a 16 MB stack; UIKit owns
+the main thread.  The two sides communicate exclusively through:
+
+  * lock-protected queues (keystrokes, rich input events, pinch
+    updates) drained by ios_read_socket on the Emacs thread;
+  * publish/drain channels for resize, mouse motion, appearance
+    changes, and open-file requests: the UIKit side writes plain C
+    data under a mutex and pokes a wake pipe; the Emacs thread
+    builds any Lisp data on its own side;
+  * dispatch_async / dispatch_sync onto the main queue for UIKit
+    work initiated from Lisp (clipboard, tooltips, keyboard
+    show/hide, pickers, menus).
+
+Invariants: the UIKit thread never allocates Lisp data and never
+reads frame state (input events carry a nil frame; the drain
+attaches one); the Emacs thread never sleeps on UIKit -- modal UI
+(menus, dialogs) runs a nested input pump so C-g and type-ahead
+keep working.
+
+HOME and the working directory are the sandboxed Documents/
+folder (the one visible in the Files app); .emacs.d is created
+there.  All geometry is in logical points (Core Graphics applies
+the Retina scale underneath), and the display reports 163 ppi so
+the face engine's point<->pixel conversions agree with the
+drawing coordinate space.
+
+Feature status (each verified by the CI smoke test when landed)
+----------------------------------------------------------------
+
+Works:
+  * Text rendering with face attributes: colors, bold, italic,
+    underline (single and wave), overline, strike-through, cursor
+    styles; per-(size, weight, slant) font caching.
+  * Input: hardware keyboards including modifiers, arrows and
+    F-keys; the software keyboard with an accessory bar (Esc,
+    sticky Ctrl/Meta, Tab, C-g, arrow keys, M-x); tap as mouse-1,
+    long-press as mouse-2, single-finger drag as selection with
+    live highlight, two-finger pan as wheel events, pinch as
+    pinch events (text-scale-pinch).
+  * Popup menus (x-popup-menu, mouse-3) as chained action sheets
+    with submenu hierarchy, separators, and toggle/radio state;
+    dialogs (x-popup-dialog, use-dialog-box) as modal alerts.
+  * Tooltips (x-show-tip / x-hide-tip) as an auto-hiding overlay.
+  * Clipboard via UIPasteboard (changeCount-cached), wired to
+    interprogram-cut/paste-function.
+  * Files: open-in-place from other apps via drag-n-drop events;
+    ios-pick-file presents the Files picker asynchronously;
+    security-scoped bookmarks persist access across launches; the
+    save round-trip into Documents is exercised by CI end to end.
+  * Frame parameters (colors, cursor, font via
+    set_new_font_hook); rotation / split-view / soft-keyboard
+    resizes; live dark/light appearance tracking; haptic bell;
+    background lifecycle quiesces drawing; the minibuffer
+    auto-shows the soft keyboard (defcustom
+    ios-auto-show-keyboard).
+  * Image loading via ImageIO and Core Graphics
+    (iosimage.m); PNG, JPEG, GIF, TIFF, HEIC, BMP without
+    third-party dependencies, decoded on the Emacs thread and
+    cached through the standard image-cache.
+  * Self-test battery (lisp/term/ios-tests.el, M-x
+    ios-run-self-tests): twenty-two probes covering sandbox
+    identity, file round-trip, clipboard, geometry, appearance,
+    image load, face attributes, color-name resolution, theme
+    face-spec matching, frame parameters, frame-background-mode,
+    the
+    pinch / wheel / drag-n-drop event bindings, TLS (GnuTLS
+    availability and trust anchors), and documentation (DOC
+    docstrings and Info manuals).  One PASS / FAIL line per
+    probe is written to ~/ios-test-results.txt.
+
+Known issues / deferred:
+  * Rendering uses an overpaint command list (correct, simple);
+    per-row damage tracking is the planned optimization.
+  * Pane headers inside submenus are dropped -- action sheets
+    have no section concept.
+  * Subprocesses (make-process / call-process) work in the
+    simulator but signal a Lisp error on device: the iOS sandbox
+    forbids posix_spawn.  Inherent to the platform.
+  * Device signing / TestFlight packaging needs Apple credentials
+    and is not exercised by CI.
+
+App Store compliance notes
+--------------------------
+
+* No JIT (no native compilation, no dynamic module loading).
+* No fork/exec; Emacs subprocess primitives error out on device.
+* Sandboxed filesystem; user files live in the per-app Documents
+  directory and Files-app picked URLs (security-scoped, bookmark
+  persistence across launches).
+* pdumper image is data, not executable code, and is generated on
+  first launch into the writable Application Support directory.
+
+Debug facilities
+----------------
+
+Set these in the app's environment (SIMCTL_CHILD_* under simctl):
+
+  EMACS_IOS_DEBUG_LOG=1   show the launch-log strip above the canvas
+  EMACS_IOS_AUTO_INPUT=1  run the CI keystroke driver after launch
+
+Logs land in Documents/emacs-launch.log and emacs-stdout.log.
