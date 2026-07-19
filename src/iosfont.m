@@ -554,14 +554,202 @@ ios_font_text_extents (struct font *font,
 /* Complex-text shaping via Core Text.                                */
 /* ------------------------------------------------------------------ */
 
-/* Shape LGSTRING with Core Text and fill its LGLYPH vector, returning
-   the glyph count used, or nil to let the caller fall back to the
-   unshaped per-character layout.  This is what turns ligatures and
-   complex scripts (Arabic, Indic) into correct glyph runs.  Adapted
-   from macfont's CTLine/CTRun shaper without the AppKit ScreenFont
-   path, and defensive throughout: any uncertainty returns nil rather
-   than a partial or wrong result, so a shaping miss never corrupts the
-   display -- it just renders unshaped.  */
+/* Faithful port of macfont's CTLine/CTRun shaper (minus the AppKit
+   ScreenFont path).  The three-pass composed-character-range
+   computation gives each glyph a correct from/to span even for
+   ligatures and Indic conjuncts, and the right-to-left permutation puts
+   Arabic and Hebrew glyphs back in logical order -- both needed for
+   cursor motion and editing to line up with the display.  The composite
+   draw path in iosterm.m mirrors ns_draw_composite_glyph_string, the
+   same consumer this shaper feeds on macOS.  Defensive: a substituted
+   run (left for the fontset) or any inconsistency returns nil, so a
+   shaping miss renders unshaped rather than wrong.  */
+
+/* Per-glyph shaping result, mirroring macfont's mac_glyph_layout.  */
+struct ios_glyph_layout
+{
+  CFRange comp_range;    /* composed-character range, UTF-16 indices */
+  CFIndex string_index;  /* UTF-16 index of the glyph's first char   */
+  CGGlyph glyph_id;
+  CGFloat advance;
+  CGFloat advance_delta;
+  CGFloat baseline_delta;
+};
+
+/* A CTLine over STRING in FONT with kerning off (Emacs owns spacing).  */
+static CTLineRef
+ios_ct_line (CFStringRef string, CTFontRef font)
+{
+  float zero = 0;
+  CFNumberRef kern = CFNumberCreate (NULL, kCFNumberFloatType, &zero);
+  CFStringRef keys[] = { kCTFontAttributeName, kCTKernAttributeName };
+  CFTypeRef vals[] = { font, kern };
+  CFDictionaryRef attrs
+    = CFDictionaryCreate (NULL, (const void **) keys, (const void **) vals,
+                          2, &kCFTypeDictionaryKeyCallBacks,
+                          &kCFTypeDictionaryValueCallBacks);
+  CFAttributedStringRef astr
+    = attrs ? CFAttributedStringCreate (NULL, string, attrs) : NULL;
+  CTLineRef line = astr ? CTLineCreateWithAttributedString (astr) : NULL;
+  if (kern) CFRelease (kern);
+  if (attrs) CFRelease (attrs);
+  if (astr) CFRelease (astr);
+  return line;
+}
+
+/* Shape STRING with FONT into GLYPH_LAYOUTS (room for GLYPH_LEN),
+   returning the glyph count, or 0 to fall back.  Ported from
+   mac_font_shape.  */
+static CFIndex
+ios_ct_shape (CTFontRef font, CFStringRef string,
+              struct ios_glyph_layout *glyph_layouts, CFIndex glyph_len)
+{
+  CFIndex used, result = 0;
+  CTLineRef ctline = ios_ct_line (string, font);
+  if (ctline == NULL)
+    return 0;
+
+  used = CTLineGetGlyphCount (ctline);
+  if (used > 0 && used <= glyph_len)
+    {
+      CFArrayRef ctruns = CTLineGetGlyphRuns (ctline);
+      CFIndex k, ctrun_count = CFArrayGetCount (ctruns);
+      CGFloat total_advance = 0;
+      CFIndex total_glyph_count = 0;
+      bool ok = true;
+
+      for (k = 0; k < ctrun_count; k++)
+        {
+          CTRunRef ctrun = CFArrayGetValueAtIndex (ctruns, k);
+          CFIndex i, min_location, glyph_count = CTRunGetGlyphCount (ctrun);
+          struct ios_glyph_layout *glbuf = glyph_layouts + total_glyph_count;
+          CFRange string_range, comp_range, range;
+          CFIndex *permutation;
+
+          /* A run drawn in a substitute font is left for the fontset;
+             give up and let redisplay lay it out unshaped.  */
+          CFDictionaryRef ra = CTRunGetAttributes (ctrun);
+          CTFontRef rf = ra ? CFDictionaryGetValue (ra, kCTFontAttributeName)
+                            : NULL;
+          if (rf && !CFEqual (rf, font))
+            {
+              ok = false;
+              break;
+            }
+          if (glyph_count == 0)
+            continue;
+
+          if (CTRunGetStatus (ctrun) & kCTRunStatusRightToLeft)
+            permutation = xmalloc (sizeof (CFIndex) * glyph_count);
+          else
+            permutation = NULL;
+#define RIGHT_TO_LEFT_P permutation
+
+          /* First pass: per glyph, the composed-character range at its
+             string index (comp_range is a temporary work area here).  */
+          string_range = CTRunGetStringRange (ctrun);
+          min_location = string_range.location + string_range.length;
+          for (i = 0; i < glyph_count; i++)
+            {
+              struct ios_glyph_layout *gl = glbuf + glyph_count - i - 1;
+              CFIndex glyph_index = RIGHT_TO_LEFT_P ? i : glyph_count - i - 1;
+              CFRange rng;
+
+              CTRunGetStringIndices (ctrun, CFRangeMake (glyph_index, 1),
+                                     &gl->string_index);
+              rng = CFStringGetRangeOfComposedCharactersAtIndex
+                      (string, gl->string_index);
+              gl->comp_range.location = min_location;
+              gl->comp_range.length = rng.location + rng.length;
+              if (rng.location < min_location)
+                min_location = rng.location;
+            }
+
+          /* Second pass: group glyphs into composed-character ranges and
+             build the right-to-left permutation.  */
+          comp_range = CFRangeMake (string_range.location, 0);
+          range = CFRangeMake (0, 0);
+          while (1)
+            {
+              struct ios_glyph_layout *gl
+                = glbuf + range.location + range.length;
+
+              if (gl->comp_range.length
+                  > comp_range.location + comp_range.length)
+                comp_range.length
+                  = gl->comp_range.length - comp_range.location;
+              min_location = gl->comp_range.location;
+              range.length++;
+
+              if (min_location >= comp_range.location + comp_range.length)
+                {
+                  comp_range.length = min_location - comp_range.location;
+                  for (i = 0; i < range.length; i++)
+                    {
+                      glbuf[range.location + i].comp_range = comp_range;
+                      if (RIGHT_TO_LEFT_P)
+                        permutation[range.location + i]
+                          = range.location + range.length - i - 1;
+                    }
+                  comp_range = CFRangeMake (min_location, 0);
+                  range.location += range.length;
+                  range.length = 0;
+                  if (range.location == glyph_count)
+                    break;
+                }
+            }
+
+          /* Third pass: glyph ids, positions, advances (permuted).  */
+          for (range = CFRangeMake (0, 1); range.location < glyph_count;
+               range.location++)
+            {
+              struct ios_glyph_layout *gl;
+              CGPoint position;
+              CGFloat max_x;
+
+              if (!RIGHT_TO_LEFT_P)
+                gl = glbuf + range.location;
+              else
+                {
+                  CFIndex src = glyph_count - 1 - range.location;
+                  CFIndex dest = permutation[src];
+
+                  gl = glbuf + dest;
+                  if (src < dest)
+                    {
+                      CFIndex tmp = gl->string_index;
+                      gl->string_index = glbuf[src].string_index;
+                      glbuf[src].string_index = tmp;
+                    }
+                }
+              CTRunGetGlyphs (ctrun, range, &gl->glyph_id);
+              CTRunGetPositions (ctrun, range, &position);
+              max_x = position.x
+                      + CTRunGetTypographicBounds (ctrun, range, NULL, NULL,
+                                                   NULL);
+              max_x = max (max_x, total_advance);
+              gl->advance_delta = position.x - total_advance;
+              gl->baseline_delta = position.y;
+              gl->advance = max_x - total_advance;
+              total_advance = max_x;
+            }
+
+          if (RIGHT_TO_LEFT_P)
+            xfree (permutation);
+#undef RIGHT_TO_LEFT_P
+
+          total_glyph_count += glyph_count;
+        }
+
+      if (ok)
+        result = used;
+    }
+
+  CFRelease (ctline);
+  return result;
+}
+
+/* The font driver's shape hook.  Ported from macfont_shape.  */
 static Lisp_Object
 ios_font_shape (Lisp_Object lgstring, Lisp_Object direction)
 {
@@ -576,152 +764,126 @@ ios_font_shape (Lisp_Object lgstring, Lisp_Object direction)
   if (ctfont == NULL)
     return Qnil;
 
-  ptrdiff_t glyph_len = LGSTRING_GLYPH_LEN (lgstring);
-  if (glyph_len <= 0)
-    return Qnil;
+  ptrdiff_t glyph_len = LGSTRING_GLYPH_LEN (lgstring), len, i, j;
+  CFIndex nonbmp_len = 0;
 
-  /* Leading run of real characters.  */
-  ptrdiff_t nchars = 0;
-  while (nchars < glyph_len && FIXNUMP (LGSTRING_CHAR (lgstring, nchars)))
-    nchars++;
-  if (nchars == 0)
-    return Qnil;
-
-  /* UTF-16 string plus a code-unit -> character-index map, so a glyph's
-     Core Text string index resolves back to the Emacs character.  */
-  UniChar *u16 = xmalloc (sizeof *u16 * nchars * 2);
-  ptrdiff_t *u16char = xmalloc (sizeof *u16char * nchars * 2);
-  CFIndex u16len = 0;
-  for (ptrdiff_t i = 0; i < nchars; i++)
+  for (i = 0; i < glyph_len; i++)
     {
-      UniChar tmp[2];
-      CFIndex k = ios_utf32_to_utf16 ((UTF32Char) XFIXNUM (LGSTRING_CHAR
-                                                           (lgstring, i)),
-                                      tmp);
-      for (CFIndex j = 0; j < k; j++)
-        {
-          u16[u16len] = tmp[j];
-          u16char[u16len] = i;
-          u16len++;
-        }
+      Lisp_Object lglyph = LGSTRING_GLYPH (lgstring, i);
+      if (NILP (lglyph))
+        break;
+      if (LGLYPH_CHAR (lglyph) >= 0x10000)
+        nonbmp_len++;
     }
+  len = i;
+  if (len == 0)
+    return Qnil;
 
-  CFStringRef string = CFStringCreateWithCharacters (NULL, u16, u16len);
-  if (string == NULL)
+  /* UTF-16 buffer, plus a sentinel-terminated list of the UTF-16 indices
+     of non-BMP characters, to convert Core Text's UTF-16 offsets back to
+     Emacs character indices.  */
+  UniChar *unichars = xmalloc (sizeof *unichars * (len + nonbmp_len));
+  CFIndex *nonbmp_indices = xmalloc (sizeof *nonbmp_indices * (nonbmp_len + 1));
+  for (i = j = 0; i < len; i++)
     {
-      xfree (u16);
-      xfree (u16char);
+      UTF32Char c = LGLYPH_CHAR (LGSTRING_GLYPH (lgstring, i));
+      if (ios_utf32_to_utf16 (c, unichars + i + j) > 1)
+        nonbmp_indices[j++] = i + j;
+    }
+  nonbmp_indices[j] = len + j;   /* sentinel */
+
+  /* NoCopy: the CFString references unichars, which therefore must
+     outlive it and the glyph loop, so it is freed only at the end.  */
+  CFStringRef string = CFStringCreateWithCharactersNoCopy
+    (NULL, unichars, len + nonbmp_len, kCFAllocatorNull);
+  CFIndex used = 0;
+  struct ios_glyph_layout *layouts = NULL;
+  if (string)
+    {
+      layouts = xmalloc (sizeof *layouts * glyph_len);
+      used = ios_ct_shape (ctfont, string, layouts, glyph_len);
+      CFRelease (string);
+    }
+  if (used == 0)
+    {
+      xfree (unichars);
+      xfree (nonbmp_indices);
+      xfree (layouts);
       return Qnil;
     }
 
-  /* This font, kerning off (Emacs owns positioning).  */
-  float zero = 0;
-  CFNumberRef kern = CFNumberCreate (NULL, kCFNumberFloatType, &zero);
-  CFStringRef keys[] = { kCTFontAttributeName, kCTKernAttributeName };
-  CFTypeRef vals[] = { ctfont, kern };
-  CFDictionaryRef attrs
-    = CFDictionaryCreate (NULL, (const void **) keys, (const void **) vals,
-                          2, &kCFTypeDictionaryKeyCallBacks,
-                          &kCFTypeDictionaryValueCallBacks);
-  CFAttributedStringRef astr
-    = attrs ? CFAttributedStringCreate (NULL, string, attrs) : NULL;
-  CTLineRef line = astr ? CTLineCreateWithAttributedString (astr) : NULL;
-  if (kern) CFRelease (kern);
-  if (attrs) CFRelease (attrs);
-  if (astr) CFRelease (astr);
-  CFRelease (string);
-  if (line == NULL)
+  for (i = 0; i < used; i++)
     {
-      xfree (u16);
-      xfree (u16char);
-      return Qnil;
-    }
+      Lisp_Object lglyph = LGSTRING_GLYPH (lgstring, i);
+      struct ios_glyph_layout *gl = layouts + i;
+      EMACS_INT from, to;
+      struct font_metrics metrics;
+      int xoff, yoff, wadjust;
+      unsigned code;
+      UTF32Char c;
 
-  CFArrayRef runs = CTLineGetGlyphRuns (line);
-  CFIndex nruns = runs ? CFArrayGetCount (runs) : 0;
-  ptrdiff_t out = 0;
-  bool ok = nruns > 0;
-  double total_advance = 0;
-
-  for (CFIndex r = 0; r < nruns && ok; r++)
-    {
-      CTRunRef run = CFArrayGetValueAtIndex (runs, r);
-      /* A run Core Text drew in a substitute font must fall back to the
-         fontset, not be shaped here.  */
-      CFDictionaryRef ra = CTRunGetAttributes (run);
-      CTFontRef rf = ra ? CFDictionaryGetValue (ra, kCTFontAttributeName)
-                        : NULL;
-      if (rf && !CFEqual (rf, ctfont))
+      if (NILP (lglyph))
         {
-          ok = false;
-          break;
+          lglyph = LGLYPH_NEW ();
+          LGSTRING_SET_GLYPH (lgstring, i, lglyph);
         }
 
-      CFIndex gc = CTRunGetGlyphCount (run);
-      for (CFIndex gi = 0; gi < gc; gi++)
-        {
-          if (out >= glyph_len)
-            {
-              ok = false;
-              break;
-            }
-          CFRange one = CFRangeMake (gi, 1);
-          CGGlyph g = 0;
-          CGPoint pos = { 0, 0 };
-          CFIndex sidx = 0;
-          CTRunGetGlyphs (run, one, &g);
-          CTRunGetPositions (run, one, &pos);
-          CTRunGetStringIndices (run, one, &sidx);
-          double gadv = CTRunGetTypographicBounds (run, one, NULL, NULL, NULL);
+      /* comp_range is in UTF-16 units; subtract the non-BMP units seen
+         so far to recover Emacs character indices.  */
+      from = gl->comp_range.location;
+      j = 0;
+      while (nonbmp_indices[j] < from)
+        j++;
+      from -= j;
+      LGLYPH_SET_FROM (lglyph, from);
 
-          double max_x = pos.x + gadv;
-          if (max_x < total_advance)
-            max_x = total_advance;
-          double advance_delta = pos.x - total_advance;
-          double advance = max_x - total_advance;
-          total_advance = max_x;
+      to = gl->comp_range.location + gl->comp_range.length;
+      while (nonbmp_indices[j] < to)
+        j++;
+      to -= j;
+      LGLYPH_SET_TO (lglyph, to - 1);
 
-          ptrdiff_t ci = (sidx >= 0 && sidx < u16len) ? u16char[sidx] : 0;
-          int c = XFIXNUM (LGSTRING_CHAR (lgstring, ci));
+      /* LGLYPH_CHAR: the base character, or 0 to mark a non-trivial
+         composition (the glyph is not the base char's own glyph).  */
+      if (unichars[gl->string_index] >= 0xD800
+          && unichars[gl->string_index] < 0xDC00)
+        c = (((unichars[gl->string_index] - 0xD800) << 10)
+             + (unichars[gl->string_index + 1] - 0xDC00) + 0x10000);
+      else
+        c = unichars[gl->string_index];
+      {
+        UniChar u2[2];
+        CGGlyph g2[2] = { 0, 0 };
+        CFIndex kk = ios_utf32_to_utf16 (c, u2);
+        if (!CTFontGetGlyphsForCharacters (ctfont, u2, g2, kk)
+            || g2[0] != gl->glyph_id)
+          c = 0;
+      }
+      LGLYPH_SET_CHAR (lglyph, c);
+      LGLYPH_SET_CODE (lglyph, gl->glyph_id);
 
-          Lisp_Object lglyph = LGSTRING_GLYPH (lgstring, out);
-          if (NILP (lglyph))
-            {
-              lglyph = LGLYPH_NEW ();
-              LGSTRING_SET_GLYPH (lgstring, out, lglyph);
-            }
-          LGLYPH_SET_FROM (lglyph, ci);
-          LGLYPH_SET_TO (lglyph, ci);
-          LGLYPH_SET_CHAR (lglyph, c);
-          LGLYPH_SET_CODE (lglyph, g);
+      code = gl->glyph_id;
+      ios_font_text_extents (font, &code, 1, &metrics);
+      LGLYPH_SET_WIDTH (lglyph, metrics.width);
+      LGLYPH_SET_LBEARING (lglyph, metrics.lbearing);
+      LGLYPH_SET_RBEARING (lglyph, metrics.rbearing);
+      LGLYPH_SET_ASCENT (lglyph, metrics.ascent);
+      LGLYPH_SET_DESCENT (lglyph, metrics.descent);
 
-          unsigned code = g;
-          struct font_metrics m;
-          ios_font_text_extents (font, &code, 1, &m);
-          LGLYPH_SET_WIDTH (lglyph, m.width);
-          LGLYPH_SET_LBEARING (lglyph, m.lbearing);
-          LGLYPH_SET_RBEARING (lglyph, m.rbearing);
-          LGLYPH_SET_ASCENT (lglyph, m.ascent);
-          LGLYPH_SET_DESCENT (lglyph, m.descent);
-
-          int xoff = (int) lround (advance_delta);
-          int yoff = (int) lround (-pos.y);
-          int wadjust = (int) lround (advance);
-          if (xoff != 0 || yoff != 0 || wadjust != m.width)
-            LGLYPH_SET_ADJUSTMENT (lglyph,
-                                   CALLN (Fvector, make_fixnum (xoff),
-                                          make_fixnum (yoff),
-                                          make_fixnum (wadjust)));
-          out++;
-        }
+      xoff = (int) lround (gl->advance_delta);
+      yoff = (int) lround (-gl->baseline_delta);
+      wadjust = (int) lround (gl->advance);
+      if (xoff != 0 || yoff != 0 || wadjust != metrics.width)
+        LGLYPH_SET_ADJUSTMENT (lglyph,
+                               CALLN (Fvector, make_fixnum (xoff),
+                                      make_fixnum (yoff),
+                                      make_fixnum (wadjust)));
     }
 
-  CFRelease (line);
-  xfree (u16);
-  xfree (u16char);
-  if (!ok || out == 0)
-    return Qnil;
-  return make_fixnum (out);
+  xfree (unichars);
+  xfree (nonbmp_indices);
+  xfree (layouts);
+  return make_fixnum (used);
 }
 
 #ifdef HAVE_WINDOW_SYSTEM
