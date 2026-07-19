@@ -511,6 +511,20 @@ ios_font_text_extents (struct font *font,
   if (nglyphs <= 0)
     return;
 
+  /* Fixed-pitch fast path: every glyph advances by the cell width, so
+     skip the per-glyph Core Text metric round-trips entirely.  This is
+     the default font and every code buffer -- macfont caches per-glyph
+     metrics; for a monospaced font the cell width is all we need.  */
+  if (info->spacing == FONT_SPACING_MONO)
+    {
+      metrics->width = nglyphs * font->space_width;
+      metrics->lbearing = 0;
+      metrics->rbearing = metrics->width;
+      metrics->ascent = font->ascent;
+      metrics->descent = font->descent;
+      return;
+    }
+
   int width = 0, i;
   for (i = 0; i < nglyphs; i++)
     {
