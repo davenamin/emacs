@@ -1818,7 +1818,6 @@ static frame_parm_handler ios_frame_parm_handlers[] =
   NULL,                                      /* override-redirect */
   gui_set_no_special_glyphs,                 /* no-special-glyphs */
   NULL,                                      /* alpha-background */
-  gui_set_borders_respect_alpha_background,  /* borders-respect-alpha-background */
   NULL,                                      /* use-frame-synchronization */
 };
 
