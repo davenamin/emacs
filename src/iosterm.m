@@ -294,19 +294,23 @@ ios_draw_glyph_string (struct glyph_string *s)
       if (weight > 100) deco |= IOS_DECO_BOLD;
     }
 
-  /* The cell grid positions every character on Emacs's integer
-     column width, so Core Text's natural advances (e.g. 8.43pt
-     for 14pt SF Mono vs the ceil'd 9pt cell) can't misplace a
-     glyph repainted on its own, e.g. by cursor passage.  But that
-     alignment only holds for the frame's default font: a glyph
-     string in another font -- the variable-pitch and scaled-height
-     faces the splash screen and many packages use -- was laid out
-     by redisplay with that font's own (often proportional)
-     advances, so forcing it onto the default grid mis-lays the run
-     and drops its tail.  Pass 0 for non-default fonts so the canvas
-     draws them with natural advances instead.  */
-  double cell_width = (s->font == FRAME_FONT (s->f))
-                      ? (double) FRAME_COLUMN_WIDTH (s->f) : 0.0;
+  /* Position every character on the run's own integer cell width so
+     Core Text's fractional natural advance (e.g. 8.43pt for 14pt SF
+     Mono vs the ceil'd 9pt cell) can't misplace a glyph repainted on
+     its own, e.g. by cursor passage.  The width has to be the width
+     of THIS run's font, not the frame's: the backend opens only the
+     fixed-pitch system font, so the default face and its font-lock
+     bold/italic variants share the frame column width -- keeping them
+     on one grid stops a long keyword or comment run from drifting --
+     while a :height-scaled face (splash text, headings) has its own,
+     narrower or wider, cell, and snapping to that cell matches how
+     redisplay laid the row out.  min_width == max_width holds for
+     every font the backend opens; fall back to natural advances for a
+     proportional font, should one ever appear.  */
+  double cell_width = (s->font
+                       && s->font->min_width == s->font->max_width
+                       && s->font->max_width > 0)
+                      ? (double) s->font->max_width : 0.0;
   ios_canvas_draw_text ((double) s->x, (double) s->y,
                         w, h, fg, bg, utf8, font_size, deco,
                         cell_width,
