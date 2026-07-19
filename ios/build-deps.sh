@@ -294,6 +294,29 @@ sed -e 's|^Libs:.*|Libs: -L${libdir} -lgnutls -lhogweed -lnettle -lgmp|' \
     "$pc" > "$pc.tmp"
 mv "$pc.tmp" "$pc"
 
+## Hide gnulib's hash_string / hash_lookup inside libgnutls.a.
+## GnuTLS bundles gnulib, whose hash.o exports those two symbols --
+## the same names Emacs's fns.c uses on the 30.x release series
+## (master renamed them to hash_find / hash_from_string).  Linking
+## the static archive into Emacs then fails with duplicate symbols.
+## They are private to gnutls, so partial-link the whole archive
+## into one object with the two symbols marked unexported (private
+## extern), which keeps gnutls's own internal references resolved
+## while removing the clash; then re-archive.  A no-op where the
+## names do not collide.
+symhide="$work/gnutls-symhide"
+rm -rf "$symhide"; mkdir -p "$symhide"
+( cd "$symhide" && $AR x "$prefix/lib/libgnutls.a" )
+printf '_hash_string\n_hash_lookup\n' > "$symhide/unexport.sym"
+xcrun --sdk "$sdk" ld -r -arch "$arch" "$symhide"/*.o \
+  -unexported_symbols_list "$symhide/unexport.sym" \
+  -o "$symhide/libgnutls-combined.o" >> "$log" 2>&1 \
+  || build_failed "gnutls symbol-hide relink"
+rm -f "$prefix/lib/libgnutls.a"
+$AR rcs "$prefix/lib/libgnutls.a" "$symhide/libgnutls-combined.o"
+$RANLIB "$prefix/lib/libgnutls.a"
+rm -rf "$symhide"
+
 ## ---- libxml2 ----------------------------------------------------
 ## HTML/XML parsing for eww, shr, and feed readers.  Emacs feeds
 ## libxml2 already-decoded UTF-8 buffer text, so the optional
