@@ -1559,7 +1559,6 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_webp=no
   with_gif=no
   with_jpeg=no
-  with_sqlite3=no
   with_tiff=no
   with_selinux=no
   with_modules=no
@@ -1607,6 +1606,16 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   else
     with_gnutls=no
     with_xml2=no
+  fi
+
+  # sqlite3 needs no cross-compiled dependency: the iOS SDK ships
+  # libsqlite3, so -lsqlite3 resolves against the sysroot.  Enable
+  # it in the inner cross pass unconditionally (independent of
+  # --with-ios-deps); the outer host bridging pass stays minimal.
+  if test "$XCONFIGURE" = "ios"; then
+    with_sqlite3=yes
+  else
+    with_sqlite3=no
   fi
 
   # Force the dumping strategy to "none" for the iOS cross pass
