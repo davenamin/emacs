@@ -1,0 +1,454 @@
+===== ENVIRONMENT =====
+
+$ sw_vers
+ProductName:		macOS
+ProductVersion:		26.4
+BuildVersion:		25E246
+[exit=0]
+
+$ xcodebuild -version
+Xcode 26.5
+Build version 17F42
+[exit=0]
+
+$ xcrun --sdk iphonesimulator --show-sdk-path
+/Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk
+[exit=0]
+
+$ xcrun --sdk iphonesimulator --show-sdk-version
+26.5
+[exit=0]
+
+$ xcrun simctl list runtimes
+== Runtimes ==
+iOS 26.2 (26.2 - 23C54) - com.apple.CoreSimulator.SimRuntime.iOS-26-2
+iOS 26.4 (26.4.1 - 23E254a) - com.apple.CoreSimulator.SimRuntime.iOS-26-4
+iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5
+tvOS 26.2 (26.2 - 23K51) - com.apple.CoreSimulator.SimRuntime.tvOS-26-2
+tvOS 26.4 (26.4 - 23L243a) - com.apple.CoreSimulator.SimRuntime.tvOS-26-4
+tvOS 26.5 (26.5 - 23L470) - com.apple.CoreSimulator.SimRuntime.tvOS-26-5
+watchOS 26.2 (26.2 - 23S303) - com.apple.CoreSimulator.SimRuntime.watchOS-26-2
+watchOS 26.4 (26.4 - 23T240b) - com.apple.CoreSimulator.SimRuntime.watchOS-26-4
+watchOS 26.5 (26.5 - 23T570) - com.apple.CoreSimulator.SimRuntime.watchOS-26-5
+visionOS 26.2 (26.2 - 23N301) - com.apple.CoreSimulator.SimRuntime.xrOS-26-2
+visionOS 26.4 (26.4.1 - 23O249a) - com.apple.CoreSimulator.SimRuntime.xrOS-26-4
+visionOS 26.5 (26.5 - 23O470) - com.apple.CoreSimulator.SimRuntime.xrOS-26-5
+[exit=0]
+
+===== BUILD DEPS =====
+
+$ brew update
+[34m==>[0m [1mUpdating Homebrew...[0m
+To restore the stashed changes to /opt/homebrew/Library/Taps/homebrew/homebrew-core, run:
+  cd /opt/homebrew/Library/Taps/homebrew/homebrew-core && git stash pop
+[34m==>[0m [1mHomebrew's analytics have entirely moved to our InfluxDB instance in the EU.[0m
+We gather less data than before and have destroyed all Google Analytics data:
+  [4mhttps://docs.brew.sh/Analytics[24m[0m
+Please reconsider re-enabling analytics to help our volunteer maintainers with:
+  brew analytics on
+[34m==>[0m [1mHomebrew is run entirely by unpaid volunteers. Please consider donating:[0m
+  [4mhttps://github.com/Homebrew/brew#-donations[24m
+
+Updated 3 taps (aws/tap, homebrew/core and homebrew/cask).
+[34m==>[0m [1mNew Formulae[0m
+bittensor: SDK and command-line tool for the Bittensor network
+chopper: Filter and trim long-read sequencing data by quality and length
+flyline: Supercharged Bash plugin replacement for readline
+gcx: CLI for managing Grafana Cloud resources
+gof5: F5 BIG-IP VPN client
+gss-ntlmssp: NTLM authentication plugin for GSSAPI
+libjaylink: Provide interoperability with JLINK hardware
+octl: Modern CLI for Outscale
+ovh-ttyrec: Enhanced (but compatible) version of the classic ttyrec
+qobine-tui: Tui player for Qobuz
+qobine-web: Server and web based player for Qobuz
+rust-wasm: Rust standard library and sysroot for WebAssembly targets
+tmux-fingers: Copy pasting in terminal with vimium/vimperator like hints
+utiluti: macOS command-line tool to work with default apps
+woxi: Interpreter for a subset of the Wolfram Language
+zsh-patina: Blazingly fast Zsh syntax highlighter
+[34m==>[0m [1mNew Casks[0m
+aphera: Raw photo editing software
+arcbox: Runtime for containers, Linux virtual machines, and AI agent sandboxes
+juicy: Menu bar battery monitor with custom charge alerts and health tracking
+logseq-og: Privacy-first, open-source platform for knowledge sharing and management
+perplexity: AI-powered answer engine with Personal Computer agent
+smallstepagent: Device identity and certificate management daemon
+[34m==>[0m [1mOutdated Formulae[0m
+aws-sam-cli
+ca-certificates
+libpsl
+pipx
+pkgconf
+rustup
+[34m==>[0m [1mOutdated Casks[0m
+google-chrome
+microsoft-edge
+
+You have [1m6[0m outdated formulae and [1m2[0m outdated casks installed.
+You can upgrade them with [1mbrew upgrade[0m
+or list them with [1mbrew outdated[0m.
+[exit=0]
+
+$ brew install automake autoconf libtool pkg-config texinfo
+pkgconf 3.0.2 is already installed but outdated (so it will be upgraded).
+::warning::The following taps are not trusted:%0A  aws/tap%0A%0AHomebrew is currently ignoring formulae, casks and commands from these taps because tap trust is required.%0AUntap them with:%0A  brew untap aws/tap%0ATrust specific formulae, casks and commands with:%0A  brew trust --formula <user>/<tap>/<formula>%0A  brew trust --cask <user>/<tap>/<cask>%0A  brew trust --command <user>/<tap>/<command>%0AWhole-tap trust is broader and includes all current and future formulae,%0Acasks and commands from the listed taps. Trust whole taps with:%0A  brew trust aws/tap%0ATo disable trust checks:%0A  export HOMEBREW_NO_REQUIRE_TAP_TRUST=1%0AThis is not recommended and will be removed in a later release.%0AFor more information, see:%0A  https://docs.brew.sh/Tap-Trust%0A
+[34m==>[0m [1mWould install 5 formulae:[0m
+automake autoconf libtool pkgconf texinfo
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/automake/manifests/1.18.1_1[0m
+[34m==>[0m [1mWould install 2 dependencies for automake:[0m
+m4
+autoconf
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/autoconf/manifests/2.73[0m
+[34m==>[0m [1mWould install 1 dependency for autoconf:[0m
+m4
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/libtool/manifests/2.6.2[0m
+[34m==>[0m [1mWould install 1 dependency for libtool:[0m
+m4
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/pkgconf/manifests/3.0.3[0m
+[34m==>[0m [1mDownloading https://ghcr.io/v2/homebrew/core/texinfo/manifests/7.3[0m
+[32m==>[0m [1mFetching downloads for: [32mautomake[39m, [32mautoconf[39m, [32mlibtool[39m, [32mpkgconf[39m and [32mtexinfo[39m[0m
+✔︎ Bottle Manifest m4 (1.4.21)
+✔︎ Bottle m4 (1.4.21)
+✔︎ Bottle pkgconf (3.0.3)
+✔︎ Bottle automake (1.18.1_1)
+✔︎ Bottle autoconf (2.73)
+✔︎ Bottle libtool (2.6.2)
+✔︎ Bottle texinfo (7.3)
+[32m==>[0m [1mInstalling dependencies for automake:[0m [32mm4[39m and [32mautoconf[39m[0m
+[32m==>[0m [1mInstalling automake dependency: [32mm4[39m[0m
+[34m==>[0m [1mPouring m4--1.4.21.arm64_tahoe.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/m4/1.4.21: 14 files, 815.7KB
+[32m==>[0m [1mInstalling automake dependency: [32mautoconf[39m[0m
+[34m==>[0m [1mPouring autoconf--2.73.arm64_tahoe.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/autoconf/2.73: 73 files, 3.8MB
+[32m==>[0m [1mInstalling [32mautomake[39m[0m
+[34m==>[0m [1mPouring automake--1.18.1_1.arm64_tahoe.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/automake/1.18.1_1: 134 files, 3.6MB
+[34m==>[0m [1mPouring libtool--2.6.2.arm64_tahoe.bottle.tar.gz[0m
+[34m==>[0m [1mCaveats[0m
+All commands have been installed with the prefix "g".
+If you need to use these commands with their normal names, you
+can add a "gnubin" directory to your PATH from your bashrc like:
+  PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH"
+[34m==>[0m [1mSummary[0m
+🍺  /opt/homebrew/Cellar/libtool/2.6.2: 78 files, 4.2MB
+[32m==>[0m [1mUpgrading [32mpkg-config[39m[0m
+  3.0.2 -> 3.0.3
+[34m==>[0m [1mPouring pkgconf--3.0.3.arm64_tahoe.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/pkgconf/3.0.3: 35 files, 737.1KB
+[34m==>[0m [1mPouring texinfo--7.3.arm64_tahoe.bottle.tar.gz[0m
+🍺  /opt/homebrew/Cellar/texinfo/7.3: 529 files, 11.1MB
+[32m==>[0m [1mCaveats[0m
+[34m==>[0m [1mlibtool[0m
+All commands have been installed with the prefix "g".
+If you need to use these commands with their normal names, you
+can add a "gnubin" directory to your PATH from your bashrc like:
+  PATH="/opt/homebrew/opt/libtool/libexec/gnubin:$PATH"
+[exit=0]
+
+===== REGENERATE configure =====
+
+$ ./autogen.sh
+Checking whether you have the necessary tools...
+(Read INSTALL.REPO for more details on building Emacs)
+Checking for autoconf (need at least version 2.65) ... ok
+Your system has the required tools.
+Building aclocal.m4 ...
+Running 'autoreconf -fi -I m4' ...
+Building 'aclocal.m4' in exec ...
+Running 'autoreconf -fi' in exec ...
+Configuring local git repository...
+git config transfer.fsckObjects 'true'
+git config diff.cpp.xfuncname '!^[ 	]*[A-Za-z_][A-Za-z_0-9]*:[[:space:]]*($|/[/*])
+^((::[[:space:]]*)?[A-Za-z_][A-Za-z_0-9]*[[:space:]]*\(.*)$
+^((#define[[:space:]]|DEFUN).*)$'
+git config diff.elisp.xfuncname '^\([^[:space:]]*def[^[:space:]]+[[:space:]]+([^()[:space:]]+)'
+git config diff.m4.xfuncname '^((m4_)?define|A._DEFUN(_ONCE)?)\([^),]*'
+git config diff.make.xfuncname '^([$.[:alnum:]_].*:|[[:alnum:]_]+[[:space:]]*([*:+]?[:?]?|!?)=|define .*)'
+git config diff.shell.xfuncname '^([[:space:]]*[[:alpha:]_][[:alnum:]_]*[[:space:]]*\(\)|[[:alpha:]_][[:alnum:]_]*=)'
+git config diff.texinfo.xfuncname '^@node[[:space:]]+([^,[:space:]][^,]+)'
+Installing git hooks...
+You can now run './configure'.
+[exit=0]
+
+===== TLS DEPS (gmp, nettle, gnutls) =====
+
+$ ios/build-deps.sh --sdk iphonesimulator --prefix /Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+build-deps.sh: sdk=iphonesimulator arch=arm64 min=15.0 prefix=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+build-deps.sh: full compile output in /Users/runner/work/emacs/emacs/ios-deps/build-iphonesimulator/build.log
+build-deps.sh: fetching https://ftpmirror.gnu.org/gmp/gmp-6.3.0.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2045k  100 2045k    0     0  6750k      0 --:--:-- --:--:-- --:--:-- 24.9M
+build-deps.sh: using a3c2b80201b89e68616f4ad30bc66aee4927c3ce50e33929ca819d5c43538898  /Users/runner/work/emacs/emacs/ios-deps/downloads/gmp-6.3.0.tar.xz
+build-deps.sh: building gmp-6.3.0
+build-deps.sh: fetching https://ftpmirror.gnu.org/nettle/nettle-3.10.1.tar.gz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0
+  9 2581k    9  247k    0     0   483k      0  0:00:05 --:--:--  0:00:05  483k100 2581k  100 2581k    0     0  3946k      0 --:--:-- --:--:-- --:--:-- 16.0M
+build-deps.sh: using b0fcdd7fc0cdea6e80dcf1dd85ba794af0d5b4a57e26397eee3bc193272d9132  /Users/runner/work/emacs/emacs/ios-deps/downloads/nettle-3.10.1.tar.gz
+build-deps.sh: building nettle-3.10.1
+build-deps.sh: fetching https://www.gnupg.org/ftp/gcrypt/gnutls/v3.8/gnutls-3.8.9.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0  0 6686k    0 12288    0     0  29990      0  0:03:48 --:--:--  0:03:48 29970100 6686k  100 6686k    0     0  5170k      0  0:00:01  0:00:01 --:--:-- 5171k
+build-deps.sh: using 69e113d802d1670c4d5ac1b99040b1f2d5c7c05daec5003813c049b5184820ed  /Users/runner/work/emacs/emacs/ios-deps/downloads/gnutls-3.8.9.tar.xz
+build-deps.sh: building gnutls-3.8.9
+build-deps.sh: fetching https://download.gnome.org/sources/libxml2/2.12/libxml2-2.12.9.tar.xz
+  % Total    % Received % Xferd  Average Speed   Time    Time     Time  Current
+                                 Dload  Upload   Total   Spent    Left  Speed
+  0     0    0     0    0     0      0      0 --:--:-- --:--:-- --:--:--     0100 2581k  100 2581k    0     0  21.5M      0 --:--:-- --:--:-- --:--:-- 21.7M
+build-deps.sh: using 59912db536ab56a3996489ea0299768c7bcffe57169f0235e7f962a91f483590  /Users/runner/work/emacs/emacs/ios-deps/downloads/libxml2-2.12.9.tar.xz
+build-deps.sh: building libxml2-2.12.9
+build-deps.sh: done.
+build-deps.sh: configure Emacs with --with-ios-deps=/Users/runner/work/emacs/emacs/ios-deps/iphonesimulator
+[exit=0]
+
+===== CONFIGURE (iphonesimulator) =====
+[configure exit=0]
+config.status: linking ../lib/time_rz.c to cross/lib/time_rz.c
+config.status: linking ../lib/timegm.c to cross/lib/timegm.c
+config.status: linking ../lib/timespec-add.c to cross/lib/timespec-add.c
+config.status: linking ../lib/timespec-sub.c to cross/lib/timespec-sub.c
+config.status: linking ../lib/timespec.c to cross/lib/timespec.c
+config.status: linking ../lib/timespec.h to cross/lib/timespec.h
+config.status: linking ../lib/u64.c to cross/lib/u64.c
+config.status: linking ../lib/u64.h to cross/lib/u64.h
+config.status: linking ../lib/unistd.c to cross/lib/unistd.c
+config.status: linking ../lib/unistd.in.h to cross/lib/unistd.in.h
+config.status: linking ../lib/unlocked-io.h to cross/lib/unlocked-io.h
+config.status: linking ../lib/utimens.c to cross/lib/utimens.c
+config.status: linking ../lib/utimens.h to cross/lib/utimens.h
+config.status: linking ../lib/utimensat.c to cross/lib/utimensat.c
+config.status: linking ../lib/verify.h to cross/lib/verify.h
+config.status: linking ../lib/vla.h to cross/lib/vla.h
+config.status: linking ../lib/warn-on-use.h to cross/lib/warn-on-use.h
+config.status: linking ../lib/xalloc-oversized.h to cross/lib/xalloc-oversized.h
+config.status: linking ../lib/af_alg.h to cross/lib/af_alg.h
+config.status: linking ../lib/save-cwd.h to cross/lib/save-cwd.h
+config.status: linking ../lib/fingerprint.c to cross/lib/fingerprint.c
+config.status: linking ../lib/fingerprint.h to cross/lib/fingerprint.h
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/openat-die.c to cross/lib/openat-die.c
+config.status: linking ../lib/save-cwd.c to cross/lib/save-cwd.c
+config.status: linking ../lib/min-max.h to cross/lib/min-max.h
+config.status: executing src/epaths.h commands
+config.status: executing src/.gdbinit commands
+config.status: executing doc/emacs/emacsver.texi commands
+config.status: executing etc-refcards-emacsver.tex commands
+1
+1
+
+===== MAKE IOS =====
+[make exit=2]
+--- last 25 lines of make-ios.out ---
+      | static
+/Users/runner/work/emacs/emacs/src/iosterm.m:1280:1: warning: no previous prototype for function 'ios_publish_canvas_size' [-Wmissing-prototypes]
+ 1280 | ios_publish_canvas_size (double width, double height)
+      | ^
+/Users/runner/work/emacs/emacs/src/iosterm.m:1279:1: note: declare 'static' if the function is not intended to be used outside of this translation unit
+ 1279 | void
+      | ^
+      | static
+/Users/runner/work/emacs/emacs/src/iosterm.m:1360:1: warning: no previous prototype for function 'ios_enqueue_key' [-Wmissing-prototypes]
+ 1360 | ios_enqueue_key (int codepoint)
+      | ^
+/Users/runner/work/emacs/emacs/src/iosterm.m:1359:1: note: declare 'static' if the function is not intended to be used outside of this translation unit
+ 1359 | void
+      | ^
+      | static
+/Users/runner/work/emacs/emacs/src/iosterm.m:1821:3: error: use of undeclared identifier 'gui_set_borders_respect_alpha_background'
+ 1821 |   gui_set_borders_respect_alpha_background,  /* borders-respect-alpha-background */
+      |   ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/runner/work/emacs/emacs/src/iosterm.m:1770:27: warning: tentative array definition assumed to have one element [-Wtentative-definition-array]
+ 1770 | static frame_parm_handler ios_frame_parm_handlers[] =
+      |                           ^
+8 warnings and 1 error generated.
+make[2]: *** [iosterm.o] Error 1
+make[1]: *** [src/emacs] Error 2
+make: *** [ios] Error 2
+--- make errors (if any) ---
+2884:/Users/runner/work/emacs/emacs/src/iosterm.m:1821:3: error: use of undeclared identifier 'gui_set_borders_respect_alpha_background'
+
+===== (B) OUR BUNDLE: STRUCTURE =====
+
+$ find build-ios-sim/ios/Emacs.app
+find: build-ios-sim/ios/Emacs.app: No such file or directory
+[exit=1]
+
+$ ls -la build-ios-sim/ios/Emacs.app
+ls: build-ios-sim/ios/Emacs.app: No such file or directory
+[exit=1]
+
+===== (B) OUR BUNDLE: Info.plist (root) =====
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleIdentifier build-ios-sim/ios/Emacs.app/Info.plist
+Print: Entry, "CFBundleIdentifier", Does Not Exist
+File Doesn't Exist, Will Create: build-ios-sim/ios/Emacs.app/Info.plist
+[exit=1]
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleExecutable build-ios-sim/ios/Emacs.app/Info.plist
+Print: Entry, "CFBundleExecutable", Does Not Exist
+File Doesn't Exist, Will Create: build-ios-sim/ios/Emacs.app/Info.plist
+[exit=1]
+
+$ /usr/libexec/PlistBuddy -c Print CFBundleSupportedPlatforms build-ios-sim/ios/Emacs.app/Info.plist
+Print: Entry, "CFBundleSupportedPlatforms", Does Not Exist
+File Doesn't Exist, Will Create: build-ios-sim/ios/Emacs.app/Info.plist
+[exit=1]
+
+$ plutil -lint build-ios-sim/ios/Emacs.app/Info.plist
+build-ios-sim/ios/Emacs.app/Info.plist: (The file “Info.plist” couldn’t be opened because there is no such file.)
+[exit=1]
+
+$ file build-ios-sim/ios/Emacs.app/Info.plist
+build-ios-sim/ios/Emacs.app/Info.plist: cannot open `build-ios-sim/ios/Emacs.app/Info.plist' (No such file or directory)
+[exit=0]
+
+$ head -c 64 build-ios-sim/ios/Emacs.app/Info.plist
+head: build-ios-sim/ios/Emacs.app/Info.plist: No such file or directory
+[exit=1]
+
+===== (B) OUR BUNDLE: binary =====
+
+$ file build-ios-sim/ios/Emacs.app/emacs
+build-ios-sim/ios/Emacs.app/emacs: cannot open `build-ios-sim/ios/Emacs.app/emacs' (No such file or directory)
+[exit=0]
+
+$ sh -c otool -l 'build-ios-sim/ios/Emacs.app/emacs' | grep -A4 LC_BUILD_VERSION
+error: /Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/otool-classic: can't open file: build-ios-sim/ios/Emacs.app/emacs (No such file or directory)
+[exit=1]
+
+===== (B) OUR BUNDLE: codesign BEFORE =====
+
+$ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
+[exit=1]
+--- ad-hoc re-sign the bundle ---
+
+$ codesign --force --sign - build-ios-sim/ios/Emacs.app
+build-ios-sim/ios/Emacs.app: No such file or directory
+[exit=1]
+
+$ sh -c codesign -dvvv 'build-ios-sim/ios/Emacs.app' 2>&1 | grep -iE 'Identifier|Format|flags'
+[exit=1]
+
+===== (B) OUR BUNDLE: embedded __info_plist contents =====
+
+$ sh -c otool -X -s __TEXT __info_plist 'build-ios-sim/ios/Emacs.app/emacs' | awk '{for(i=2;i<=NF;i++) printf "%s", $i; print ""}' | tr -d ' ' | xxd -r -p > /tmp/embedded.plist 2>/dev/null && plutil -p /tmp/embedded.plist 2>&1 | head -25
+error: /Applications/Xcode_26.5.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/otool-classic: can't open file: build-ios-sim/ios/Emacs.app/emacs (No such file or directory)
+/tmp/embedded.plist: Property List error: Cannot parse a NULL or zero-length data / JSON error: Unable to parse empty data.
+[exit=0]
+
+===== BOOT SIMULATOR =====
+devicetype=com.apple.CoreSimulator.SimDeviceType.iPhone-17-Pro
+No runtime specified, using 'iOS 26.5 (26.5 - 23F77) - com.apple.CoreSimulator.SimRuntime.iOS-26-5'
+device=3F1BC2EA-8C77-4808-837B-7C2DFC91C028
+
+$ xcrun simctl boot 3F1BC2EA-8C77-4808-837B-7C2DFC91C028
+[exit=0]
+
+$ xcrun simctl bootstatus 3F1BC2EA-8C77-4808-837B-7C2DFC91C028 -b
+Monitoring boot status for ci-diag-phone (3F1BC2EA-8C77-4808-837B-7C2DFC91C028).
+Device already booted, nothing to do.
+
+[exit=0]
+
+===== (A) MINIMAL REFERENCE APP =====
+
+$ xcrun --sdk iphonesimulator clang -arch arm64 -mios-simulator-version-min=15.0 -isysroot /Applications/Xcode_26.5.app/Contents/Developer/Platforms/iPhoneSimulator.platform/Developer/SDKs/iPhoneSimulator26.5.sdk -framework UIKit -framework Foundation -o ref-app/Hello.app/Hello ref-app/main.m
+[exit=0]
+
+$ plutil -lint ref-app/Hello.app/Info.plist
+ref-app/Hello.app/Info.plist: OK
+[exit=0]
+
+$ codesign --force --sign - ref-app/Hello.app
+ref-app/Hello.app: replacing existing signature
+[exit=0]
+
+$ sh -c codesign -dvvv 'ref-app/Hello.app' 2>&1 | grep -iE 'Identifier|flags'
+Identifier=org.gnu.hello
+CodeDirectory v=20400 size=294 flags=0x2(adhoc) hashes=3+3 location=embedded
+TeamIdentifier=not set
+[exit=0]
+
+$ find ref-app/Hello.app
+ref-app/Hello.app
+ref-app/Hello.app/_CodeSignature
+ref-app/Hello.app/_CodeSignature/CodeResources
+ref-app/Hello.app/Hello
+ref-app/Hello.app/Info.plist
+[exit=0]
+--- install reference app (expect SUCCESS -- this is the control) ---
+
+$ xcrun simctl install 3F1BC2EA-8C77-4808-837B-7C2DFC91C028 ref-app/Hello.app
+[exit=0]
+
+===== (B) INSTALL OUR BUNDLE (the real test) =====
+
+$ xcrun simctl install 3F1BC2EA-8C77-4808-837B-7C2DFC91C028 build-ios-sim/ios/Emacs.app
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
+Simulator device failed to install the application.
+Unhandled error domain NSPOSIXErrorDomain, code 2
+Underlying error (domain=NSPOSIXErrorDomain, code=2):
+	lstat of /Users/runner/work/emacs/emacs/build-ios-sim/ios/Emacs.app failed: No such file or directory
+	Unhandled error domain NSPOSIXErrorDomain, code 2
+[exit=2]
+
+===== STRUCTURED DIFF: reference vs ours (Info.plist keys) =====
+
+$ sh -c plutil -convert json -o - 'ref-app/Hello.app/Info.plist' 2>&1
+{"CFBundleShortVersionString":"1.0","CFBundleIdentifier":"org.gnu.hello","MinimumOSVersion":"15.0","CFBundleName":"Hello","DTPlatformName":"iphonesimulator","LSRequiresIPhoneOS":true,"UIDeviceFamily":[1,2],"CFBundleExecutable":"Hello","CFBundlePackageType":"APPL","CFBundleSupportedPlatforms":["iPhoneSimulator"],"CFBundleVersion":"1"}[exit=0]
+
+$ sh -c plutil -convert json -o - 'build-ios-sim/ios/Emacs.app/Info.plist' 2>&1
+build-ios-sim/ios/Emacs.app/Info.plist: (The file “Info.plist” couldn’t be opened because there is no such file.)
+[exit=1]
+
+===== LAUNCH OUR APP AND CAPTURE LOGS =====
+
+$ env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 xcrun simctl launch booted org.gnu.emacs
+An error was encountered processing the command (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+Simulator device failed to launch org.gnu.emacs.
+Underlying error (domain=FBSOpenApplicationServiceErrorDomain, code=4):
+	The request to open "org.gnu.emacs" failed.
+[exit=4]
+--- sleeping 30s for Emacs init + self-tests to do something ---
+--- capturing simulator screenshot ---
+
+$ xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
+Detected file type from extension: PNG
+Note: No display specified. Defaulting to display: 8C128C18-8A2D-4ADD-BE28-85932EEE899C (screenID: 1, name: LCD)
+Wrote screenshot to: /Users/runner/work/emacs/emacs/ci-diag/sim-screenshot.png
+[exit=0]
+
+$ xcrun simctl terminate booted org.gnu.emacs
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=3):
+Simulator device failed to terminate org.gnu.emacs.
+found nothing to terminate
+Underlying error (domain=NSPOSIXErrorDomain, code=3):
+	The request to terminate "org.gnu.emacs" failed. found nothing to terminate
+	found nothing to terminate
+[exit=3]
+An error was encountered processing the command (domain=NSPOSIXErrorDomain, code=2):
+The operation couldn’t be completed. No such file or directory
+No such file or directory
+data_container=
+(data container not present -- app may have failed before main)
+(self-test results file absent)
+
+--- unified log (process=emacs, last 2m) ---
+getpwuid_r did not find a match for uid 501
+Timestamp               Ty Process[PID:TID]
+
+--- unified log crash signatures ---
+
+--- crash reports ---
+  scanning /Users/runner/Library/Logs/CoreSimulator/3F1BC2EA-8C77-4808-837B-7C2DFC91C028/CrashReporter (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/3F1BC2EA-8C77-4808-837B-7C2DFC91C028 (recursive)
+  scanning /Users/runner/Library/Logs/CoreSimulator/CrashReporter/Standalone (recursive)
+  scanning /Users/runner/Library/Logs/DiagnosticReports (recursive)
+
+===== END =====
