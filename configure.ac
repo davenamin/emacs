@@ -1623,27 +1623,28 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
     with_sqlite3=no
   fi
 
-  # Force the dumping strategy to "none" for the iOS cross pass
-  # only.  The recursive XCONFIGURE=ios cross-build can't run
-  # temacs on the host to produce a pdmp file (the binary targets
-  # iOS), so it skips build-time dumping entirely; the resulting
-  # emacs binary bootstraps Lisp from source on every startup
-  # (slower but correct).  with_pdumper / HAVE_PDUMPER / DUMPING
-  # are all overridden here even though the early dumping block at
-  # ~line 455 has already run -- the values these variables hold
-  # at AC_OUTPUT are what get substituted into the Makefiles.
+  # No BUILD-TIME dump for the iOS cross pass: the recursive
+  # XCONFIGURE=ios build can't run temacs on the host to produce a
+  # pdmp (the binary targets iOS), so DUMPING=none and no emacs.pdmp
+  # rule is emitted.  But KEEP pdumper support (HAVE_PDUMPER=yes):
+  # pdumper.o is compiled regardless, and the make var gates
+  # make-fingerprint, which stamps a per-build fingerprint into the
+  # binary so a stale dump from an earlier app version is rejected.
+  # The app then dumps itself on first launch (see the iOS branch in
+  # loadup.el) into its sandbox and loads that dump on subsequent
+  # launches (src/ios.m, and the HAVE_IOS branch of load_pdump),
+  # exactly the way the Android port does.  These override the early
+  # dumping block (~line 455); the values held at AC_OUTPUT are what
+  # reach the Makefiles.
   #
-  # The OUTER host pass keeps the default pdumper strategy: the
-  # ios target builds host bootstrap-emacs + bootstrap-emacs.pdmp
-  # to generate the bundle's autoload files, and forcing
-  # DUMPING=none there would leave src/Makefile without the
-  # bootstrap-emacs.pdmp rule while also making every batch
-  # invocation of bootstrap-emacs pay a full source-form loadup.
+  # The OUTER host pass keeps the default pdumper strategy so the ios
+  # target can build host bootstrap-emacs + bootstrap-emacs.pdmp for
+  # the bundle's autoload files.
   if test "$XCONFIGURE" = "ios"; then
     with_dumping=none
-    with_pdumper=no
-    HAVE_PDUMPER=no
     DUMPING=none
+    with_pdumper=yes
+    HAVE_PDUMPER=yes
   fi
 fi
 

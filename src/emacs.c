@@ -905,6 +905,15 @@ load_pdump (int argc, char **argv, char *dump_file)
     fatal ("could not load dump file \"%s\": %s",
 	   dump_file, dump_error_to_string (result));
   return argv[0];
+#elif defined HAVE_IOS
+  /* iOS passes the sandbox dump path directly (there is no command
+     line).  Loading is best-effort: a missing dump (first launch) or
+     one rejected for a stale fingerprint (after an app update) leaves
+     Emacs uninitialized so main runs loadup.el, whose iOS branch
+     re-dumps for next launch.  Never fatal.  */
+  if (dump_file)
+    pdumper_load (dump_file, argv[0]);
+  return argv[0];
 #else
 
   const char *const suffix = ".pdmp";
