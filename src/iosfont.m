@@ -117,18 +117,17 @@ ios_spec_wants_mono (Lisp_Object spec)
           || strcasecmp (s, "fixed") == 0);
 }
 
-/* Turn a font spec/entity into a concrete UIFont, honouring family,
-   weight, slant, and spacing.  Never returns nil: falls back to the
-   monospaced system font so face realization always has a face.  */
+/* Turn a font spec/entity's FAMILY into a concrete UIFont at the given
+   weight/slant/spacing (passed explicitly, because font_list_entities
+   clears the spec's weight and slant before calling the driver's list
+   and filters the results afterward).  Never returns nil: falls back to
+   the monospaced system font so face realization always has a face.  */
 static UIFont *
-ios_resolve_uifont (Lisp_Object spec, CGFloat size)
+ios_resolve_uifont (Lisp_Object spec, CGFloat size,
+                    bool wantBold, bool wantItalic, bool wantMono)
 {
   if (size < 1)
     size = 14;
-
-  bool wantBold = ios_spec_wants_bold (spec);
-  bool wantItalic = ios_spec_wants_italic (spec);
-  bool wantMono = ios_spec_wants_mono (spec);
 
   Lisp_Object fam = AREF (spec, FONT_FAMILY_INDEX);
   NSString *family = nil;
@@ -219,50 +218,15 @@ ios_ctfont_from_uifont (UIFont *uif, CGFloat size)
     ((__bridge CTFontDescriptorRef) uif.fontDescriptor, size, NULL);
 }
 
-/* Build a font entity describing UIFont UIF resolved for SPEC.  */
+/* Build a font entity for UIFont UIF, labelled with the weight, slant,
+   and spacing it was resolved at.  Labelling by the resolved combination
+   (rather than introspecting the opaque system-font traits) is both
+   reliable and truthful -- list generates one entity per combination,
+   the way macfont enumerates a family's faces.  */
 static Lisp_Object
-ios_uifont_entity (UIFont *uif, Lisp_Object spec)
+ios_uifont_entity (UIFont *uif, bool isBold, bool isItalic, bool isMono)
 {
   Lisp_Object entity = font_make_entity ();
-
-  /* Describe what the font ACTUALLY is, read through Core Text off a
-     CTFont rebuilt from the descriptor (which, unlike the PostScript
-     name, preserves the weight axis).  CTFontCopyTraits -- the call
-     macfont.m uses -- then exposes the numeric weight and slant, so the
-     bold monospaced system font is labelled bold and find-font accepts
-     a bold spec.  */
-  bool isBold = false, isItalic = false, isMono = false;
-  CTFontRef ct = ios_ctfont_from_uifont (uif, uif.pointSize > 0
-                                         ? uif.pointSize : 14);
-  if (ct)
-    {
-      CFDictionaryRef traits = CTFontCopyTraits (ct);
-      if (traits)
-        {
-          int64_t sym = 0;
-          double v;
-          CFNumberRef n = CFDictionaryGetValue (traits, kCTFontSymbolicTrait);
-          if (n)
-            CFNumberGetValue (n, kCFNumberSInt64Type, &sym);
-          isBold = (sym & kCTFontTraitBold) != 0;
-          isItalic = (sym & kCTFontTraitItalic) != 0;
-          isMono = (sym & kCTFontTraitMonoSpace) != 0;
-          /* The symbolic Bold/Italic bits are often unset on the system
-             fonts even when the weight/slant axes say otherwise.  */
-          n = CFDictionaryGetValue (traits, kCTFontWeightTrait);
-          if (n && CFNumberGetValue (n, kCFNumberDoubleType, &v) && v >= 0.25)
-            isBold = true;
-          n = CFDictionaryGetValue (traits, kCTFontSlantTrait);
-          if (n && CFNumberGetValue (n, kCFNumberDoubleType, &v) && v > 0.01)
-            isItalic = true;
-          CFRelease (traits);
-        }
-      CFRelease (ct);
-    }
-  /* Spacing: Core Text likewise omits the MonoSpace bit for the system
-     mono font, so fall back to the family-name heuristic.  */
-  if (!isMono)
-    isMono = ios_spec_wants_mono (spec);
 
   ASET (entity, FONT_TYPE_INDEX, Qios);
   ASET (entity, FONT_FOUNDRY_INDEX, intern ("apple"));
@@ -365,28 +329,40 @@ ios_font_get_cache (struct frame *f)
   return dpyinfo->name_list_element;
 }
 
-/* Resolve SPEC to one concrete face via UIFont (Apple's matcher) and
-   return a single entity for it.  We resolve rather than enumerate:
-   Apple's matcher already picks the best face for the requested family
-   and traits, so handing Emacs that one candidate opens exactly it.  */
+/* List the requested family across weight and slant.  font_list_entities
+   strips the spec's weight and slant before calling us and then filters
+   our results against the original spec, so a single entity would be
+   dropped whenever a specific weight or slant is asked for.  Return one
+   entity per {regular,bold} x {roman,italic} combination, each labelled
+   accordingly, the way macfont enumerates a family's faces.  */
 static Lisp_Object
 ios_font_list (struct frame *f, Lisp_Object font_spec)
 {
   (void) f;
-  UIFont *uif = ios_resolve_uifont (font_spec, 14);
-  if (uif == nil)
-    return Qnil;
-  return list1 (ios_uifont_entity (uif, font_spec));
+  bool mono = ios_spec_wants_mono (font_spec);
+  Lisp_Object list = Qnil;
+
+  for (int b = 0; b < 2; b++)
+    for (int it = 0; it < 2; it++)
+      {
+        UIFont *uif = ios_resolve_uifont (font_spec, 14, b, it, mono);
+        if (uif != nil)
+          list = Fcons (ios_uifont_entity (uif, b, it, mono), list);
+      }
+  return list;
 }
 
 static Lisp_Object
 ios_font_match (struct frame *f, Lisp_Object font_spec)
 {
   (void) f;
-  UIFont *uif = ios_resolve_uifont (font_spec, 14);
+  bool b = ios_spec_wants_bold (font_spec);
+  bool it = ios_spec_wants_italic (font_spec);
+  bool mono = ios_spec_wants_mono (font_spec);
+  UIFont *uif = ios_resolve_uifont (font_spec, 14, b, it, mono);
   if (uif == nil)
     return Qnil;
-  return ios_uifont_entity (uif, font_spec);
+  return ios_uifont_entity (uif, b, it, mono);
 }
 
 static Lisp_Object
@@ -421,9 +397,12 @@ ios_font_open (struct frame *f, Lisp_Object font_entity, int pixel_size)
 
   /* Re-resolve the entity to a UIFont and recreate the CTFont through
      its descriptor, so the weight survives (a system font's name does
-     not encode it).  ios_resolve_uifont is deterministic, so this opens
-     the same face list/match described.  */
-  UIFont *uif = ios_resolve_uifont (font_entity, pixel_size);
+     not encode it).  The entity carries the weight/slant list labelled
+     it with, so this opens exactly that face.  */
+  UIFont *uif = ios_resolve_uifont (font_entity, pixel_size,
+                                    ios_spec_wants_bold (font_entity),
+                                    ios_spec_wants_italic (font_entity),
+                                    ios_spec_wants_mono (font_entity));
   CTFontRef ctfont = ios_ctfont_from_uifont (uif, pixel_size);
   if (ctfont == NULL)
     return Qnil;
