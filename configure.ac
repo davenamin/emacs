@@ -1504,10 +1504,10 @@ by hand to see the underlying error.])])
      # pipe()+fcntl() fallback, which compiles cleanly on every
      # Apple SDK.  The iphoneos SDK reports pipe2 as unavailable on
      # its own so this override is also harmless there.
-     # The inner pass also generates ios/Emacs.base/Info.plist and
-     # embeds it into the binary's __info_plist section, so the
-     # bundle-metadata vars must reach it too, not just the outer
-     # pass that writes the bundle's on-disk Info.plist.
+     # The inner pass also generates ios/Emacs.base/Info.plist (the
+     # bundle's on-disk plist, and for simulator builds the source of
+     # the binary's embedded __info_plist section), so the
+     # bundle-metadata vars must reach it too, not just the outer pass.
      AS_IF([XCONFIGURE=ios \
             IOS_SDK="$IOS_SDK" IOS_ARCH="$IOS_ARCH" \
             IOS_DEPLOYMENT_TARGET="$IOS_DEPLOYMENT_TARGET" \
@@ -3090,21 +3090,26 @@ AS_IF([test "$IOS" = "yes"],[
   IOS_LIBS="$IOS_LIBS -framework ImageIO -framework MobileCoreServices"
   # UTType constants used by the document picker in iosfns.m.
   IOS_LIBS="$IOS_LIBS -framework UniformTypeIdentifiers"
-  # Embed the bundle's Info.plist into the Mach-O's __TEXT,__info_plist
-  # section.  Real Xcode-built iOS apps always carry this; the modern
-  # iOS toolchain's IXPlaceholder (the install-coordination component
-  # in CoreSimulator / MobileInstallation) reads bundle metadata from
-  # this section, not from the file on disk, and a bundle without it
-  # is rejected with a misleading "Missing bundle ID" error.
+  # Simulator builds only: embed the bundle's Info.plist into the
+  # Mach-O's __TEXT,__info_plist section.  CoreSimulator's install path
+  # (IXPlaceholder / MobileInstallation) reads bundle metadata from this
+  # section during `simctl install', and a simulator bundle without it
+  # fails with a misleading "Missing bundle ID".  Device bundles must
+  # NOT carry it: unlike a macOS command-line tool, an iOS app keeps its
+  # Info.plist only as the standalone bundle file, and App Store
+  # validation rejects a device executable that has an embedded
+  # __INFO_PLIST section.
   #
-  # pwd at configure time is the build directory.  The same absolute
-  # path is reachable from the cross src/ directory at link time
-  # because we resolve it here (not at make-time).  Both the outer
-  # host pass and the inner XCONFIGURE=ios pass run config.status,
-  # which generates ios/Emacs.base/Info.plist with identical
-  # IOS_PLATFORM_DISPLAY values (both derived from $IOS_SDK), so
-  # whichever pass writes last gives the binary the right plist.
-  IOS_LIBS="$IOS_LIBS -Wl,-sectcreate,__TEXT,__info_plist,`pwd`/ios/Emacs.base/Info.plist"
+  # pwd at configure time is the build directory; the same absolute path
+  # is reachable from the cross src/ directory at link time because we
+  # resolve it here (not at make-time).  config.status (run in both the
+  # outer host and inner XCONFIGURE=ios passes) generates
+  # ios/Emacs.base/Info.plist first.
+  case "$IOS_SDK" in
+    iphonesimulator)
+      IOS_LIBS="$IOS_LIBS -Wl,-sectcreate,__TEXT,__info_plist,`pwd`/ios/Emacs.base/Info.plist"
+      ;;
+  esac
   IOS_BUILD_CFLAGS="-fPIC -fvisibility=hidden -fobjc-arc"
 
   AC_DEFINE([HAVE_IOS], [1], [Define to 1 if Emacs is being built
