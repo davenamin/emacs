@@ -2240,6 +2240,12 @@ ios_main (int argc, char **argv)
   ios_launch_log (@"ios_main: entered");
   ios_setenv_bundle_paths ();
   char *dump_file = ios_dump_path ();
+  /* loadup.el dumps to EMACS_PDMP on first launch (see the iOS clause
+     there).  emacs.c loads the same path via the dump_file argument
+     on later launches.  Keep the two in sync through this one env
+     var so the write target and the read target never diverge.  */
+  if (dump_file)
+    setenv ("EMACS_PDMP", dump_file, 1);
   ios_launch_log ([NSString stringWithFormat:
                    @"ios_main: dump_file=%s, calling ios_emacs_init",
                    dump_file ?: "(null)"]);

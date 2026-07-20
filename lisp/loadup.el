@@ -626,6 +626,27 @@ directory got moved.  This is set to be a pair in the form of:
                   ;; Continue with loadup.
                   nil)
               (error nil))))))
+  (if (and (featurep 'ios)
+           (not noninteractive))
+      ;; iOS, like Android, cross-compiles temacs and never dumps at
+      ;; build time (with_dumping=none).  Instead the first launch runs
+      ;; loadup to completion and then dumps itself to a fixed path in
+      ;; the app sandbox, supplied by the C startup code via EMACS_PDMP.
+      ;; Later launches pass --dump-file and load that pdmp, so loadup
+      ;; is skipped and (pdumper-stats) is non-nil.  If the app was
+      ;; upgraded, pdumper rejects the stale dump on the fingerprint
+      ;; check, initialized stays nil, loadup runs again, and the write
+      ;; below overwrites it.  Dumping must never be fatal here.
+      (let ((dump-file-name (getenv "EMACS_PDMP")))
+        (when (and dump-file-name
+                   (not (pdumper-stats)))
+          (let ((dump-temp-file-name (concat dump-file-name ".tmp")))
+            (condition-case ()
+                (progn
+                  (dump-emacs-portable dump-temp-file-name)
+                  (rename-file dump-temp-file-name dump-file-name t))
+              (error
+               (ignore-errors (delete-file dump-temp-file-name)))))))
   (if dump-mode
       (let ((output (cond ((equal dump-mode "pdump") "emacs.pdmp")
                           ((equal dump-mode "pbootstrap")
@@ -695,7 +716,7 @@ directory got moved.  This is set to be a pair in the form of:
                                   (expand-file-name (concat name ".pdmp")
                                                     invocation-directory)
                                   t))))
-        (kill-emacs))))
+        (kill-emacs)))))
 
 ;; This file must be loaded each time Emacs is run from scratch, e.g., temacs.
 ;; So run the startup code now.  First, remove `-l loadup' from args.
