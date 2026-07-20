@@ -6481,7 +6481,14 @@ TERMINFO=yes
 ## LIBS_TERMCAP="-lncurses", this overrides LIBS_TERMCAP = -ltinfo,
 ## if that was found above to have tputs.
 ## Should we use the gnu* logic everywhere?
-case "$opsys$REALLY_ANDROID" in
+case "$opsys$REALLY_ANDROID$IOS" in
+  ## iOS: a GUI-only app that never drives a TTY.  Use Emacs's bundled
+  ##  termcap (see TERMCAP_OBJ below) rather than the system terminfo:
+  ##  on iOS the termcap/terminfo symbols live in libSystem's private
+  ##  ncurses, and importing them fails App Store validation
+  ##  ("references non-public symbols: _tputs, _tgetent, ...").
+  darwinyes) TERMINFO=no; LIBS_TERMCAP= ;;
+
   ## darwin: Prevents crashes when running Emacs in Terminal.app under 10.2.
   ##  The ncurses library has been moved out of the System framework in
   ##  Mac OS X 10.2.  So if configure detects it, set the command-line
@@ -6560,6 +6567,14 @@ if test $TERMINFO = yes; then
 fi
 if test "X$LIBS_TERMCAP" = "X-lncurses"; then
   AC_DEFINE([USE_NCURSES], [1], [Define to 1 if you use ncurses.])
+fi
+## iOS links no system termcap library, but the termcap/terminfo
+## symbols (tputs, tgetent, ...) still resolve from libSystem's private
+## ncurses -- and importing them fails App Store validation.  Link
+## Emacs's own termcap.o so those symbols are defined in the binary
+## instead of imported (the MS-DOS build bundles it the same way).
+if test "$IOS" = yes; then
+  TERMCAP_OBJ="termcap.o tparam.o"
 fi
 AC_SUBST([LIBS_TERMCAP])
 AC_SUBST([TERMCAP_OBJ])
