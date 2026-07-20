@@ -1107,11 +1107,28 @@ ios_enqueue_event (struct input_event *ie)
 /* Pending canvas resize, published from EmacsUIView's
    layoutSubviews on the UIKit thread and consumed by
    ios_read_socket on the Emacs thread.  Only the most recent
-   request matters; coalesced via overwrite under the lock.  */
+   request matters; coalesced via overwrite under the lock.
+
+   The size is also debounced: layoutSubviews fires on every tick of
+   the keyboard-slide and rotation animations, publishing a stream of
+   intermediate (and sometimes degenerate) bounds.  Applying each one
+   means a change_frame_size -> full relayout -> redisplay per tick,
+   which flickers.  Instead each publish bumps ios_resize_generation
+   and schedules a settle check; a size is only marked valid (ready to
+   apply) once IOS_RESIZE_SETTLE_NSEC elapses with no newer publish
+   superseding it, so Emacs reflows once on the size the animation
+   lands on.  */
 static pthread_mutex_t ios_resize_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_pending_canvas_w = 0;
 static int ios_pending_canvas_h = 0;
 static bool ios_pending_canvas_valid = false;
+static uint64_t ios_resize_generation = 0;
+
+/* Settle window for the resize debounce.  Shorter than the ~250 ms
+   keyboard animation so every intermediate tick is superseded, long
+   enough that the reflow delay after the animation ends is not
+   perceptible.  */
+#define IOS_RESIZE_SETTLE_NSEC (150LL * 1000 * 1000)
 
 /* Last known mouse / finger position lives further up (above
    ios_mouse_position, which reads it directly).  */
@@ -1353,17 +1370,41 @@ ios_apply_pending_motion (void)
 void
 ios_publish_canvas_size (double width, double height)
 {
-  pthread_mutex_lock (&ios_resize_lock);
   int w = (int) width;
   int h = (int) height;
-  if (ios_pending_canvas_w != w || ios_pending_canvas_h != h)
+  uint64_t gen;
+  pthread_mutex_lock (&ios_resize_lock);
+  /* An already-settled publish of the identical size is a no-op: the
+     frame is either that size or a pending-valid apply will make it
+     so.  Anything else (re)opens the settle window.  */
+  if (ios_pending_canvas_w == w && ios_pending_canvas_h == h
+      && ios_pending_canvas_valid)
     {
-      ios_pending_canvas_w = w;
-      ios_pending_canvas_h = h;
-      ios_pending_canvas_valid = true;
+      pthread_mutex_unlock (&ios_resize_lock);
+      return;
     }
+  ios_pending_canvas_w = w;
+  ios_pending_canvas_h = h;
+  ios_pending_canvas_valid = false;
+  gen = ++ios_resize_generation;
   pthread_mutex_unlock (&ios_resize_lock);
-  ios_wake ();
+
+  /* Mark this size ready only if it survives the settle window with
+     no newer publish.  Intermediate animation ticks bump the
+     generation and are dropped here, so change_frame_size runs once,
+     on the size the animation settles on.  */
+  dispatch_after (dispatch_time (DISPATCH_TIME_NOW, IOS_RESIZE_SETTLE_NSEC),
+                  dispatch_get_global_queue (QOS_CLASS_USER_INITIATED, 0),
+                  ^{
+                    bool ready;
+                    pthread_mutex_lock (&ios_resize_lock);
+                    ready = (gen == ios_resize_generation);
+                    if (ready)
+                      ios_pending_canvas_valid = true;
+                    pthread_mutex_unlock (&ios_resize_lock);
+                    if (ready)
+                      ios_wake ();
+                  });
 }
 
 /* Last published canvas size, for x-create-frame: UIKit lays the
