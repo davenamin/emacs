@@ -66,11 +66,52 @@ UIKit's `traitCollectionDidChange:'.  Default binding refreshes
         (setq frame-background-mode mode)
         (mapc #'frame-set-background-mode (frame-list))))))
 
+(defun ios--setup-fontset-fallbacks ()
+  "Map non-Latin scripts and emoji to iOS system font families.
+The default face uses the monospaced system font, which covers
+Latin and punctuation but not CJK, emoji, or most complex scripts.
+Core Text draws a fixed glyph run, so unlike the old string-reshape
+path it does not substitute a covering font automatically; naming a
+family per script lets the fontset pick one the driver can open."
+  ;; Missing families are ignored (ignore-errors), and the driver falls
+  ;; back to the system font for any that do not resolve, so listing a
+  ;; family iOS lacks is harmless.
+  (dolist (entry '((han        . "PingFang SC")
+                   (kana       . "Hiragino Sans")
+                   (cjk-misc   . "PingFang SC")
+                   (bopomofo   . "PingFang TC")
+                   (hangul     . "Apple SD Gothic Neo")
+                   (thai       . "Thonburi")
+                   (lao        . "Lao Sangam MN")
+                   (khmer      . "Khmer Sangam MN")
+                   (burmese    . "Myanmar Sangam MN")
+                   (arabic     . "Geeza Pro")
+                   (hebrew     . "Arial Hebrew")
+                   (devanagari . "Kohinoor Devanagari")
+                   (bengali    . "Bangla Sangam MN")
+                   (gujarati   . "Gujarati Sangam MN")
+                   (gurmukhi   . "Gurmukhi MN")
+                   (kannada    . "Kannada Sangam MN")
+                   (malayalam  . "Malayalam Sangam MN")
+                   (oriya      . "Oriya Sangam MN")
+                   (sinhala    . "Sinhala Sangam MN")
+                   (tamil      . "Tamil Sangam MN")
+                   (telugu     . "Telugu Sangam MN")
+                   (tibetan    . "Kailasa")
+                   (ethiopic   . "Kefa")
+                   (emoji      . "Apple Color Emoji")
+                   (symbol     . "Apple Symbols")))
+    (ignore-errors
+      (set-fontset-font t (car entry)
+                        (font-spec :family (cdr entry))
+                        nil 'prepend))))
+
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
 WINDOW-SYSTEM is `ios'.  DISPLAY is ignored."
   (create-default-fontset)
+  (ios--setup-fontset-fallbacks)
   ;; Seed frame-background-mode from the OS-wide appearance so the
   ;; default theme picks dark or light accordingly.
   (when (fboundp 'ios-system-appearance)
@@ -203,6 +244,8 @@ minibuffer exit is unconditional once shown by this hook."
 ;; subdirectory or the load fails with "No such file" on first use.
 (autoload 'ios-run-self-tests "term/ios-tests"
   "Run the iOS port's functional self-tests." t)
+(autoload 'ios-show-font-demo "term/ios-tests"
+  "Show a buffer of shaped and non-Latin text for CI screenshots." t)
 
 (provide 'ios-win)
 

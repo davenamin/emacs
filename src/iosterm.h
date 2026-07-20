@@ -302,6 +302,22 @@ extern void ios_publish_open_file (const char *path);
    real canvas instead of a whole-screen guess.  */
 extern bool ios_get_canvas_size (int *w, int *h);
 
+/* Retained CTFontRef backing a struct font, as an opaque pointer so
+   this plain-C header need not import Core Text (iosfont.m).  NULL for
+   a font not opened by the iOS driver.  */
+extern void *ios_font_ctfont (struct font *font);
+
+/* Paint N Core Text glyphs into the backing store (ios.m).  GLYPHS are
+   CGGlyph indices; XPOS holds each glyph's x origin and BASELINE_Y the
+   shared baseline, in Emacs (top-left) frame pixels.  */
+extern void ios_canvas_draw_glyphs (void *ctfont,
+                                    const unsigned short *glyphs,
+                                    const double *xpos, int n,
+                                    double baseline_y,
+                                    unsigned long fg_pixel,
+                                    double clip_x, double clip_y,
+                                    double clip_width, double clip_height);
+
 #ifdef __OBJC__
 /* Persist a security-scoped bookmark for URL so a relaunch can
    restore access (ios.m).  Safe from any thread.  */

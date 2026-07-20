@@ -220,6 +220,53 @@ Results land in ~/ios-test-results.txt; one line per test."
     ;; expect a string; a font object here signals wrong-type-argument.
     (cl-assert (stringp (frame-parameter nil 'font))))
 
+  (ios-test-deftest font-families-multiple
+    "the Core Text driver lists more than one font family"
+    ;; The old shim returned a single monospaced family; the real
+    ;; driver enumerates UIFont.familyNames.
+    (cl-assert (> (length (font-family-list)) 5)))
+
+  (ios-test-deftest font-bold-italic-real
+    "bold and italic resolve to actual fonts, not synthesised flags"
+    (cl-assert (find-font (font-spec :weight 'bold)))
+    (cl-assert (find-font (font-spec :slant 'italic))))
+
+  (ios-test-deftest char-coverage-cjk
+    "a CJK ideograph is displayable through the script fontset fallback"
+    ;; U+6F22 (Han "kan"); hex escape avoids non-ASCII source bytes.
+    (cl-assert (char-displayable-p ?\x6f22)))
+
+  (ios-test-deftest char-coverage-emoji
+    "an emoji is displayable through the Apple Color Emoji fallback"
+    ;; U+1F600 GRINNING FACE.
+    (cl-assert (char-displayable-p ?\x1f600)))
+
+  (ios-test-deftest char-coverage-bengali
+    "Bengali resolves through the script fontset fallback"
+    (cl-assert (char-displayable-p ?\x0985)))     ; BENGALI LETTER A
+
+  (ios-test-deftest char-coverage-telugu
+    "Telugu resolves through the script fontset fallback"
+    (cl-assert (char-displayable-p ?\x0c05)))     ; TELUGU LETTER A
+
+  (ios-test-deftest font-named-family-opens
+    "a named family (Courier) resolves to a real font"
+    (cl-assert (find-font (font-spec :family "Courier"))))
+
+  (ios-test-deftest font-default-is-fixed-pitch
+    "the default face renders fixed-pitch: i and W measure the same"
+    ;; Exercises the monospaced text-extents fast path end to end.
+    (cl-assert (= (string-pixel-width "iiiiiiii")
+                  (string-pixel-width "WWWWWWWW"))))
+
+  (ios-test-deftest font-variable-pitch-is-proportional
+    "variable-pitch renders proportional: W is wider than i"
+    ;; Proves real per-glyph Core Text advances, not a monospace cell.
+    (cl-assert (> (string-pixel-width
+                   (propertize "WWWWWWWW" 'face 'variable-pitch))
+                  (string-pixel-width
+                   (propertize "iiiiiiii" 'face 'variable-pitch)))))
+
   ;;; --- Drag-n-drop handler ---------------------------------------
 
   (ios-test-deftest drag-n-drop-handler-bound
@@ -285,6 +332,51 @@ Results land in ~/ios-test-results.txt; one line per test."
     (with-temp-file path
       (insert (mapconcat #'identity (nreverse ios-test--out) "")))
     (message "ios-run-self-tests: wrote %s" path)))
+
+;;; --- Font demo (visual, for CI screenshots) ----------------------
+;;
+;; The self-test battery grades things a screenshot cannot -- but
+;; shaping and coverage are the reverse: only visible to the eye.
+;; ios-show-font-demo fills a buffer with text that exercises Core
+;; Text shaping (Arabic joining, Devanagari/Tamil conjuncts and vowel
+;; reordering), script coverage (CJK, emoji), and the proportional /
+;; bold / italic faces, so the simulator screenshot the workflow
+;; captures can be eyeballed for correctness.  Strings are built from
+;; explicit code points to keep this source pure ASCII.
+
+(defun ios-show-font-demo ()
+  "Display a buffer of shaped and non-Latin text for CI screenshots."
+  (interactive)
+  (let ((buf (get-buffer-create "*iOS Font Demo*")))
+    (with-current-buffer buf
+      (erase-buffer)
+      (insert "iOS font rendering demo\n\n")
+      ;; SF Mono has no coding ligatures, so these stay discrete; a
+      ;; ligature-carrying font would join them.
+      (insert "Ligatures: -> => != >= <= === =~ |>\n")
+      ;; Arabic: letters must join into cursive forms (shaping).
+      (insert (format "Arabic:     %s\n"
+                      (string #x627 #x644 #x639 #x631 #x628 #x64a #x629)))
+      ;; Hebrew: right-to-left, no joining.
+      (insert (format "Hebrew:     %s\n"
+                      (string #x5e2 #x5d1 #x5e8 #x5d9 #x5ea)))
+      ;; Devanagari "namaste": virama forms the s-t conjunct.
+      (insert (format "Devanagari: %s\n"
+                      (string #x928 #x92e #x938 #x94d #x924 #x947)))
+      ;; Tamil: the i vowel sign reorders before its consonant.
+      (insert (format "Tamil:      %s\n"
+                      (string #xba4 #xbae #xbbf #xbb4 #xbcd)))
+      (insert (format "CJK:        %s\n"
+                      (string #x6f22 #x5b57 #x4e2d #x6587)))
+      (insert (format "Emoji:      %s\n"
+                      (string #x1f600 #x1f389 #x2764)))
+      (insert "\n")
+      (insert (propertize "variable-pitch proportional text\n"
+                          'face 'variable-pitch))
+      (insert (propertize "bold weight\n" 'face 'bold))
+      (insert (propertize "italic slant\n" 'face 'italic))
+      (goto-char (point-min)))
+    (switch-to-buffer buf)))
 
 (provide 'ios-tests)
 ;;; ios-tests.el ends here
