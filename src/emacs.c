@@ -910,9 +910,25 @@ load_pdump (int argc, char **argv, char *dump_file)
      line).  Loading is best-effort: a missing dump (first launch) or
      one rejected for a stale fingerprint (after an app update) leaves
      Emacs uninitialized so main runs loadup.el, whose iOS branch
-     re-dumps for next launch.  Never fatal.  */
+     re-dumps for next launch.  Never fatal.  The outcome is logged to
+     stderr (captured in the app's emacs-stdout.log) so the load path
+     is visible without poking pdumper-stats: "could not open file" on
+     first launch, "not built for this Emacs executable" after an app
+     update, or "loaded dump" once the dump is in place.  */
   if (dump_file)
-    pdumper_load (dump_file, argv[0]);
+    {
+      int result = pdumper_load (dump_file, argv[0]);
+      if (result == PDUMPER_LOAD_SUCCESS)
+	fprintf (stderr, "emacs-pdmp: loaded dump from %s\n", dump_file);
+      else
+	fprintf (stderr,
+		 "emacs-pdmp: no dump loaded from %s (%s); "
+		 "running loadup from source\n",
+		 dump_file, dump_error_to_string (result));
+    }
+  else
+    fprintf (stderr, "emacs-pdmp: no dump path provided; "
+	     "running loadup from source\n");
   return argv[0];
 #else
 
