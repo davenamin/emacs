@@ -641,11 +641,17 @@ directory got moved.  This is set to be a pair in the form of:
         (when (and dump-file-name
                    (not (pdumper-stats)))
           (let ((dump-temp-file-name (concat dump-file-name ".tmp")))
-            (condition-case ()
+            ;; message here goes to stderr (no frame exists yet during
+            ;; loadup), so it lands in the app's emacs-stdout.log next
+            ;; to the load-path line emacs.c writes, telling the whole
+            ;; first-launch story: no dump loaded -> wrote dump.
+            (condition-case err
                 (progn
                   (dump-emacs-portable dump-temp-file-name)
-                  (rename-file dump-temp-file-name dump-file-name t))
+                  (rename-file dump-temp-file-name dump-file-name t)
+                  (message "emacs-pdmp: wrote dump to %s" dump-file-name))
               (error
+               (message "emacs-pdmp: dump failed: %S" err)
                (ignore-errors (delete-file dump-temp-file-name)))))))
   (if dump-mode
       (let ((output (cond ((equal dump-mode "pdump") "emacs.pdmp")
