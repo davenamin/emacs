@@ -1623,23 +1623,17 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
     with_sqlite3=no
   fi
 
-  # No BUILD-TIME dump for the iOS cross pass: the recursive
-  # XCONFIGURE=ios build can't run temacs on the host to produce a
-  # pdmp (the binary targets iOS), so DUMPING=none and no emacs.pdmp
-  # rule is emitted.  But KEEP pdumper support (HAVE_PDUMPER=yes):
-  # pdumper.o is compiled regardless, and the make var gates
-  # make-fingerprint, which stamps a per-build fingerprint into the
-  # binary so a stale dump from an earlier app version is rejected.
-  # The app then dumps itself on first launch (see the iOS branch in
-  # loadup.el) into its sandbox and loads that dump on subsequent
-  # launches (src/ios.m, and the HAVE_IOS branch of load_pdump),
-  # exactly the way the Android port does.  These override the early
-  # dumping block (~line 455); the values held at AC_OUTPUT are what
-  # reach the Makefiles.
+  # No build-time dump for the iOS cross pass: temacs targets iOS and
+  # cannot run on the host, so DUMPING=none and no emacs.pdmp rule is
+  # emitted.  Pdumper support itself stays enabled, which keeps
+  # make-fingerprint stamping a per-build fingerprint into the binary
+  # so a dump left by an earlier app version is rejected.  As on
+  # Android, the app dumps itself on first launch into its sandbox
+  # (see the iOS branch of loadup.el) and loads that dump thereafter.
   #
-  # The OUTER host pass keeps the default pdumper strategy so the ios
-  # target can build host bootstrap-emacs + bootstrap-emacs.pdmp for
-  # the bundle's autoload files.
+  # The outer host pass keeps the default pdumper strategy so the ios
+  # target can build bootstrap-emacs and its pdmp for the bundle's
+  # autoload files.
   if test "$XCONFIGURE" = "ios"; then
     with_dumping=none
     DUMPING=none

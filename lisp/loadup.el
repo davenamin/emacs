@@ -388,19 +388,13 @@
 ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
 ;; which happens while processing 'elisp-flymake-byte-compile', when
 ;; elisp-mode.elc is outdated.
-;; iOS port: preempt the autoload of `flymake-log' before elisp-mode.el
-;; is loaded.  The autoload entry in ldefs-boot.el is marked `t' (macro),
-;; so when elisp-mode.el's eager macroexp encounters the
-;; `(flymake-log :warning ...)' calls inside elisp-flymake-byte-compile,
-;; it triggers a load of flymake.el -- which on iOS fails part-way
-;; through `(require 'project)' / its dependents with a
-;; `(wrong-type-argument stringp nil)' signal (a downstream effect of
-;; the still-stubby HOME / files / cwd state during loadup).  Defining
-;; a no-op `flymake-log' macro here overrides the autoload, so the
-;; expansion proceeds without dragging flymake.el in.  flymake remains
-;; usable at runtime via its own autoload trigger after Emacs has
-;; finished bringing up its sandboxed environment; this only patches
-;; the loadup-time path.
+;; On iOS, preempt the `flymake-log' autoload before elisp-mode.el is
+;; loaded.  Its entry in ldefs-boot.el is marked `t' (macro), so eager
+;; macroexpansion of the `(flymake-log :warning ...)' calls inside
+;; elisp-flymake-byte-compile pulls in flymake.el, which signals
+;; `(wrong-type-argument stringp nil)' under the incomplete HOME and
+;; working-directory state that exists during loadup.  A no-op macro
+;; overrides the autoload; flymake itself remains available at runtime.
 (when (featurep 'ios)
   (defmacro flymake-log (_level _msg &rest _args)
     "Stub for use only during loadup on iOS; see loadup.el for rationale."
@@ -620,14 +614,11 @@ directory got moved.  This is set to be a pair in the form of:
 ;; hash-consing hash table is GC'd.
 (setq purify-flag nil)
 
-;; Make sure we will attempt bidi reordering henceforth -- but only
-;; if the Unicode property tables loaded.  charprop.el is GENERATED
-;; after temacs is built (during dump) and is missing for cross-
-;; builds that don't dump (notably the iOS bring-up), so flipping
-;; this unconditionally aborts bidi_initialize inside the first
-;; redisplay tick.  Keep redisplay--inhibit-bidi t until the tables
-;; exist; bidi can be turned on at runtime later if/when iOS grows
-;; a charprop equivalent.
+;; Make sure we will attempt bidi reordering henceforth, but only if
+;; the Unicode property tables loaded.  charprop.el is generated after
+;; temacs is built and is absent in cross-builds that do not dump, so
+;; flipping this unconditionally aborts bidi_initialize during the
+;; first redisplay.
 (when (featurep 'charprop)
   (setq redisplay--inhibit-bidi nil))
 
@@ -663,23 +654,17 @@ directory got moved.  This is set to be a pair in the form of:
               (error nil))))))
   (if (and (featurep 'ios)
            (not noninteractive))
-      ;; iOS, like Android, cross-compiles temacs and never dumps at
-      ;; build time (with_dumping=none).  Instead the first launch runs
-      ;; loadup to completion and then dumps itself to a fixed path in
-      ;; the app sandbox, supplied by the C startup code via EMACS_PDMP.
-      ;; Later launches pass --dump-file and load that pdmp, so loadup
-      ;; is skipped and (pdumper-stats) is non-nil.  If the app was
-      ;; upgraded, pdumper rejects the stale dump on the fingerprint
-      ;; check, initialized stays nil, loadup runs again, and the write
-      ;; below overwrites it.  Dumping must never be fatal here.
+      ;; Like Android, iOS cross-compiles temacs and does not dump at
+      ;; build time.  The first launch runs loadup to completion and
+      ;; dumps itself to the sandbox path the C startup code supplies
+      ;; in EMACS_PDMP; later launches load that dump instead, leaving
+      ;; `pdumper-stats' non-nil.  After an app update pdumper rejects
+      ;; the stale dump on its fingerprint, loadup runs again, and the
+      ;; write below replaces it.  Dumping must never be fatal here.
       (let ((dump-file-name (getenv "EMACS_PDMP")))
         (when (and dump-file-name
                    (not (pdumper-stats)))
           (let ((dump-temp-file-name (concat dump-file-name ".tmp")))
-            ;; message here goes to stderr (no frame exists yet during
-            ;; loadup), so it lands in the app's emacs-stdout.log next
-            ;; to the load-path line emacs.c writes, telling the whole
-            ;; first-launch story: no dump loaded -> wrote dump.
             (condition-case err
                 (progn
                   (dump-emacs-portable dump-temp-file-name)

@@ -87,17 +87,12 @@ ios_documents_path (NSString *name)
    normally when the AppDelegate tears down at app termination.  */
 __weak static UITextView *ios_log_view = nil;
 
-/* Append a timestamped MSG line to Documents/emacs-launch.log, and
-   echo via NSLog.  Two-channel logging on purpose: NSLog reaches
-   `simctl launch --console` and the unified log; the file remains
-   reachable via the Files app or by spelunking through
-   ~/Library/Developer/CoreSimulator/Devices/<udid>/data/Containers/
-   Data/Application/<app-uuid>/Documents/.
-
-   Third channel: the on-screen UITextView (if installed) gets the
-   line appended on the main thread.  This is what makes "the app
-   launches but hangs" visibly NOT a hang -- the user sees the
-   running progress trail through Emacs init.  */
+/* Append a timestamped MSG line to Documents/emacs-launch.log and
+   echo it via NSLog.  Both channels are kept: NSLog reaches
+   `simctl launch --console` and the unified log, while the file stays
+   reachable through the Files app or the simulator's data container.
+   The line is also appended to the on-screen log view, if one is
+   installed, so startup progress is visible on the device.  */
 void
 ios_launch_log (NSString *msg)
 {
@@ -1837,21 +1832,18 @@ ios_auto_input_thread (void *unused)
   ios_enqueue_key (0x18);   /* C-x */
   ios_enqueue_key (0x13);   /* C-s */
 
-  /* Self-test battery: M-x ios-run-self-tests RET.  Writes
-     ~/ios-test-results.txt with one line per probe.  The workflow's
-     post-launch step cats the file and fails the run on any
-     FAIL line.  */
+  /* Run the self-test battery, which writes ~/ios-test-results.txt
+     with one line per probe for the caller to check.  */
   sleep (3);
   ios_launch_log (@"auto-input(thread): M-x ios-run-self-tests RET");
   const char *cmd = "\x1bxios-run-self-tests\r";
   for (const char *p = cmd; *p; p++)
     ios_enqueue_key ((int) (unsigned char) *p);
 
-  /* Leave the font demo on screen for the workflow's screenshot: it
-     shows shaped Arabic / Devanagari / Tamil, RTL Hebrew, CJK, emoji,
-     and the proportional / bold / italic faces, so the captured image
-     can be eyeballed for shaping and coverage the self-tests can't
-     grade.  The screenshot fires ~35s after launch, well after this.  */
+  /* Leave the font demo on screen.  It renders shaped Arabic,
+     Devanagari and Tamil, RTL Hebrew, CJK, emoji and the
+     proportional, bold and italic faces, so a screenshot shows
+     shaping and coverage that the self-tests cannot grade.  */
   sleep (3);
   ios_launch_log (@"auto-input(thread): M-x ios-show-font-demo RET");
   const char *demo = "\x1bxios-show-font-demo\r";
@@ -1924,11 +1916,9 @@ ios_emacs_bg_thread (void *unused)
   UIViewController *vc = [[UIViewController alloc] init];
   vc.view.backgroundColor = UIColor.blackColor;
 
-  /* Debug build (EMACS_IOS_DEBUG_LOG set) puts the bring-up title
-     and log strip across the top; production builds give the
-     canvas the entire safe area.  CI sets the env var via
-     SIMCTL_CHILD_* so screenshots still capture the launch
-     trail.  */
+  /* With EMACS_IOS_DEBUG_LOG set, a title and log strip occupy the
+     top of the window; otherwise the canvas gets the entire safe
+     area.  */
   BOOL debug_ui = (getenv ("EMACS_IOS_DEBUG_LOG") != NULL);
 
   EmacsUIView *canvas = [[EmacsUIView alloc] initWithFrame:CGRectZero];
@@ -2025,24 +2015,14 @@ ios_emacs_bg_thread (void *unused)
 
   ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: returning YES");
 
-  /* CI diagnostic: synthesize an input event a few seconds after
-     launch so the simulator screenshot captures something other
-     than the loadup splash.  On a real device the user provides
-     these via tap/keyboard; without this the headless CI run
-     never moves past `Welcome / Loading'.
-
-     5s = startup-init complete (loadup is ~3s on macOS arm64
-     simulators), 8s = pre-screenshot.  */
-  /* CI screenshot driver: send keys on a dedicated pthread instead
-     of dispatch_after on the main queue.  The +10s main-queue
-     dispatch never fired in past runs -- the simulator screenshot
-     operation appears to nudge the app's lifecycle in a way that
-     drops queued blocks.  A standalone pthread with sleep() is
-     immune to that.  */
-  /* Only run the auto-typing driver when CI asks for it
-     (simctl launch inherits SIMCTL_CHILD_* variables into the
-     app's environment).  A real user's launch must not have demo
-     keystrokes injected 5 seconds in.  */
+  /* Automated runs synthesize keystrokes a few seconds after launch
+     so a screenshot captures a working session rather than the
+     startup splash.  This is gated on EMACS_IOS_AUTO_INPUT, which
+     simctl passes through as SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT, so
+     an ordinary launch is never driven.  The keys are sent from a
+     dedicated thread using sleep() rather than dispatch_after on the
+     main queue: taking a screenshot perturbs the app lifecycle in a
+     way that can drop queued main-queue blocks.  */
   if (getenv ("EMACS_IOS_AUTO_INPUT"))
     {
       pthread_t auto_thread;

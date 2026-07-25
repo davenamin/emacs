@@ -22,12 +22,11 @@
 
 ;;; Commentary:
 
-;; Battery of correctness checks the CI auto-input thread runs after
-;; the demo round-trip.  Each check writes one PASS / FAIL / SKIP line
-;; into ~/ios-test-results.txt; the workflow greps it and a single
-;; FAIL fails the run.  Designed to be self-contained -- no network,
-;; no UI interaction -- so it runs in the simulator's batch-ish
-;; auto-input flow without any human poking.
+;; Battery of correctness checks for the iOS port.  Each check writes
+;; one PASS, FAIL or SKIP line into ~/ios-test-results.txt, so an
+;; automated run can grep the file and fail on any FAIL.  The checks
+;; are self-contained -- no network and no UI interaction -- so they
+;; can run unattended in a simulator.
 
 ;;; Code:
 
@@ -333,19 +332,18 @@ Results land in ~/ios-test-results.txt; one line per test."
       (insert (mapconcat #'identity (nreverse ios-test--out) "")))
     (message "ios-run-self-tests: wrote %s" path)))
 
-;;; --- Font demo (visual, for CI screenshots) ----------------------
+;;; --- Font demo (visual) ------------------------------------------
 ;;
-;; The self-test battery grades things a screenshot cannot -- but
-;; shaping and coverage are the reverse: only visible to the eye.
-;; ios-show-font-demo fills a buffer with text that exercises Core
-;; Text shaping (Arabic joining, Devanagari/Tamil conjuncts and vowel
-;; reordering), script coverage (CJK, emoji), and the proportional /
-;; bold / italic faces, so the simulator screenshot the workflow
-;; captures can be eyeballed for correctness.  Strings are built from
-;; explicit code points to keep this source pure ASCII.
+;; Shaping and script coverage are hard to grade programmatically but
+;; obvious on sight.  `ios-show-font-demo' fills a buffer with text
+;; exercising Core Text shaping (Arabic joining, Devanagari and Tamil
+;; conjuncts and vowel reordering), script coverage (CJK, emoji) and
+;; the proportional, bold and italic faces, so a screenshot can be
+;; inspected for correctness.  Strings are built from explicit code
+;; points to keep this source pure ASCII.
 
 (defun ios-show-font-demo ()
-  "Display a buffer of shaped and non-Latin text for CI screenshots."
+  "Display a buffer of shaped and non-Latin text for visual inspection."
   (interactive)
   (let ((buf (get-buffer-create "*iOS Font Demo*")))
     (with-current-buffer buf
