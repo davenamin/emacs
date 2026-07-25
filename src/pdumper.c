@@ -4118,7 +4118,12 @@ types.  */)
 {
   eassert (initialized);
 
-#ifndef HAVE_ANDROID
+  /* Android and iOS dump themselves on the device the first time the
+     app starts, from inside loadup, which is not batch mode -- there
+     is no command line to pass -batch on and no separate build-time
+     dump step for a cross-built binary.  Both are exempt from this
+     restriction for that reason.  */
+#if !defined HAVE_ANDROID && !defined HAVE_IOS
   if (! noninteractive)
     error ("Dumping Emacs currently works only in batch mode.  "
            "If you'd like it to work interactively, please consider "
