@@ -961,15 +961,13 @@ load_pdump (int argc, char **argv, char *dump_file)
 	   dump_file, dump_error_to_string (result));
   return argv[0];
 #elif defined HAVE_IOS
-  /* iOS passes the sandbox dump path directly (there is no command
-     line).  Loading is best-effort: a missing dump (first launch) or
-     one rejected for a stale fingerprint (after an app update) leaves
-     Emacs uninitialized so main runs loadup.el, whose iOS branch
-     re-dumps for next launch.  Never fatal.  The outcome is logged to
-     stderr (captured in the app's emacs-stdout.log) so the load path
-     is visible without poking pdumper-stats: "could not open file" on
-     first launch, "not built for this Emacs executable" after an app
-     update, or "loaded dump" once the dump is in place.  */
+  /* iOS passes the sandbox dump path directly; there is no command
+     line to parse.  Loading is best-effort and never fatal: a missing
+     dump (first launch) or one rejected for a stale fingerprint (after
+     an app update) leaves Emacs uninitialized, so main runs loadup,
+     whose iOS branch dumps again for the next launch.  The outcome is
+     logged so the load path can be diagnosed from the app's captured
+     output.  */
   if (dump_file)
     {
       int result = pdumper_load (dump_file, argv[0]);

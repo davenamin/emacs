@@ -245,7 +245,7 @@ minibuffer exit is unconditional once shown by this hook."
 (autoload 'ios-run-self-tests "term/ios-tests"
   "Run the iOS port's functional self-tests." t)
 (autoload 'ios-show-font-demo "term/ios-tests"
-  "Show a buffer of shaped and non-Latin text for CI screenshots." t)
+  "Show a buffer of shaped and non-Latin text for visual inspection." t)
 
 (provide 'ios-win)
 

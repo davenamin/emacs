@@ -305,29 +305,14 @@ jobs:
           fi
           true
 
-      - name: Commit diagnostics back to branch
+      # Diagnostics are published as run artifacts rather than
+      # committed, so captured logs and screenshots stay out of the
+      # source tree.
+      - name: Upload diagnostics
         if: always()
-        run: |
-          set +e
-          git config user.name  "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          # The Emacs pre-commit hook rejects trailing whitespace in
-          # the staged file (the diagnostic output captures lines from
-          # configure/make stdout that legitimately have spaces at EOL).
-          # Strip them defensively before adding.  The screenshot is
-          # binary so no whitespace concerns.
-          if [ -f ci-diag/sim-install.txt ]; then
-            sed -i '' -E 's/[[:space:]]+$//' ci-diag/sim-install.txt 2>/dev/null \
-              || sed -i -E 's/[[:space:]]+$//' ci-diag/sim-install.txt
-          fi
-          git add ci-diag/sim-install.txt
-          if [ -f ci-diag/sim-screenshot.png ]; then
-            git add ci-diag/sim-screenshot.png
-          fi
-          git commit -m "ci-diag: simulator-install diagnostic results [skip ci]" || {
-            echo "nothing to commit"; exit 0; }
-          for i in 1 2 3 4; do
-            git pull --rebase origin claude/ios-port && git push origin HEAD:claude/ios-port && break
-            sleep $((i*2))
-          done
-          true
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sim-diagnostics
+          path: ci-diag/
+          if-no-files-found: warn
+          retention-days: 30

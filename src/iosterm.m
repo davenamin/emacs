@@ -113,9 +113,9 @@ extern void ios_canvas_set_background (unsigned long pixel);
 extern void ios_canvas_scroll (double x, double y,
                                double width, double height, double dy);
 
-/* Diagnostic counters: how many begin/end/draw calls we've seen.
-   Logged from update_end so a screenshot reveals whether the
-   redisplay engine is asking us to render anything.  */
+/* Counts of update_begin, update_end and glyph-draw calls, logged
+   from update_end to show whether redisplay is issuing any drawing
+   work.  */
 static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
 
 /* Input event queue + wake pipe.  Hoisted above ios_term_init so
@@ -952,8 +952,8 @@ ios_term_init (void)
   terminal->kboard = allocate_kboard (Qios);
   terminal->kboard->reference_count++;
 
-  /* Install the only real hooks we have for now.  Everything else is
-     NULL and the generic code checks before calling.  */
+  /* Hooks the port implements; the rest stay NULL, which the generic
+     code checks for before calling.  */
   terminal->read_socket_hook = ios_read_socket;
   terminal->defined_color_hook = ios_defined_color;
   terminal->update_begin_hook = ios_term_update_begin;
@@ -1109,15 +1109,14 @@ ios_enqueue_event (struct input_event *ie)
    ios_read_socket on the Emacs thread.  Only the most recent
    request matters; coalesced via overwrite under the lock.
 
-   The size is also debounced: layoutSubviews fires on every tick of
-   the keyboard-slide and rotation animations, publishing a stream of
-   intermediate (and sometimes degenerate) bounds.  Applying each one
-   means a change_frame_size -> full relayout -> redisplay per tick,
-   which flickers.  Instead each publish bumps ios_resize_generation
-   and schedules a settle check; a size is only marked valid (ready to
-   apply) once IOS_RESIZE_SETTLE_NSEC elapses with no newer publish
-   superseding it, so Emacs reflows once on the size the animation
-   lands on.  */
+   The size is also debounced.  layoutSubviews fires on every tick of
+   the keyboard-slide and rotation animations, and applying each
+   intermediate bounds means a change_frame_size, relayout and
+   redisplay per tick.  Each publish instead bumps
+   ios_resize_generation and schedules a settle check; the size is
+   marked valid only once IOS_RESIZE_SETTLE_NSEC elapses with no newer
+   publish superseding it, so Emacs reflows once, on the size the
+   animation lands on.  */
 static pthread_mutex_t ios_resize_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_pending_canvas_w = 0;
 static int ios_pending_canvas_h = 0;
