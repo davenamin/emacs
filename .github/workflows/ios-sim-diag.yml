@@ -240,21 +240,30 @@ jobs:
           fi
 
           # Self-test gate: any FAIL line in ios-test-results.txt
-          # fails the workflow.  Absent file is acceptable for older
-          # commits but flagged as a soft warning here so the
-          # diagnostic still shows.
+          # fails the workflow, and so does a run that produced no
+          # results at all -- an absent or empty file means Emacs
+          # never reached the self-tests, which is a failure and not
+          # a pass.  Counts and FAIL lines go to the job log as well
+          # as the diagnostic file, so the outcome is readable
+          # without downloading the artifact.
           RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
+          log ""
+          log "--- self-test summary ---"
           if [ -f "$RESULTS" ]; then
-            log ""
-            log "--- self-test summary ---"
-            grep -c '^PASS ' "$RESULTS" >> "$OUT" || true
+            PASSED=$(grep -c '^PASS ' "$RESULTS" || true)
+            log "PASS lines: $PASSED"
+            if [ "$PASSED" -eq 0 ]; then
+              log "self-tests produced no PASS lines"
+              FAILED_SELFTESTS=1
+            fi
             if grep -q '^FAIL ' "$RESULTS"; then
               log "self-tests failed:"
-              grep '^FAIL ' "$RESULTS" >> "$OUT" || true
+              grep '^FAIL ' "$RESULTS" | while IFS= read -r l; do log "  $l"; done
               FAILED_SELFTESTS=1
             fi
           else
-            log "(self-test results file absent)"
+            log "self-test results file absent"
+            FAILED_SELFTESTS=1
           fi
 
           # Fall back to the unified log for NSLog output -- captures
