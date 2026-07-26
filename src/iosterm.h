@@ -285,6 +285,9 @@ struct ios_key_event
    without importing UIKit.  */
 extern int ios_main (int argc, char **argv);
 extern void ios_enqueue_key_event (struct ios_key_event *ev);
+#ifdef __OBJC__
+extern unsigned int ios_first_codepoint (NSString *str);
+#endif
 extern char *ios_dump_path (void);
 extern struct terminal *ios_term_init (void);
 extern bool ios_defined_color (struct frame *, const char *,

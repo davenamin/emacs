@@ -914,26 +914,6 @@ ios_modifier_only_keycode (long hid)
           || hid == UIKeyboardHIDUsageKeyboardCapsLock);
 }
 
-/* First code point of STR, or 0 if STR is empty or is one of the
-   "UIKeyInput..." names UIKit substitutes for keys that stand for a
-   control character.  Apple documents comparing against those
-   constants (see "Input strings for special keys"); the Emacs thread
-   recognizes such keys by their key code instead.  */
-static unsigned int
-ios_first_codepoint (NSString *str)
-{
-  if (str.length == 0 || [str hasPrefix:@"UIKeyInput"])
-    return 0;
-  unichar c = [str characterAtIndex:0];
-  /* Reassemble a surrogate pair so astral characters survive.  */
-  if (c >= 0xd800 && c <= 0xdbff && str.length > 1)
-    {
-      unichar lo = [str characterAtIndex:1];
-      if (lo >= 0xdc00 && lo <= 0xdfff)
-        return 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
-    }
-  return c;
-}
 
 /* Copy KEY into the queue verbatim.  No interpretation happens here:
    the Emacs thread decides what the modifiers mean and which of the

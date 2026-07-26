@@ -1484,6 +1484,27 @@ ios_enqueue_key_event (struct ios_key_event *ev)
   ios_wake ();
 }
 
+/* First code point of STR, or 0 if STR is empty or is one of the
+   "UIKeyInput..." names UIKit substitutes for keys that stand for a
+   control character.  Apple documents comparing against those
+   constants (see "Input strings for special keys"); the Emacs thread
+   recognizes such keys by their key code instead.  */
+unsigned int
+ios_first_codepoint (NSString *str)
+{
+  if (str.length == 0 || [str hasPrefix:@"UIKeyInput"])
+    return 0;
+  unichar c = [str characterAtIndex:0];
+  /* Reassemble a surrogate pair so astral characters survive.  */
+  if (c >= 0xd800 && c <= 0xdbff && str.length > 1)
+    {
+      unichar lo = [str characterAtIndex:1];
+      if (lo >= 0xdc00 && lo <= 0xdfff)
+        return 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
+    }
+  return c;
+}
+
 /* Map a HID usage to the X11 keysym Emacs names function keys by, or
    0 when the key is an ordinary character key.  keyboard.c turns
    these into symbols such as `left' and `f1', which existing keymaps
@@ -1631,6 +1652,57 @@ ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
   ie->code = c;
   ie->modifiers = mods;
   return true;
+}
+
+DEFUN ("ios-translate-key", Fios_translate_key, Sios_translate_key,
+       2, 4, 0,
+       doc: /* Translate a hardware key press without pressing a key.
+KEY-CODE is a HID usage such as 41 for Escape, and FLAGS the UIKit
+modifier mask: 131072 Shift, 262144 Control, 524288 Option, 1048576
+Command.  CHARS and CHARS-PLAIN are the strings UIKit would report as
+the key's -characters and -charactersIgnoringModifiers, and may be
+omitted for keys that carry no character.
+
+Value is a list (KIND CODE MODIFIERS), where KIND is `ascii',
+`non-ascii' or `multibyte', CODE the character or X keysym, and
+MODIFIERS the Emacs modifier bits.  Value is nil if the press yields
+no event.  This runs the same translation hardware key presses use,
+so it can check key handling on a device or simulator that has no
+hardware keyboard attached.  */)
+  (Lisp_Object key_code, Lisp_Object flags, Lisp_Object chars,
+   Lisp_Object chars_plain)
+{
+  CHECK_FIXNUM (key_code);
+  CHECK_FIXNUM (flags);
+
+  struct ios_key_event ev;
+  ev.prepacked = false;
+  ev.key_code = XFIXNUM (key_code);
+  ev.modifier_flags = (unsigned int) XFIXNUM (flags);
+  ev.chars = 0;
+  ev.chars_plain = 0;
+
+  @autoreleasepool {
+    if (STRINGP (chars))
+      ev.chars = ios_first_codepoint
+        ([NSString stringWithUTF8String: SSDATA (chars)]);
+    if (STRINGP (chars_plain))
+      ev.chars_plain = ios_first_codepoint
+        ([NSString stringWithUTF8String: SSDATA (chars_plain)]);
+  }
+
+  struct input_event ie;
+  if (!ios_translate_key (&ev, &ie))
+    return Qnil;
+
+  Lisp_Object kind;
+  switch (ie.kind)
+    {
+    case NON_ASCII_KEYSTROKE_EVENT:      kind = Qnon_ascii; break;
+    case MULTIBYTE_CHAR_KEYSTROKE_EVENT: kind = Qmultibyte; break;
+    default:                             kind = Qascii; break;
+    }
+  return list3 (kind, make_fixnum (ie.code), make_fixnum (ie.modifiers));
 }
 
 /* Producer for the on-screen keyboard and the accessory bar, whose
@@ -1971,6 +2043,11 @@ syms_of_iosterm (void)
   DEFSYM (Qctrl, "ctrl");
   DEFSYM (Qmeta, "meta");
   DEFSYM (Qsuper, "super");
+
+  /* Qascii and Qnon_ascii come from charset.c and keymap.c, which
+     every build compiles.  */
+  DEFSYM (Qmultibyte, "multibyte");
+  defsubr (&Sios_translate_key);
 
   DEFVAR_LISP ("ios-option-modifier", Vios_option_modifier,
      doc: /* Modifier the Option key produces.
