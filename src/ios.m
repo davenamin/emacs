@@ -756,16 +756,14 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
      autocompletion, a dictation result, a paste -- and applying the
      latch to each in turn would turn a single armed Ctrl into a run
      of control characters.  */
-  unsigned mods = ios_sticky_mods;
-  if (mods != 0)
-    ios_set_sticky_mods (0);
+  int mods = ios_take_sticky_mods ();
 
   NSUInteger i = 0;
   while (i < text.length)
     {
       unichar c = [text characterAtIndex:i];
       i++;
-      int code = c;
+      unsigned int code = c;
       /* Rejoin a surrogate pair, so characters outside the basic
          plane -- emoji among them -- survive as one code point.  */
       if (c >= 0xd800 && c <= 0xdbff && i < text.length)
@@ -778,15 +776,17 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
             }
         }
 
-      int packed = code | (int) mods;
-      /* Map control-letter combos to the canonical 0x01..0x1A, the
-         same convention ios_translate_key applies to hardware keys,
-         so existing keymaps match.  */
-      if ((mods & CHAR_CTL) && code >= 'a' && code <= 'z')
-        packed = (code - 'a' + 1) | (mods & ~CHAR_CTL);
-      else if ((mods & CHAR_CTL) && code >= 'A' && code <= 'Z')
-        packed = (code - 'A' + 1) | (mods & ~CHAR_CTL);
-      ios_enqueue_key (packed);
+      /* Queued as a character with no key code, so the one copy of
+         the modifier and control-folding rules, in ios_translate_key,
+         applies to typed text as it does to hardware keys.  */
+      struct ios_key_event ev;
+      ev.prepacked = false;
+      ev.key_code = 0;
+      ev.modifier_flags = 0;
+      ev.chars = code;
+      ev.chars_plain = code;
+      ev.sticky_mods = mods;
+      ios_enqueue_key_event (&ev);
       mods = 0;
     }
 }
@@ -851,6 +851,18 @@ ios_set_sticky_mods (unsigned mods)
       [meta setTitleColor:(on ? UIColor.whiteColor : nil)
                  forState:UIControlStateNormal];
     }
+}
+
+/* Return the latched modifiers and release them.  Called by each
+   producer as it enqueues, so the latch is consumed by whatever the
+   user types next, on either keyboard.  */
+static int
+ios_take_sticky_mods (void)
+{
+  int mods = (int) ios_sticky_mods;
+  if (mods != 0)
+    ios_set_sticky_mods (0);
+  return mods;
 }
 
 - (UIView *) inputAccessoryView
@@ -934,11 +946,10 @@ ios_emit_keysym (unsigned xk)
   EVENT_INIT (ie);
   ie.kind = NON_ASCII_KEYSTROKE_EVENT;
   ie.code = xk;
-  ie.modifiers = (int) ios_sticky_mods;
+  ie.modifiers = ios_take_sticky_mods ();
   ie.frame_or_window = Qnil;
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
-  ios_set_sticky_mods (0);
 }
 
 - (void) accStickyCtrl
@@ -949,22 +960,30 @@ ios_emit_keysym (unsigned xk)
 {
   ios_set_sticky_mods (ios_sticky_mods ^ CHAR_META);
 }
-- (void) accEsc        { ios_enqueue_key (0x1b); }
-- (void) accTab        { ios_enqueue_key (0x09); }
+- (void) accEsc        { ios_enqueue_key (0x1b | ios_take_sticky_mods ()); }
+- (void) accTab        { ios_enqueue_key (0x09 | ios_take_sticky_mods ()); }
 /* C-g: the quit character.  read_socket's store path recognizes
    it and sets Vquit_flag immediately, and the polling atimer
    drains our queue even while Lisp is busy, so this gives
    touch-only users a working quit -- without it a stuck
-   minibuffer prompt is inescapable.  */
-- (void) accCg         { ios_enqueue_key (0x07); }
+   minibuffer prompt is inescapable.  Any latched modifier is
+   discarded rather than applied: quitting has to mean quitting, and
+   leaving the latch armed would spend it on the next key.  */
+- (void) accCg
+{
+  ios_take_sticky_mods ();
+  ios_enqueue_key (0x07);
+}
 - (void) accLeft       { ios_emit_keysym (0xff51); }
 - (void) accUp         { ios_emit_keysym (0xff52); }
 - (void) accRight      { ios_emit_keysym (0xff53); }
 - (void) accDown       { ios_emit_keysym (0xff54); }
 - (void) accMx
 {
-  /* M-x runs execute-extended-command in the standard global map.  */
-  ios_enqueue_key (CHAR_META | 'x');
+  /* M-x runs execute-extended-command in the standard global map.
+     A latched modifier still applies, so Ctrl then M-x reaches
+     C-M-x.  */
+  ios_enqueue_key (CHAR_META | 'x' | ios_take_sticky_mods ());
 }
 
 
@@ -1002,6 +1021,10 @@ ios_queue_uikey (UIKey *key)
       || (ev.key_code == 0 && ev.chars == 0 && ev.chars_plain == 0))
     return NO;
 
+  /* Taken only once the press is known to produce something, so
+     holding Shift on the hardware keyboard does not silently spend a
+     modifier latched on the bar.  */
+  ev.sticky_mods = ios_take_sticky_mods ();
   ios_enqueue_key_event (&ev);
   return YES;
 }
