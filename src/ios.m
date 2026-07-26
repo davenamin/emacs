@@ -93,20 +93,41 @@ __weak static UITextView *ios_log_view = nil;
    reachable through the Files app or the simulator's data container.
    The line is also appended to the on-screen log view, if one is
    installed, so startup progress is visible on the device.  */
+/* Whether the launch log is recorded at all.  Off unless
+   EMACS_IOS_DEBUG_LOG is set, which is how the simulator diagnostic
+   runs the app.  Every message otherwise costs an entry in the
+   unified log and an open, append and close of a file in the app's
+   container, for the life of the process; writing to flash is among
+   the more expensive things a device does, and a shipping app should
+   not pay for it to record progress nobody reads.  */
+static bool
+ios_logging_enabled (void)
+{
+  static bool enabled;
+  static dispatch_once_t once;
+  dispatch_once (&once, ^{
+    enabled = (getenv ("EMACS_IOS_DEBUG_LOG") != NULL);
+  });
+  return enabled;
+}
+
 void
 ios_launch_log (NSString *msg)
 {
-  NSLog (@"emacs-launch: %@", msg);
-  NSString *path = ios_documents_path (@"emacs-launch.log");
-  if (path)
+  if (ios_logging_enabled ())
     {
-      NSString *line = [NSString stringWithFormat:@"%@ %@\n",
-                        [NSDate date], msg];
-      FILE *f = fopen (path.UTF8String, "a");
-      if (f != NULL)
+      NSLog (@"emacs-launch: %@", msg);
+      NSString *path = ios_documents_path (@"emacs-launch.log");
+      if (path)
         {
-          fputs (line.UTF8String, f);
-          fclose (f);
+          NSString *line = [NSString stringWithFormat:@"%@ %@\n",
+                            [NSDate date], msg];
+          FILE *f = fopen (path.UTF8String, "a");
+          if (f != NULL)
+            {
+              fputs (line.UTF8String, f);
+              fclose (f);
+            }
         }
     }
 
@@ -129,10 +150,17 @@ ios_launch_log (NSString *msg)
    printf/fprintf the C-side Emacs code emits is captured.  iOS apps
    have no controlling terminal; without this redirect those writes
    would be silently dropped.  Line-buffered so the trail is fresh
-   even if the process crashes mid-init.  */
+   even if the process crashes mid-init.
+
+   Only when logging is enabled: line buffering turns each line into
+   its own write to flash, and loadup alone emits hundreds of them.
+   Left unredirected the same writes are simply discarded, which
+   costs nothing.  */
 static void
 ios_redirect_stdio (void)
 {
+  if (!ios_logging_enabled ())
+    return;
   NSString *path = ios_documents_path (@"emacs-stdout.log");
   if (!path)
     return;
@@ -395,6 +423,9 @@ extern void ios_publish_pinch (double x, double y, double dx, double dy,
      device scale.  */
   CGContextRef _backing;
   CGFloat _backingW, _backingH, _backingScale;
+  /* Set whenever the backing store is painted into, cleared once a
+     composite has been requested for it.  */
+  BOOL _dirty;
   uint32_t _bgPixel;
   NSLock *_lock;
   /* Non-nil replaces the system keyboard; see
@@ -689,6 +720,7 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
   _backingW = sz.width;
   _backingH = sz.height;
   _backingScale = scale;
+  _dirty = YES;
 }
 
 - (void) setBackgroundPixel:(uint32_t)pixel
@@ -1046,6 +1078,7 @@ ios_queue_uikey (UIKey *key)
   [_lock lock];
   if (_backing != NULL)
     {
+      _dirty = YES;
       if (cmd.kind == EmacsDrawKindShift)
         [self renderShift:cmd];
       else
@@ -1092,14 +1125,23 @@ ios_queue_uikey (UIKey *key)
 }
 
 /* Redisplay tick brackets.  Painting is immediate, so opening a
-   tick needs no work; closing one requests a composite of the
-   backing store.  */
+   tick needs no work; closing one composites the backing store, but
+   only if something was painted into it.  Redisplay runs ticks that
+   draw nothing -- the device logs show `draws=0' -- and compositing
+   for those spends a full-screen blit to put back the pixels that
+   are already on screen.  */
 - (void) beginFrame
 {
 }
 
 - (void) endFrame
 {
+  [_lock lock];
+  BOOL dirty = _dirty;
+  _dirty = NO;
+  [_lock unlock];
+  if (!dirty)
+    return;
   dispatch_async (dispatch_get_main_queue (), ^{
     [self setNeedsDisplay];
   });
