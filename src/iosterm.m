@@ -1573,12 +1573,14 @@ ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
     {
       ie->kind = ASCII_KEYSTROKE_EVENT;
       ie->code = ev->chars & ((1 << CHARACTERBITS) - 1);
-      ie->modifiers = ev->chars & CHAR_MODIFIER_MASK;
+      ie->modifiers = (ev->chars & CHAR_MODIFIER_MASK) | ev->sticky_mods;
       return true;
     }
 
   unsigned int flags = ev->modifier_flags;
-  int mods = 0;
+  /* Modifiers latched on the accessory bar apply to this press
+     whichever keyboard produced it.  */
+  int mods = ev->sticky_mods;
   if (flags & UIKeyModifierControl)
     mods |= ios_modifier_bit (Vios_control_modifier);
   if (flags & UIKeyModifierAlternate)
@@ -1653,13 +1655,14 @@ ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
 }
 
 DEFUN ("ios-translate-key", Fios_translate_key, Sios_translate_key,
-       2, 4, 0,
+       2, 5, 0,
        doc: /* Translate a hardware key press without pressing a key.
 KEY-CODE is a HID usage such as 41 for Escape, and FLAGS the UIKit
 modifier mask: 131072 Shift, 262144 Control, 524288 Option, 1048576
 Command.  CHARS and CHARS-PLAIN are the strings UIKit would report as
 the key's -characters and -charactersIgnoringModifiers, and may be
-omitted for keys that carry no character.
+omitted for keys that carry no character.  STICKY is the Emacs
+modifier bits latched on the accessory bar, if any.
 
 Value is a list (KIND CODE MODIFIERS), where KIND is `ascii',
 `non-ascii' or `multibyte', CODE the character or X keysym, and
@@ -1668,7 +1671,7 @@ no event.  This runs the same translation hardware key presses use,
 so it can check key handling on a device or simulator that has no
 hardware keyboard attached.  */)
   (Lisp_Object key_code, Lisp_Object flags, Lisp_Object chars,
-   Lisp_Object chars_plain)
+   Lisp_Object chars_plain, Lisp_Object sticky)
 {
   CHECK_FIXNUM (key_code);
   CHECK_FIXNUM (flags);
@@ -1679,6 +1682,7 @@ hardware keyboard attached.  */)
   ev.modifier_flags = (unsigned int) XFIXNUM (flags);
   ev.chars = 0;
   ev.chars_plain = 0;
+  ev.sticky_mods = FIXNUMP (sticky) ? XFIXNUM (sticky) : 0;
 
   @autoreleasepool {
     if (STRINGP (chars))
@@ -1714,6 +1718,7 @@ ios_enqueue_key (int codepoint)
   ev.modifier_flags = 0;
   ev.chars = (unsigned int) codepoint;
   ev.chars_plain = 0;
+  ev.sticky_mods = 0;
   ios_enqueue_key_event (&ev);
 }
 

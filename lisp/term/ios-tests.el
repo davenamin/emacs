@@ -396,7 +396,35 @@ Results land in ~/ios-test-results.txt; one line per test."
 
       (ios-test-deftest key-modifier-only-press
         "a press with neither key code nor character yields nothing"
-        (cl-assert (null (xlate 0 option))))))
+        (cl-assert (null (xlate 0 option))))
+
+      ;; The accessory bar stays on screen with a hardware keyboard
+      ;; attached, so a modifier latched there is taken by the next
+      ;; key from either keyboard.
+
+      (ios-test-deftest key-latched-ctrl-reaches-hardware
+        "a latched Ctrl folds a hardware letter to its control code"
+        (cl-assert (equal '(ascii 1 0)
+                          (xlate hid-a 0 "a" "a" (ash 1 26)))))
+
+      (ios-test-deftest key-latched-meta-reaches-hardware
+        "a latched Meta sets Meta on a hardware letter"
+        (let ((r (xlate hid-a 0 "a" "a" (ash 1 27))))
+          (cl-assert (= ?a (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-latched-modifier-on-function-key
+        "a latched modifier reaches a function key too"
+        (let ((r (xlate hid-left 0 nil nil (ash 1 27))))
+          (cl-assert (eq 'non-ascii (nth 0 r)))
+          (cl-assert (= #xff51 (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-latched-combines-with-held
+        "a latched Meta combines with a Control held on the keyboard"
+        (let ((r (xlate hid-a control "a" "a" (ash 1 27))))
+          (cl-assert (= 1 (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))))
 
   ;;; --- Write the results -----------------------------------------
 

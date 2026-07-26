@@ -266,10 +266,15 @@ extern struct ios_display_info *x_display_list;
    one of the "UIKeyInput..." names UIKit reports for special keys
    (those are recognized by KEY_CODE instead).
 
-   PREPACKED marks the other producer: the on-screen keyboard and the
-   accessory bar hand over a character that already carries its Emacs
-   modifier bits, so CHARS is used as-is and the other fields are
-   ignored.  */
+   PREPACKED marks the accessory bar's own keys, which hand over a
+   character that already carries its Emacs modifier bits, so CHARS is
+   used as-is and KEY_CODE and MODIFIER_FLAGS are ignored.
+
+   STICKY_MODS carries the Emacs modifier bits latched on the accessory
+   bar when this press happened.  The bar is on screen whether or not
+   a hardware keyboard is attached, so the latch is taken by whichever
+   input arrives next, and is stamped here because the state belongs
+   to the UIKit thread that owns the buttons.  */
 
 struct ios_key_event
 {
@@ -278,6 +283,7 @@ struct ios_key_event
   unsigned int modifier_flags;  /* Raw UIKeyModifierFlags.  */
   unsigned int chars;
   unsigned int chars_plain;
+  int sticky_mods;
 };
 
 /* Everything the UIKit side sends to the Emacs thread travels in one
