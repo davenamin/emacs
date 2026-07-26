@@ -325,6 +325,79 @@ Results land in ~/ios-test-results.txt; one line per test."
       (cl-assert (stringp dir))
       (cl-assert (file-exists-p (expand-file-name "dir" dir)))))
 
+  ;;; --- Hardware key translation -----------------------------------
+
+  ;; `ios-translate-key' runs the same translation a real key press
+  ;; goes through, so these cover the hardware keyboard path on a
+  ;; simulator that has none attached.  HID usages and modifier masks
+  ;; are written out rather than named, since UIKit's constants are
+  ;; not visible from Lisp.
+
+  (let ((hid-a 4) (hid-comma 54) (hid-f 9)
+        (hid-escape 41) (hid-tab 43) (hid-return 40) (hid-left 80)
+        (shift 131072) (control 262144) (option 524288))
+    (cl-flet ((xlate (&rest args) (apply #'ios-translate-key args)))
+
+      (ios-test-deftest key-escape-is-esc
+        "Escape yields ESC, not the first letter of UIKeyInputEscape"
+        ;; UIKit reports the placeholder name as the key's characters;
+        ;; reading its first letter would produce `U'.
+        (cl-assert (equal '(ascii 27 0)
+                          (xlate hid-escape 0
+                                 "UIKeyInputEscape" "UIKeyInputEscape"))))
+
+      (ios-test-deftest key-tab-and-return
+        "Tab and Return yield their control codes"
+        (cl-assert (equal '(ascii 9 0) (xlate hid-tab 0)))
+        (cl-assert (equal '(ascii 13 0) (xlate hid-return 0))))
+
+      (ios-test-deftest key-arrow-is-function-key
+        "Left arrow yields the XK_Left keysym as a non-ASCII event"
+        (cl-assert (equal '(non-ascii #xff51 0) (xlate hid-left 0))))
+
+      (ios-test-deftest key-plain-letter
+        "an unmodified letter passes through"
+        (cl-assert (equal (list 'ascii ?a 0) (xlate hid-a 0 "a" "a"))))
+
+      (ios-test-deftest key-control-letter-folds
+        "C-a folds to 1, and Shift does not change that"
+        (cl-assert (equal '(ascii 1 0) (xlate hid-a control "a" "a")))
+        (cl-assert (equal '(ascii 1 0)
+                          (xlate hid-a (logior control shift) "A" "a"))))
+
+      (ios-test-deftest key-option-is-meta
+        "Option-f is M-f rather than Meta plus the alternate glyph"
+        ;; -characters reports the Option layer's florin sign here.
+        (let ((r (xlate hid-f option (string #x192) "f")))
+          (cl-assert (eq 'ascii (nth 0 r)))
+          (cl-assert (= ?f (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-option-none-keeps-layer
+        "with ios-option-modifier nil, Option enters the layer glyph"
+        (let ((ios-option-modifier nil))
+          (let ((r (xlate hid-f option (string #x192) "f")))
+            (cl-assert (= #x192 (nth 1 r)))
+            (cl-assert (= 0 (logand (nth 2 r) (ash 1 27)))))))
+
+      (ios-test-deftest key-control-keeps-shift
+        "Control combinations keep the shifted character"
+        ;; -charactersIgnoringModifiers is always unshifted, so using
+        ;; it for Control would turn C-< into C-comma.
+        (cl-assert (equal (list 'ascii ?< (ash 1 26))
+                          (xlate hid-comma (logior control shift)
+                                 "<" ","))))
+
+      (ios-test-deftest key-extra-keyboard-modifiers
+        "extra-keyboard-modifiers is merged in"
+        (let ((extra-keyboard-modifiers (ash 1 27)))
+          (cl-assert (/= 0 (logand (nth 2 (xlate hid-a 0 "a" "a"))
+                                   (ash 1 27))))))
+
+      (ios-test-deftest key-modifier-only-press
+        "a press with neither key code nor character yields nothing"
+        (cl-assert (null (xlate 0 option))))))
+
   ;;; --- Write the results -----------------------------------------
 
   (let ((path (expand-file-name "ios-test-results.txt" "~")))
