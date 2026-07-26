@@ -698,9 +698,8 @@ ios_term_update_end (struct frame *f)
   if (f && FRAME_IOS_P (f))
     ios_canvas_set_background (FRAME_BACKGROUND_PIXEL (f));
   ios_canvas_end_frame ();
-  /* Light heartbeat: first few ticks then every 100th, with the
-     root window's live dims.  Cheap and has repeatedly proven its
-     diagnostic worth during bring-up.  */
+  /* Heartbeat for the launch log: the first few ticks and every
+     hundredth after that, with the root window's live dimensions.  */
   if (ios_dbg_end <= 3 || (ios_dbg_end % 100) == 0)
     {
       struct window *rootw = XWINDOW (FRAME_ROOT_WINDOW (f));
