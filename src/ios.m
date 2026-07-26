@@ -902,9 +902,6 @@ ios_emit_keysym (unsigned xk)
 }
 
 
-/* Translate a UIKey into the packed codepoint+modifiers our queue
-   expects.  Returns -1 if the key has no codepoint we know how to
-   handle (raw modifier presses, dead keys, etc).  */
 /* Translate UIKey modifier flags into Emacs CHAR_* bits.
    Option maps to Meta and Command to Super, matching the macOS
    port's default conventions.  Shift is only included when
@@ -923,6 +920,47 @@ ios_mods_from_flags (UIKeyModifierFlags m, bool include_shift)
   return mods;
 }
 
+/* Return the shifted form of the unshifted character C.
+   -charactersIgnoringModifiers drops Shift along with everything
+   else, so a combination that uses both Meta and Shift arrives
+   unshifted: M-< would reach Emacs as M-, and run the binding for
+   that instead.  Letters shift layout-independently; the punctuation
+   row assumes the US layout.  */
+static unichar
+ios_apply_shift (unichar c)
+{
+  if (c >= 'a' && c <= 'z')
+    return c - 'a' + 'A';
+  switch (c)
+    {
+    case '1': return '!';
+    case '2': return '@';
+    case '3': return '#';
+    case '4': return '$';
+    case '5': return '%';
+    case '6': return '^';
+    case '7': return '&';
+    case '8': return '*';
+    case '9': return '(';
+    case '0': return ')';
+    case '-': return '_';
+    case '=': return '+';
+    case '[': return '{';
+    case ']': return '}';
+    case '\\': return '|';
+    case ';': return ':';
+    case '\'': return '"';
+    case ',': return '<';
+    case '.': return '>';
+    case '/': return '?';
+    case '`': return '~';
+    default:  return c;
+    }
+}
+
+/* Translate a UIKey into the packed codepoint+modifiers our queue
+   expects.  Returns -1 if the key has no codepoint we know how to
+   handle (raw modifier presses, dead keys, etc).  */
 static int
 ios_pack_uikey (UIKey *key)
 {
@@ -952,21 +990,26 @@ ios_pack_uikey (UIKey *key)
     }
 
   /* For Control and Option combos prefer
-     charactersIgnoringModifiers: C-Shift-a must produce 'a' (the
-     canonicalization below turns it into 0x01), and with Option
-     acting as Meta, key.characters would be the Option-layer
-     glyph -- Option-f is a florin sign on a US layout -- so M-f
-     would arrive as Meta plus that glyph instead of Meta-f.  For
-     everything else use characters, which applies Shift
+     charactersIgnoringModifiers, because with Option acting as Meta
+     key.characters is the Option-layer glyph -- Option-f is a florin
+     sign on a US layout -- so M-f would arrive as Meta plus that
+     glyph.  That string drops Shift too, which is restored below.
+     For everything else use characters, which applies Shift
      layout-correctly: Shift+a is "A", Shift+1 on US is "!".  */
+  bool unshifted =
+    (key.modifierFlags & (UIKeyModifierControl | UIKeyModifierAlternate)) != 0;
   NSString *chars =
-    (key.modifierFlags & (UIKeyModifierControl | UIKeyModifierAlternate))
-    ? key.charactersIgnoringModifiers
-    : key.characters;
+    unshifted ? key.charactersIgnoringModifiers : key.characters;
   if (chars.length == 0)
-    chars = key.characters;
+    {
+      chars = key.characters;
+      unshifted = false;
+    }
   if (chars.length == 0)
-    chars = key.charactersIgnoringModifiers;
+    {
+      chars = key.charactersIgnoringModifiers;
+      unshifted = true;
+    }
   if (chars.length == 0)
     return -1;
 
@@ -977,6 +1020,9 @@ ios_pack_uikey (UIKey *key)
     return -1;
 
   unichar c = [chars characterAtIndex:0];
+  if (unshifted && (key.modifierFlags & UIKeyModifierShift))
+    c = ios_apply_shift (c);
+
   /* Most ASCII control-letter combos: Control flips the high
      bits.  For C-a we want code 1 ('a' & 0x1f), not 'a' with
      CHAR_CTL set -- Emacs accepts either but treating it like
