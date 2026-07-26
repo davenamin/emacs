@@ -750,22 +750,45 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
 
 - (void) insertText:(NSString *)text
 {
-  for (NSUInteger i = 0; i < text.length; i++)
+  /* The sticky modifiers apply to the first character only and are
+     then released, matching the platform convention for latching
+     modifiers.  TEXT is frequently more than one character -- an
+     autocompletion, a dictation result, a paste -- and applying the
+     latch to each in turn would turn a single armed Ctrl into a run
+     of control characters.  */
+  unsigned mods = ios_sticky_mods;
+  if (mods != 0)
+    ios_set_sticky_mods (0);
+
+  NSUInteger i = 0;
+  while (i < text.length)
     {
       unichar c = [text characterAtIndex:i];
-      int packed = (int) c | (int) ios_sticky_mods;
+      i++;
+      int code = c;
+      /* Rejoin a surrogate pair, so characters outside the basic
+         plane -- emoji among them -- survive as one code point.  */
+      if (c >= 0xd800 && c <= 0xdbff && i < text.length)
+        {
+          unichar lo = [text characterAtIndex:i];
+          if (lo >= 0xdc00 && lo <= 0xdfff)
+            {
+              code = 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
+              i++;
+            }
+        }
+
+      int packed = code | (int) mods;
       /* Map control-letter combos to the canonical 0x01..0x1A, the
          same convention ios_translate_key applies to hardware keys,
          so existing keymaps match.  */
-      if ((ios_sticky_mods & CHAR_CTL) && c >= 'a' && c <= 'z')
-        packed = (c - 'a' + 1) | (ios_sticky_mods & ~CHAR_CTL);
-      else if ((ios_sticky_mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
-        packed = (c - 'A' + 1) | (ios_sticky_mods & ~CHAR_CTL);
+      if ((mods & CHAR_CTL) && code >= 'a' && code <= 'z')
+        packed = (code - 'a' + 1) | (mods & ~CHAR_CTL);
+      else if ((mods & CHAR_CTL) && code >= 'A' && code <= 'Z')
+        packed = (code - 'A' + 1) | (mods & ~CHAR_CTL);
       ios_enqueue_key (packed);
+      mods = 0;
     }
-  /* Sticky modifiers apply to one character then clear, matching
-     the iOS sticky-key convention.  */
-  ios_sticky_mods = 0;
 }
 
 - (void) deleteBackward
@@ -792,10 +815,43 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
 
 /* Accessory bar sitting above the soft keyboard with the
    Emacs-specific chord keys (Ctrl, Meta, Esc, Tab, M-x) that
-   iOS doesn't expose elsewhere.  Tapping a modifier toggles a
-   sticky bit; the next typed character is packed with the
-   accumulated modifiers and then the sticky state resets.  */
+   iOS doesn't expose elsewhere.  Tapping a modifier latches it
+   until the next character is typed, which is packed with the
+   accumulated modifiers and releases them.  */
 static unsigned ios_sticky_mods = 0;
+
+/* The two latching buttons, so their appearance can follow the state
+   above.  Weak so the bar can deallocate normally.  */
+__weak static UIButton *ios_sticky_ctrl_button = nil;
+__weak static UIButton *ios_sticky_meta_button = nil;
+
+/* Set the sticky modifiers to MODS and show that on the bar.  Every
+   change goes through here: a latch the user cannot see is a mode
+   they cannot get out of.  Main thread only, which is where both the
+   button handlers and the text input callbacks run.  */
+static void
+ios_set_sticky_mods (unsigned mods)
+{
+  ios_sticky_mods = mods;
+  UIColor *idle = [UIColor.systemGrayColor colorWithAlphaComponent:0.25];
+  UIColor *armed = UIColor.systemBlueColor;
+  UIButton *ctrl = ios_sticky_ctrl_button;
+  UIButton *meta = ios_sticky_meta_button;
+  if (ctrl != nil)
+    {
+      bool on = (mods & CHAR_CTL) != 0;
+      ctrl.backgroundColor = on ? armed : idle;
+      [ctrl setTitleColor:(on ? UIColor.whiteColor : nil)
+                 forState:UIControlStateNormal];
+    }
+  if (meta != nil)
+    {
+      bool on = (mods & CHAR_META) != 0;
+      meta.backgroundColor = on ? armed : idle;
+      [meta setTitleColor:(on ? UIColor.whiteColor : nil)
+                 forState:UIControlStateNormal];
+    }
+}
 
 - (UIView *) inputAccessoryView
 {
@@ -852,8 +908,12 @@ static unsigned ios_sticky_mods = 0;
     return b;
   };
   [row addArrangedSubview:mk (@"Esc",  @selector (accEsc))];
-  [row addArrangedSubview:mk (@"Ctrl", @selector (accStickyCtrl))];
-  [row addArrangedSubview:mk (@"Meta", @selector (accStickyMeta))];
+  UIButton *ctrl_button = mk (@"Ctrl", @selector (accStickyCtrl));
+  UIButton *meta_button = mk (@"Meta", @selector (accStickyMeta));
+  ios_sticky_ctrl_button = ctrl_button;
+  ios_sticky_meta_button = meta_button;
+  [row addArrangedSubview:ctrl_button];
+  [row addArrangedSubview:meta_button];
   [row addArrangedSubview:mk (@"Tab",  @selector (accTab))];
   [row addArrangedSubview:mk (@"C-g",  @selector (accCg))];
   [row addArrangedSubview:mk (@"←", @selector (accLeft))];
@@ -878,11 +938,17 @@ ios_emit_keysym (unsigned xk)
   ie.frame_or_window = Qnil;
   ie.timestamp = 0;
   ios_enqueue_event (&ie);
-  ios_sticky_mods = 0;
+  ios_set_sticky_mods (0);
 }
 
-- (void) accStickyCtrl { ios_sticky_mods ^= CHAR_CTL; }
-- (void) accStickyMeta { ios_sticky_mods ^= CHAR_META; }
+- (void) accStickyCtrl
+{
+  ios_set_sticky_mods (ios_sticky_mods ^ CHAR_CTL);
+}
+- (void) accStickyMeta
+{
+  ios_set_sticky_mods (ios_sticky_mods ^ CHAR_META);
+}
 - (void) accEsc        { ios_enqueue_key (0x1b); }
 - (void) accTab        { ios_enqueue_key (0x09); }
 /* C-g: the quit character.  read_socket's store path recognizes
