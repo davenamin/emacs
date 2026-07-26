@@ -280,6 +280,34 @@ struct ios_key_event
   unsigned int chars_plain;
 };
 
+/* Everything the UIKit side sends to the Emacs thread travels in one
+   queue, in the order it happened.  Keeping keys and pointer events
+   in separate queues meant one had to be drained before the other,
+   which discarded their relative order: clicking to set point and
+   then typing was indistinguishable from typing and then clicking.
+
+   A key press cannot be turned into an input_event until it reaches
+   the Emacs thread, where the modifier variables can be read, while a
+   pointer event is complete when UIKit reports it.  The union carries
+   whichever form applies, and the drain either translates it or
+   stores it directly.  */
+
+enum ios_event_kind
+{
+  IOS_EVENT_KEY,       /* Needs ios_translate_key.  */
+  IOS_EVENT_BUILT      /* Already an input_event.  */
+};
+
+struct ios_event
+{
+  enum ios_event_kind kind;
+  union
+  {
+    struct ios_key_event key;
+    struct input_event built;
+  } u;
+};
+
 /* Entry points implemented in src/ios.m and src/iosterm.m.  Declared
    here so plain C code (emacs.c, keyboard.c, pdumper.c) can call them
    without importing UIKit.  */

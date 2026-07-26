@@ -118,11 +118,12 @@ extern void ios_canvas_scroll (double x, double y,
    work.  */
 static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
 
-/* Input event queue + wake pipe.  Hoisted above ios_term_init so
-   the pipe-setup code there sees the storage; the queue plumbing
-   itself is defined further down.  */
+/* The single input queue, carrying key presses and pointer events
+   alike so their order survives, plus the wake pipe.  Hoisted above
+   ios_term_init so the pipe-setup code there sees the storage; the
+   queue plumbing itself is defined further down.  */
 #define IOS_INPUT_QUEUE_CAP 256
-static struct ios_key_event ios_input_queue[IOS_INPUT_QUEUE_CAP];
+static struct ios_event ios_input_queue[IOS_INPUT_QUEUE_CAP];
 static int ios_input_head = 0, ios_input_tail = 0;
 static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_wake_pipe[2] = { -1, -1 };
@@ -1079,29 +1080,33 @@ ios_wake (void)
     }
 }
 
-/* Queue for "rich" events (mouse clicks) alongside the keystroke
-   queue.  Producer (UI thread) appends; consumer (ios_read_socket)
-   drains and hands each to kbd_buffer_store_event_hold.  Capacity
-   is small -- gestures rarely buffer up.  */
-#define IOS_EVENT_QUEUE_CAP 64
-static struct input_event ios_event_queue[IOS_EVENT_QUEUE_CAP];
-static int ios_event_head = 0, ios_event_tail = 0;
-
-/* C-callable producer for a single fully-formed input_event.
-   Called from the UI thread.  Drops on overflow.  Wakes the
-   wait-for-input select() through the same pipe as keys.  */
-void
-ios_enqueue_event (struct input_event *ie)
+/* Append EV to the queue, or drop it if the queue is full: losing an
+   event beats blocking the UI thread.  Producers all run on the UIKit
+   thread; the consumer is ios_read_socket.  Waking the wait-for-input
+   select() through the pipe is what gets the drain to run.  */
+static void
+ios_enqueue (struct ios_event *ev)
 {
   pthread_mutex_lock (&ios_input_lock);
-  int next = (ios_event_tail + 1) % IOS_EVENT_QUEUE_CAP;
-  if (next != ios_event_head)
+  int next = (ios_input_tail + 1) % IOS_INPUT_QUEUE_CAP;
+  if (next != ios_input_head)
     {
-      ios_event_queue[ios_event_tail] = *ie;
-      ios_event_tail = next;
+      ios_input_queue[ios_input_tail] = *ev;
+      ios_input_tail = next;
     }
   pthread_mutex_unlock (&ios_input_lock);
   ios_wake ();
+}
+
+/* C-callable producer for a single fully-formed input_event, used for
+   pointer and gesture events, which UIKit reports complete.  */
+void
+ios_enqueue_event (struct input_event *ie)
+{
+  struct ios_event ev;
+  ev.kind = IOS_EVENT_BUILT;
+  ev.u.built = *ie;
+  ios_enqueue (&ev);
 }
 
 /* Pending canvas resize, published from EmacsUIView's
@@ -1461,27 +1466,17 @@ ios_apply_pending_resize (void)
                    w, h, FRAME_COLS (f), FRAME_LINES (f)]);
 }
 
-/* The key-event queue carries raw UIKit key presses; see struct
-   ios_key_event in iosterm.h for why nothing is interpreted before
-   this point.  ios_translate_key, below, turns them into input_events
-   on the Emacs thread.  */
-
-/* C-callable producer.  Called from UI thread.  Drops the event
-   on a full queue (better to lose a key than block UIKit), then
-   writes a byte to the wake pipe so wait_reading_process_input
-   returns and read_socket_hook fires.  */
+/* C-callable producer for a raw key press; see struct ios_key_event
+   in iosterm.h for why nothing is interpreted before this point.
+   ios_translate_key, below, turns these into input_events once they
+   reach the Emacs thread.  */
 void
-ios_enqueue_key_event (struct ios_key_event *ev)
+ios_enqueue_key_event (struct ios_key_event *key)
 {
-  pthread_mutex_lock (&ios_input_lock);
-  int next = (ios_input_tail + 1) % IOS_INPUT_QUEUE_CAP;
-  if (next != ios_input_head)
-    {
-      ios_input_queue[ios_input_tail] = *ev;
-      ios_input_tail = next;
-    }
-  pthread_mutex_unlock (&ios_input_lock);
-  ios_wake ();
+  struct ios_event ev;
+  ev.kind = IOS_EVENT_KEY;
+  ev.u.key = *key;
+  ios_enqueue (&ev);
 }
 
 /* First code point of STR, or 0 if STR is empty or is one of the
@@ -1570,6 +1565,9 @@ static bool
 ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
 {
   EVENT_INIT (*ie);
+  /* The drain attaches the frame, as it does for events UIKit builds
+     complete; say so rather than leaning on EVENT_INIT's memset.  */
+  ie->frame_or_window = Qnil;
 
   if (ev->prepacked)
     {
@@ -1740,19 +1738,34 @@ ios_drain_events (struct terminal *terminal, struct input_event *hold_quit)
   /* And pinch-gesture updates into PINCH_EVENTs.  */
   ios_apply_pending_pinch (hold_quit);
   int n = 0;
-  /* Drain the rich event queue first -- mouse clicks should
-     get to Emacs before whatever keystrokes piled up next.  */
+  /* One queue, drained in the order the events arrived, so a click
+     and the keystrokes around it keep their relative order.  */
   pthread_mutex_lock (&ios_input_lock);
-  while (ios_event_head != ios_event_tail)
+  while (ios_input_head != ios_input_tail)
     {
-      struct input_event ie = ios_event_queue[ios_event_head];
-      ios_event_head = (ios_event_head + 1) % IOS_EVENT_QUEUE_CAP;
+      struct ios_event ev = ios_input_queue[ios_input_head];
+      ios_input_head = (ios_input_head + 1) % IOS_INPUT_QUEUE_CAP;
       pthread_mutex_unlock (&ios_input_lock);
-      /* The UIKit thread leaves frame_or_window nil -- reading
-         frame state over there would race frame deletion here.
-         Attach the frame on this (the Emacs) thread, and drop the
-         event if no frame exists yet.  */
-      if (NILP (ie.frame_or_window))
+
+      struct input_event ie;
+      bool have;
+      if (ev.kind == IOS_EVENT_KEY)
+        {
+          have = ios_translate_key (&ev.u.key, &ie);
+          if (have)
+            ie.timestamp = 0;
+        }
+      else
+        {
+          ie = ev.u.built;
+          have = true;
+        }
+
+      /* The UIKit thread leaves frame_or_window nil -- reading frame
+         state over there would race frame deletion here.  Attach the
+         frame on this (the Emacs) thread, and drop the event if no
+         frame exists yet.  */
+      if (have && NILP (ie.frame_or_window))
         {
           struct frame *f
             = (terminal->display_info.ios
@@ -1760,34 +1773,13 @@ ios_drain_events (struct terminal *terminal, struct input_event *hold_quit)
               ? terminal->display_info.ios->highlight_frame
               : (FRAMEP (selected_frame) ? XFRAME (selected_frame) : NULL);
           if (f && FRAME_LIVE_P (f))
-            {
-              XSETFRAME (ie.frame_or_window, f);
-              kbd_buffer_store_event_hold (&ie, hold_quit);
-              n++;
-            }
+            XSETFRAME (ie.frame_or_window, f);
+          else
+            have = false;
         }
-      else
-        {
-          kbd_buffer_store_event_hold (&ie, hold_quit);
-          n++;
-        }
-      pthread_mutex_lock (&ios_input_lock);
-    }
-  while (ios_input_head != ios_input_tail)
-    {
-      struct ios_key_event ev = ios_input_queue[ios_input_head];
-      ios_input_head = (ios_input_head + 1) % IOS_INPUT_QUEUE_CAP;
-      pthread_mutex_unlock (&ios_input_lock);
 
-      struct input_event ie;
-      if (ios_translate_key (&ev, &ie))
+      if (have)
         {
-          XSETFRAME (ie.frame_or_window,
-                     (terminal->display_info.ios
-                      && terminal->display_info.ios->highlight_frame)
-                     ? terminal->display_info.ios->highlight_frame
-                     : XFRAME (selected_frame));
-          ie.timestamp = 0;
           kbd_buffer_store_event_hold (&ie, hold_quit);
           n++;
         }
