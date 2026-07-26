@@ -754,9 +754,9 @@ ios_emit_wheel_event (bool forward, CGPoint pt)
     {
       unichar c = [text characterAtIndex:i];
       int packed = (int) c | (int) ios_sticky_mods;
-      /* Map control-letter combos to the canonical 0x01..0x1A
-         (same convention as ios_pack_uikey) so existing keymaps
-         match.  */
+      /* Map control-letter combos to the canonical 0x01..0x1A, the
+         same convention ios_translate_key applies to hardware keys,
+         so existing keymaps match.  */
       if ((ios_sticky_mods & CHAR_CTL) && c >= 'a' && c <= 'z')
         packed = (c - 'a' + 1) | (ios_sticky_mods & ~CHAR_CTL);
       else if ((ios_sticky_mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
@@ -902,155 +902,61 @@ ios_emit_keysym (unsigned xk)
 }
 
 
-/* Translate UIKey modifier flags into Emacs CHAR_* bits.
-   Option maps to Meta and Command to Super, matching the macOS
-   port's default conventions.  Shift is only included when
-   INCLUDE_SHIFT: for printable characters the shift is already
-   reflected in the character itself, but for function keys
-   (arrows, F-keys) Emacs expects an explicit shift bit.  */
-static int
-ios_mods_from_flags (UIKeyModifierFlags m, bool include_shift)
+/* True for HID usages that carry no character on their own: the
+   modifier keys themselves and Caps Lock.  Presses of these are left
+   to UIKit rather than queued, which is a mechanical classification
+   and not a policy decision, so it belongs on this side.  */
+static BOOL
+ios_modifier_only_keycode (long hid)
 {
-  int mods = 0;
-  if (m & UIKeyModifierControl)   mods |= CHAR_CTL;
-  if (m & UIKeyModifierAlternate) mods |= CHAR_META;
-  if (m & UIKeyModifierCommand)   mods |= CHAR_SUPER;
-  if (include_shift && (m & UIKeyModifierShift))
-    mods |= CHAR_SHIFT;
-  return mods;
+  return ((hid >= UIKeyboardHIDUsageKeyboardLeftControl
+           && hid <= UIKeyboardHIDUsageKeyboardRightGUI)
+          || hid == UIKeyboardHIDUsageKeyboardCapsLock);
 }
 
-/* Translate a UIKey into the packed codepoint+modifiers our queue
-   expects.  Returns -1 if the key has no codepoint we know how to
-   handle (raw modifier presses, dead keys, etc).  */
-static int
-ios_pack_uikey (UIKey *key)
+/* First code point of STR, or 0 if STR is empty or is one of the
+   "UIKeyInput..." names UIKit substitutes for keys that stand for a
+   control character.  Apple documents comparing against those
+   constants (see "Input strings for special keys"); the Emacs thread
+   recognizes such keys by their key code instead.  */
+static unsigned int
+ios_first_codepoint (NSString *str)
+{
+  if (str.length == 0 || [str hasPrefix:@"UIKeyInput"])
+    return 0;
+  unichar c = [str characterAtIndex:0];
+  /* Reassemble a surrogate pair so astral characters survive.  */
+  if (c >= 0xd800 && c <= 0xdbff && str.length > 1)
+    {
+      unichar lo = [str characterAtIndex:1];
+      if (lo >= 0xdc00 && lo <= 0xdfff)
+        return 0x10000 + ((c - 0xd800) << 10) + (lo - 0xdc00);
+    }
+  return c;
+}
+
+/* Copy KEY into the queue verbatim.  No interpretation happens here:
+   the Emacs thread decides what the modifiers mean and which of the
+   two strings to believe, where Lisp variables can be read safely.
+   Returns YES if the press was queued and should not go to UIKit.  */
+static BOOL
+ios_queue_uikey (UIKey *key)
 {
   if (key == nil)
-    return -1;
-
-  /* Shift is not requested: for printables the character itself
-     already reflects it.  */
-  int mods = ios_mods_from_flags (key.modifierFlags, false);
-
-  /* Resolve keys that stand for a control character by keyCode,
-     before consulting -characters.  UIKit reports those as a sentinel
-     name rather than the control code: -characters for Escape is the
-     string "UIKeyInputEscape", so reading its first character yields
-     `U'.  Backspace is handled earlier, in ios_hid_to_xkeysym.  */
-  switch (key.keyCode)
-    {
-    case UIKeyboardHIDUsageKeyboardReturnOrEnter:
-    case UIKeyboardHIDUsageKeypadEnter:
-      return 0x0d | mods;
-    case UIKeyboardHIDUsageKeyboardTab:
-      return 0x09 | mods;
-    case UIKeyboardHIDUsageKeyboardEscape:
-      return 0x1b | mods;
-    default:
-      break;
-    }
-
-  /* For Control and Option combos prefer
-     charactersIgnoringModifiers: C-Shift-a must produce 'a' (the
-     canonicalization below turns it into 0x01), and with Option
-     acting as Meta, key.characters would be the Option-layer
-     glyph -- Option-f is a florin sign on a US layout -- so M-f
-     would arrive as Meta plus that glyph instead of Meta-f.  For
-     everything else use characters, which applies Shift
-     layout-correctly: Shift+a is "A", Shift+1 on US is "!".  */
-  NSString *chars =
-    (key.modifierFlags & (UIKeyModifierControl | UIKeyModifierAlternate))
-    ? key.charactersIgnoringModifiers
-    : key.characters;
-  if (chars.length == 0)
-    chars = key.characters;
-  if (chars.length == 0)
-    chars = key.charactersIgnoringModifiers;
-  if (chars.length == 0)
-    return -1;
-
-  /* Any remaining key whose -characters is a sentinel name is one the
-     keyCode paths above do not cover; drop it rather than insert the
-     first letter of the name.  */
-  if ([chars hasPrefix:@"UIKeyInput"])
-    return -1;
-
-  unichar c = [chars characterAtIndex:0];
-  /* Most ASCII control-letter combos: Control flips the high
-     bits.  For C-a we want code 1 ('a' & 0x1f), not 'a' with
-     CHAR_CTL set -- Emacs accepts either but treating it like
-     the X/Cocoa ports keeps existing keymaps unchanged.  */
-  if ((mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
-    c |= 0x20;   /* lowercase first */
-  if ((mods & CHAR_CTL) && c >= 'a' && c <= 'z')
-    {
-      int packed = (c - 'a' + 1) | (mods & ~CHAR_CTL);
-      return packed;
-    }
-  return (int) c | mods;
-}
-
-/* Map a UIKeyboardHIDUsage to an X11-keysym value in 0xff00..0xffff
-   (the FUNCTION_KEY_OFFSET range that keyboard.c's lispy_function_keys
-   indexes).  Returns 0 for keys that should fall through to
-   ios_pack_uikey.  */
-static unsigned
-ios_hid_to_xkeysym (long hid)
-{
-  switch (hid)
-    {
-    /* Backspace must be intercepted here: UIKey.characters for the
-       hardware delete key is "\b" (0x08), which the character
-       packer would deliver as C-h, the help prefix.  0xff08 is
-       XK_BackSpace, which keyboard.c turns into <backspace> and
-       local-function-key-map remaps to DEL.  */
-    case UIKeyboardHIDUsageKeyboardDeleteOrBackspace: return 0xff08;
-    case UIKeyboardHIDUsageKeyboardLeftArrow:    return 0xff51;
-    case UIKeyboardHIDUsageKeyboardUpArrow:      return 0xff52;
-    case UIKeyboardHIDUsageKeyboardRightArrow:   return 0xff53;
-    case UIKeyboardHIDUsageKeyboardDownArrow:    return 0xff54;
-    case UIKeyboardHIDUsageKeyboardHome:         return 0xff50;
-    case UIKeyboardHIDUsageKeyboardEnd:          return 0xff57;
-    case UIKeyboardHIDUsageKeyboardPageUp:       return 0xff55;
-    case UIKeyboardHIDUsageKeyboardPageDown:     return 0xff56;
-    case UIKeyboardHIDUsageKeyboardInsert:       return 0xff63;
-    case UIKeyboardHIDUsageKeyboardDeleteForward: return 0xffff;
-    case UIKeyboardHIDUsageKeyboardF1:  return 0xffbe;
-    case UIKeyboardHIDUsageKeyboardF2:  return 0xffbf;
-    case UIKeyboardHIDUsageKeyboardF3:  return 0xffc0;
-    case UIKeyboardHIDUsageKeyboardF4:  return 0xffc1;
-    case UIKeyboardHIDUsageKeyboardF5:  return 0xffc2;
-    case UIKeyboardHIDUsageKeyboardF6:  return 0xffc3;
-    case UIKeyboardHIDUsageKeyboardF7:  return 0xffc4;
-    case UIKeyboardHIDUsageKeyboardF8:  return 0xffc5;
-    case UIKeyboardHIDUsageKeyboardF9:  return 0xffc6;
-    case UIKeyboardHIDUsageKeyboardF10: return 0xffc7;
-    case UIKeyboardHIDUsageKeyboardF11: return 0xffc8;
-    case UIKeyboardHIDUsageKeyboardF12: return 0xffc9;
-    default: return 0;
-    }
-}
-
-/* Emit a NON_ASCII_KEYSTROKE_EVENT for an X11-style function-key
-   code, carrying the same Control / Meta / Super / Shift modifier
-   bits we pack for ASCII.  Returns YES if the press was consumed.  */
-static BOOL
-ios_emit_function_key (UIKey *key)
-{
-  unsigned xk = ios_hid_to_xkeysym ((long) key.keyCode);
-  if (xk == 0)
     return NO;
-  int mods = ios_mods_from_flags (key.modifierFlags, true);
-  struct input_event ie;
-  EVENT_INIT (ie);
-  ie.kind = NON_ASCII_KEYSTROKE_EVENT;
-  ie.code = xk;
-  ie.modifiers = mods;
-  /* Frame attached by the drain on the Emacs thread.  */
-  ie.frame_or_window = Qnil;
-  ie.timestamp = ios_event_timestamp ();
-  ios_enqueue_event (&ie);
+
+  struct ios_key_event ev;
+  ev.prepacked = false;
+  ev.key_code = (int) key.keyCode;
+  ev.modifier_flags = (unsigned int) key.modifierFlags;
+  ev.chars = ios_first_codepoint (key.characters);
+  ev.chars_plain = ios_first_codepoint (key.charactersIgnoringModifiers);
+
+  if (ios_modifier_only_keycode ((long) key.keyCode)
+      || (ev.key_code == 0 && ev.chars == 0 && ev.chars_plain == 0))
+    return NO;
+
+  ios_enqueue_key_event (&ev);
   return YES;
 }
 
@@ -1060,19 +966,8 @@ ios_emit_function_key (UIKey *key)
   (void) event;
   BOOL handled = NO;
   for (UIPress *p in presses)
-    {
-      if (ios_emit_function_key (p.key))
-        {
-          handled = YES;
-          continue;
-        }
-      int packed = ios_pack_uikey (p.key);
-      if (packed >= 0)
-        {
-          ios_enqueue_key (packed);
-          handled = YES;
-        }
-    }
+    if (ios_queue_uikey (p.key))
+      handled = YES;
   if (!handled)
     [super pressesBegan:presses withEvent:event];
 }

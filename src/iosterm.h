@@ -253,10 +253,38 @@ struct ios_output
    Generic code (frame.c) iterates this to enumerate displays.  */
 extern struct ios_display_info *x_display_list;
 
+/* A key press as UIKit reported it, with no interpretation applied.
+   pressesBegan runs on the UIKit thread, where Lisp is unavailable, so
+   it only copies these raw fields into the queue; the Emacs thread
+   turns them into an input_event in ios_translate_key.  This mirrors
+   the Android port, whose Java side likewise forwards the modifier
+   state and key code alongside the character it looked up, leaving
+   androidterm.c to apply modifier policy.
+
+   CHARS and CHARS_PLAIN are the first code point of -characters and
+   -charactersIgnoringModifiers, or 0 when the string is empty or is
+   one of the "UIKeyInput..." names UIKit reports for special keys
+   (those are recognized by KEY_CODE instead).
+
+   PREPACKED marks the other producer: the on-screen keyboard and the
+   accessory bar hand over a character that already carries its Emacs
+   modifier bits, so CHARS is used as-is and the other fields are
+   ignored.  */
+
+struct ios_key_event
+{
+  bool prepacked;
+  int key_code;                 /* A UIKeyboardHIDUsage* value.  */
+  unsigned int modifier_flags;  /* Raw UIKeyModifierFlags.  */
+  unsigned int chars;
+  unsigned int chars_plain;
+};
+
 /* Entry points implemented in src/ios.m and src/iosterm.m.  Declared
    here so plain C code (emacs.c, keyboard.c, pdumper.c) can call them
    without importing UIKit.  */
 extern int ios_main (int argc, char **argv);
+extern void ios_enqueue_key_event (struct ios_key_event *ev);
 extern char *ios_dump_path (void);
 extern struct terminal *ios_term_init (void);
 extern bool ios_defined_color (struct frame *, const char *,
