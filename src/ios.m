@@ -902,9 +902,6 @@ ios_emit_keysym (unsigned xk)
 }
 
 
-/* Translate a UIKey into the packed codepoint+modifiers our queue
-   expects.  Returns -1 if the key has no codepoint we know how to
-   handle (raw modifier presses, dead keys, etc).  */
 /* Translate UIKey modifier flags into Emacs CHAR_* bits.
    Option maps to Meta and Command to Super, matching the macOS
    port's default conventions.  Shift is only included when
@@ -923,6 +920,9 @@ ios_mods_from_flags (UIKeyModifierFlags m, bool include_shift)
   return mods;
 }
 
+/* Translate a UIKey into the packed codepoint+modifiers our queue
+   expects.  Returns -1 if the key has no codepoint we know how to
+   handle (raw modifier presses, dead keys, etc).  */
 static int
 ios_pack_uikey (UIKey *key)
 {
