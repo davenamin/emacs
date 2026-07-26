@@ -933,6 +933,24 @@ ios_pack_uikey (UIKey *key)
      already reflects it.  */
   int mods = ios_mods_from_flags (key.modifierFlags, false);
 
+  /* Resolve keys that stand for a control character by keyCode,
+     before consulting -characters.  UIKit reports those as a sentinel
+     name rather than the control code: -characters for Escape is the
+     string "UIKeyInputEscape", so reading its first character yields
+     `U'.  Backspace is handled earlier, in ios_hid_to_xkeysym.  */
+  switch (key.keyCode)
+    {
+    case UIKeyboardHIDUsageKeyboardReturnOrEnter:
+    case UIKeyboardHIDUsageKeypadEnter:
+      return 0x0d | mods;
+    case UIKeyboardHIDUsageKeyboardTab:
+      return 0x09 | mods;
+    case UIKeyboardHIDUsageKeyboardEscape:
+      return 0x1b | mods;
+    default:
+      break;
+    }
+
   /* For Control and Option combos prefer
      charactersIgnoringModifiers: C-Shift-a must produce 'a' (the
      canonicalization below turns it into 0x01), and with Option
@@ -950,24 +968,13 @@ ios_pack_uikey (UIKey *key)
   if (chars.length == 0)
     chars = key.charactersIgnoringModifiers;
   if (chars.length == 0)
-    {
-      /* Map common non-character keys by keyCode.  Only the most
-         common ones for an editor.  More to follow.  */
-      switch (key.keyCode)
-        {
-        case UIKeyboardHIDUsageKeyboardReturnOrEnter:
-        case UIKeyboardHIDUsageKeypadEnter:
-          return 0x0d | mods;
-        case UIKeyboardHIDUsageKeyboardDeleteOrBackspace:
-          return 0x7f | mods;
-        case UIKeyboardHIDUsageKeyboardTab:
-          return 0x09 | mods;
-        case UIKeyboardHIDUsageKeyboardEscape:
-          return 0x1b | mods;
-        default:
-          return -1;
-        }
-    }
+    return -1;
+
+  /* Any remaining key whose -characters is a sentinel name is one the
+     keyCode paths above do not cover; drop it rather than insert the
+     first letter of the name.  */
+  if ([chars hasPrefix:@"UIKeyInput"])
+    return -1;
 
   unichar c = [chars characterAtIndex:0];
   /* Most ASCII control-letter combos: Control flips the high
