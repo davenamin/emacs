@@ -1539,10 +1539,22 @@ ios_hid_to_xkeysym (int hid)
     }
 }
 
-/* Resolve one of the ios-*-modifier variables to a modifier bit.
-   Follows the NS port: the value is a symbol such as `meta' or
-   `super', and nil or `none' means the key contributes no modifier
-   and is left to the system.  */
+/* Resolve one of the ios-*-modifier variables for an event of KIND.
+   The value is either a symbol, applying to everything, or a plist
+   keyed by :ordinary, :function and :mouse, as in the NS and Mac
+   ports; a key can then mean Meta for ordinary keys while leaving
+   something else for the arrows.  */
+static Lisp_Object
+ios_mod_of_kind (Lisp_Object modifier, Lisp_Object kind)
+{
+  if (SYMBOLP (modifier))
+    return modifier;
+  Lisp_Object value = plist_get (modifier, kind);
+  return SYMBOLP (value) ? value : Qnil;
+}
+
+/* Modifier bit for the resolved symbol.  nil or `none' means the key
+   contributes no modifier and keeps whatever the system makes of it.  */
 static int
 ios_modifier_bit (Lisp_Object sym)
 {
@@ -1578,26 +1590,32 @@ ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
     }
 
   unsigned int flags = ev->modifier_flags;
+
+  /* Keys standing for a control character or a function key are
+     recognized by key code; UIKit reports a placeholder name rather
+     than a character for them.  Resolving this first also settles
+     which kind of event the modifier variables are consulted for.  */
+  unsigned xk = ios_hid_to_xkeysym (ev->key_code);
+  Lisp_Object kind = xk != 0 ? QCfunction : QCordinary;
+
+  Lisp_Object option = ios_mod_of_kind (Vios_option_modifier, kind);
+
   /* Modifiers latched on the accessory bar apply to this press
      whichever keyboard produced it.  */
   int mods = ev->sticky_mods;
   if (flags & UIKeyModifierControl)
-    mods |= ios_modifier_bit (Vios_control_modifier);
+    mods |= ios_modifier_bit (ios_mod_of_kind (Vios_control_modifier, kind));
   if (flags & UIKeyModifierAlternate)
-    mods |= ios_modifier_bit (Vios_option_modifier);
+    mods |= ios_modifier_bit (option);
   if (flags & UIKeyModifierCommand)
-    mods |= ios_modifier_bit (Vios_command_modifier);
+    mods |= ios_modifier_bit (ios_mod_of_kind (Vios_command_modifier, kind));
 
   /* Merge in extra-keyboard-modifiers, as xterm.c and androidterm.c
      do, and for the same reason: this is the first point at which the
      variable can be read.  */
   mods |= extra_keyboard_modifiers & CHAR_MODIFIER_MASK;
 
-  /* Keys standing for a control character or a function key are
-     recognized by key code; UIKit reports a placeholder name rather
-     than a character for them.  Shift is explicit here, as Emacs
-     expects for non-character keys.  */
-  unsigned xk = ios_hid_to_xkeysym (ev->key_code);
+  /* Shift is explicit for non-character keys, as Emacs expects.  */
   if (xk != 0)
     {
       ie->kind = NON_ASCII_KEYSTROKE_EVENT;
@@ -1628,7 +1646,7 @@ ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
      ios-option-modifier is nil or `none' the layer is what the user
      asked for, so -characters is right then too.  */
   bool option_is_modifier = ((flags & UIKeyModifierAlternate)
-                             && !ios_modifier_is_none (Vios_option_modifier));
+                             && !ios_modifier_is_none (option));
   unsigned int c = option_is_modifier ? ev->chars_plain : ev->chars;
   if (c == 0)
     c = ev->chars ? ev->chars : ev->chars_plain;
@@ -2040,6 +2058,9 @@ syms_of_iosterm (void)
   DEFSYM (Qctrl, "ctrl");
   DEFSYM (Qmeta, "meta");
   DEFSYM (Qsuper, "super");
+  DEFSYM (QCordinary, ":ordinary");
+  DEFSYM (QCfunction, ":function");
+  DEFSYM (QCmouse, ":mouse");
 
   /* Qascii and Qnon_ascii come from charset.c and keymap.c, which
      every build compiles.  */
@@ -2048,12 +2069,23 @@ syms_of_iosterm (void)
 
   DEFVAR_LISP ("ios-option-modifier", Vios_option_modifier,
      doc: /* Modifier the Option key produces.
-Value is one of the symbols `control', `meta', `alt', `super' or
-`hyper'.  A value of nil or `none' leaves Option to the keyboard
-layout, which uses it to enter the alternate characters printed on
-Apple keyboards; Meta is then still available through the Escape
-prefix or the on-screen accessory bar.  */);
-  Vios_option_modifier = Qmeta;
+The value is either SYMBOL, applying to every event, or a plist
+\(:ordinary SYMBOL :function SYMBOL :mouse SYMBOL) giving separate
+behavior for ordinary keys, function keys and mouse events.
+
+Each SYMBOL is `control', `meta', `alt', `super' or `hyper'.  A value
+of nil or `none' leaves the key to the keyboard layout, which uses
+Option to enter the alternate characters printed on Apple keyboards.
+
+The default leaves ordinary keys to the layout and makes Option mean
+Meta for function keys, following the Emacs Mac Port.  UIKit reports
+the character for an Option combination without its shift, so with
+Option acting as a modifier on ordinary keys, Option-Shift-comma
+arrives as M-, rather than M-<; leaving the layout in charge avoids
+that, at the cost of reaching Meta through the Escape prefix or the
+accessory bar.  Set this to `meta' to have Option act as Meta
+throughout, accepting that limitation.  */);
+  Vios_option_modifier = list4 (QCfunction, Qmeta, QCmouse, Qmeta);
 
   DEFVAR_LISP ("ios-command-modifier", Vios_command_modifier,
      doc: /* Modifier the Command key produces.
