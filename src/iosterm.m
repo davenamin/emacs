@@ -122,7 +122,7 @@ static int ios_dbg_begin = 0, ios_dbg_end = 0, ios_dbg_draw = 0;
    the pipe-setup code there sees the storage; the queue plumbing
    itself is defined further down.  */
 #define IOS_INPUT_QUEUE_CAP 256
-static int ios_input_queue[IOS_INPUT_QUEUE_CAP];
+static struct ios_key_event ios_input_queue[IOS_INPUT_QUEUE_CAP];
 static int ios_input_head = 0, ios_input_tail = 0;
 static pthread_mutex_t ios_input_lock = PTHREAD_MUTEX_INITIALIZER;
 static int ios_wake_pipe[2] = { -1, -1 };
@@ -1461,27 +1461,190 @@ ios_apply_pending_resize (void)
                    w, h, FRAME_COLS (f), FRAME_LINES (f)]);
 }
 
-/* The key-event queue stores 32-bit values: lower 22 bits are the
-   character code (CHARACTERBITS in lisp.h), upper bits CHAR_CTL /
-   CHAR_META / CHAR_SHIFT etc.  ASCII_KEYSTROKE_EVENT's `code' and
-   `modifiers' fields decode straight from this packing.  */
+/* The key-event queue carries raw UIKit key presses; see struct
+   ios_key_event in iosterm.h for why nothing is interpreted before
+   this point.  ios_translate_key, below, turns them into input_events
+   on the Emacs thread.  */
 
 /* C-callable producer.  Called from UI thread.  Drops the event
    on a full queue (better to lose a key than block UIKit), then
    writes a byte to the wake pipe so wait_reading_process_input
    returns and read_socket_hook fires.  */
 void
-ios_enqueue_key (int codepoint)
+ios_enqueue_key_event (struct ios_key_event *ev)
 {
   pthread_mutex_lock (&ios_input_lock);
   int next = (ios_input_tail + 1) % IOS_INPUT_QUEUE_CAP;
   if (next != ios_input_head)
     {
-      ios_input_queue[ios_input_tail] = codepoint;
+      ios_input_queue[ios_input_tail] = *ev;
       ios_input_tail = next;
     }
   pthread_mutex_unlock (&ios_input_lock);
   ios_wake ();
+}
+
+/* Map a HID usage to the X11 keysym Emacs names function keys by, or
+   0 when the key is an ordinary character key.  keyboard.c turns
+   these into symbols such as `left' and `f1', which existing keymaps
+   and local-function-key-map already bind.  */
+static unsigned
+ios_hid_to_xkeysym (int hid)
+{
+  switch (hid)
+    {
+      /* Backspace is listed here rather than sent as 0x08, which
+         Emacs would read as C-h, the help prefix.  0xff08 is
+         XK_BackSpace, which local-function-key-map remaps to DEL.  */
+    case UIKeyboardHIDUsageKeyboardDeleteOrBackspace: return 0xff08;
+    case UIKeyboardHIDUsageKeyboardLeftArrow:    return 0xff51;
+    case UIKeyboardHIDUsageKeyboardUpArrow:      return 0xff52;
+    case UIKeyboardHIDUsageKeyboardRightArrow:   return 0xff53;
+    case UIKeyboardHIDUsageKeyboardDownArrow:    return 0xff54;
+    case UIKeyboardHIDUsageKeyboardHome:         return 0xff50;
+    case UIKeyboardHIDUsageKeyboardEnd:          return 0xff57;
+    case UIKeyboardHIDUsageKeyboardPageUp:       return 0xff55;
+    case UIKeyboardHIDUsageKeyboardPageDown:     return 0xff56;
+    case UIKeyboardHIDUsageKeyboardInsert:       return 0xff63;
+    case UIKeyboardHIDUsageKeyboardDeleteForward: return 0xffff;
+    case UIKeyboardHIDUsageKeyboardF1:  return 0xffbe;
+    case UIKeyboardHIDUsageKeyboardF2:  return 0xffbf;
+    case UIKeyboardHIDUsageKeyboardF3:  return 0xffc0;
+    case UIKeyboardHIDUsageKeyboardF4:  return 0xffc1;
+    case UIKeyboardHIDUsageKeyboardF5:  return 0xffc2;
+    case UIKeyboardHIDUsageKeyboardF6:  return 0xffc3;
+    case UIKeyboardHIDUsageKeyboardF7:  return 0xffc4;
+    case UIKeyboardHIDUsageKeyboardF8:  return 0xffc5;
+    case UIKeyboardHIDUsageKeyboardF9:  return 0xffc6;
+    case UIKeyboardHIDUsageKeyboardF10: return 0xffc7;
+    case UIKeyboardHIDUsageKeyboardF11: return 0xffc8;
+    case UIKeyboardHIDUsageKeyboardF12: return 0xffc9;
+    default: return 0;
+    }
+}
+
+/* Resolve one of the ios-*-modifier variables to a modifier bit.
+   Follows the NS port: the value is a symbol such as `meta' or
+   `super', and nil or `none' means the key contributes no modifier
+   and is left to the system.  */
+static int
+ios_modifier_bit (Lisp_Object sym)
+{
+  if (NILP (sym) || EQ (sym, Qnone))
+    return 0;
+  return parse_solitary_modifier (sym);
+}
+
+static bool
+ios_modifier_is_none (Lisp_Object sym)
+{
+  return NILP (sym) || EQ (sym, Qnone);
+}
+
+/* Translate a raw key press into IE.  Runs on the Emacs thread, so
+   the ios-*-modifier variables and extra-keyboard-modifiers can be
+   read directly, the way xterm.c and androidterm.c read them.
+   Returns false if the press yields no event.  */
+static bool
+ios_translate_key (struct ios_key_event *ev, struct input_event *ie)
+{
+  EVENT_INIT (*ie);
+
+  if (ev->prepacked)
+    {
+      ie->kind = ASCII_KEYSTROKE_EVENT;
+      ie->code = ev->chars & ((1 << CHARACTERBITS) - 1);
+      ie->modifiers = ev->chars & CHAR_MODIFIER_MASK;
+      return true;
+    }
+
+  unsigned int flags = ev->modifier_flags;
+  int mods = 0;
+  if (flags & UIKeyModifierControl)
+    mods |= ios_modifier_bit (Vios_control_modifier);
+  if (flags & UIKeyModifierAlternate)
+    mods |= ios_modifier_bit (Vios_option_modifier);
+  if (flags & UIKeyModifierCommand)
+    mods |= ios_modifier_bit (Vios_command_modifier);
+
+  /* Merge in extra-keyboard-modifiers, as xterm.c and androidterm.c
+     do, and for the same reason: this is the first point at which the
+     variable can be read.  */
+  mods |= extra_keyboard_modifiers & CHAR_MODIFIER_MASK;
+
+  /* Keys standing for a control character or a function key are
+     recognized by key code; UIKit reports a placeholder name rather
+     than a character for them.  Shift is explicit here, as Emacs
+     expects for non-character keys.  */
+  unsigned xk = ios_hid_to_xkeysym (ev->key_code);
+  if (xk != 0)
+    {
+      ie->kind = NON_ASCII_KEYSTROKE_EVENT;
+      ie->code = xk;
+      ie->modifiers = mods | ((flags & UIKeyModifierShift) ? CHAR_SHIFT : 0);
+      return true;
+    }
+
+  switch (ev->key_code)
+    {
+    case UIKeyboardHIDUsageKeyboardReturnOrEnter:
+    case UIKeyboardHIDUsageKeypadEnter: ie->kind = ASCII_KEYSTROKE_EVENT;
+      ie->code = 0x0d; ie->modifiers = mods; return true;
+    case UIKeyboardHIDUsageKeyboardTab:          ie->kind = ASCII_KEYSTROKE_EVENT;
+      ie->code = 0x09; ie->modifiers = mods; return true;
+    case UIKeyboardHIDUsageKeyboardEscape:       ie->kind = ASCII_KEYSTROKE_EVENT;
+      ie->code = 0x1b; ie->modifiers = mods; return true;
+    default: break;
+    }
+
+  /* Which of the two strings to believe.  -characters applies every
+     modifier, including Option's alternate-character layer, so with
+     Option acting as a modifier it would report the layer's glyph --
+     Option-f is a florin sign on a US layout -- and lose the identity
+     of the key.  Fall back to the unshifted string only in that case.
+     Control does not remap characters this way, so it keeps
+     -characters, whose Shift is applied layout-correctly.  When
+     ios-option-modifier is nil or `none' the layer is what the user
+     asked for, so -characters is right then too.  */
+  bool option_is_modifier = ((flags & UIKeyModifierAlternate)
+                             && !ios_modifier_is_none (Vios_option_modifier));
+  unsigned int c = option_is_modifier ? ev->chars_plain : ev->chars;
+  if (c == 0)
+    c = ev->chars ? ev->chars : ev->chars_plain;
+  if (c == 0)
+    return false;
+
+  /* Control folds a letter to its 0x01..0x1a control code, as the X
+     and NS ports do, so existing keymaps match.  */
+  if ((mods & CHAR_CTL) && c >= 'A' && c <= 'Z')
+    c += 'a' - 'A';
+  if ((mods & CHAR_CTL) && c >= 'a' && c <= 'z')
+    {
+      ie->kind = ASCII_KEYSTROKE_EVENT;
+      ie->code = c - 'a' + 1;
+      ie->modifiers = mods & ~CHAR_CTL;
+      return true;
+    }
+
+  ie->kind = (c < 128 ? ASCII_KEYSTROKE_EVENT
+              : MULTIBYTE_CHAR_KEYSTROKE_EVENT);
+  ie->code = c;
+  ie->modifiers = mods;
+  return true;
+}
+
+/* Producer for the on-screen keyboard and the accessory bar, whose
+   CODEPOINT already carries its Emacs modifier bits.  */
+void
+ios_enqueue_key (int codepoint)
+{
+  struct ios_key_event ev;
+  ev.prepacked = true;
+  ev.key_code = 0;
+  ev.modifier_flags = 0;
+  ev.chars = (unsigned int) codepoint;
+  ev.chars_plain = 0;
+  ios_enqueue_key_event (&ev);
 }
 
 static int
@@ -1540,27 +1703,22 @@ ios_drain_events (struct terminal *terminal, struct input_event *hold_quit)
     }
   while (ios_input_head != ios_input_tail)
     {
-      int c = ios_input_queue[ios_input_head];
+      struct ios_key_event ev = ios_input_queue[ios_input_head];
       ios_input_head = (ios_input_head + 1) % IOS_INPUT_QUEUE_CAP;
       pthread_mutex_unlock (&ios_input_lock);
 
-      /* Decode the packed code: lower CHARACTERBITS hold the
-         codepoint, upper bits hold Emacs modifier flags.  */
-      int codepoint = c & ((1 << CHARACTERBITS) - 1);
-      int modifiers = c & CHAR_MODIFIER_MASK;
       struct input_event ie;
-      EVENT_INIT (ie);
-      ie.kind = ASCII_KEYSTROKE_EVENT;
-      ie.code = codepoint;
-      ie.modifiers = modifiers;
-      XSETFRAME (ie.frame_or_window,
-                 (terminal->display_info.ios
-                  && terminal->display_info.ios->highlight_frame)
-                 ? terminal->display_info.ios->highlight_frame
-                 : XFRAME (selected_frame));
-      ie.timestamp = 0;
-      kbd_buffer_store_event_hold (&ie, hold_quit);
-      n++;
+      if (ios_translate_key (&ev, &ie))
+        {
+          XSETFRAME (ie.frame_or_window,
+                     (terminal->display_info.ios
+                      && terminal->display_info.ios->highlight_frame)
+                     ? terminal->display_info.ios->highlight_frame
+                     : XFRAME (selected_frame));
+          ie.timestamp = 0;
+          kbd_buffer_store_event_hold (&ie, hold_quit);
+          n++;
+        }
 
       pthread_mutex_lock (&ios_input_lock);
     }
@@ -1808,6 +1966,32 @@ syms_of_iosterm (void)
      doc: /* SKIP: real doc in xterm.c.  */);
   x_underline_at_descent_line = false;
 
+  /* Qnone comes from frame.c, which every build compiles.  These
+     three are otherwise defined only by ports this build excludes.  */
+  DEFSYM (Qctrl, "ctrl");
+  DEFSYM (Qmeta, "meta");
+  DEFSYM (Qsuper, "super");
+
+  DEFVAR_LISP ("ios-option-modifier", Vios_option_modifier,
+     doc: /* Modifier the Option key produces.
+Value is one of the symbols `control', `meta', `alt', `super' or
+`hyper'.  A value of nil or `none' leaves Option to the keyboard
+layout, which uses it to enter the alternate characters printed on
+Apple keyboards; Meta is then still available through the Escape
+prefix or the on-screen accessory bar.  */);
+  Vios_option_modifier = Qmeta;
+
+  DEFVAR_LISP ("ios-command-modifier", Vios_command_modifier,
+     doc: /* Modifier the Command key produces.
+Takes the same values as `ios-option-modifier'.  Note that iPadOS
+reserves several Command combinations, such as Command-Space and
+Command-H, which never reach Emacs.  */);
+  Vios_command_modifier = Qsuper;
+
+  DEFVAR_LISP ("ios-control-modifier", Vios_control_modifier,
+     doc: /* Modifier the Control key produces.
+Takes the same values as `ios-option-modifier'.  */);
+  Vios_control_modifier = Qctrl;
 }
 
 /* ---- Frame parameter setters --------------------------------- */
