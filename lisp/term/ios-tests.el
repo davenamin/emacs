@@ -365,17 +365,38 @@ Results land in ~/ios-test-results.txt; one line per test."
         (cl-assert (equal '(ascii 1 0)
                           (xlate hid-a (logior control shift) "A" "a"))))
 
-      (ios-test-deftest key-option-is-meta
-        "Option-f is M-f rather than Meta plus the alternate glyph"
-        ;; -characters reports the Option layer's florin sign here.
-        (let ((r (xlate hid-f option (string #x192) "f")))
-          (cl-assert (eq 'ascii (nth 0 r)))
-          (cl-assert (= ?f (nth 1 r)))
-          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
+      (ios-test-deftest key-option-is-meta-when-asked
+        "with ios-option-modifier meta, Option-f is M-f"
+        ;; -characters reports the Option layer's florin sign here, so
+        ;; the base character has to come from the other string.
+        (let ((ios-option-modifier 'meta))
+          (let ((r (xlate hid-f option (string #x192) "f")))
+            (cl-assert (eq 'ascii (nth 0 r)))
+            (cl-assert (= ?f (nth 1 r)))
+            (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27)))))))
 
-      (ios-test-deftest key-option-none-keeps-layer
-        "with ios-option-modifier nil, Option enters the layer glyph"
-        (let ((ios-option-modifier nil))
+      (ios-test-deftest key-option-default-keeps-layer
+        "by default Option enters the layer glyph on an ordinary key"
+        (let ((r (xlate hid-f option (string #x192) "f")))
+          (cl-assert (= #x192 (nth 1 r)))
+          (cl-assert (= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-option-default-takes-shifted-char
+        "by default the character comes from the shifted string"
+        ;; With Option left to the layout there is no reason to read
+        ;; the unshifted string, which would report a comma here.
+        (let ((r (xlate hid-comma (logior option shift) "<" ",")))
+          (cl-assert (= ?< (nth 1 r)))
+          (cl-assert (= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-option-plist-per-kind
+        "the plist form applies per event kind"
+        (let ((ios-option-modifier (list :function 'meta)))
+          ;; A function key takes Meta ...
+          (let ((r (xlate hid-left option nil nil)))
+            (cl-assert (eq 'non-ascii (nth 0 r)))
+            (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27)))))
+          ;; ... while an ordinary key is left to the layout.
           (let ((r (xlate hid-f option (string #x192) "f")))
             (cl-assert (= #x192 (nth 1 r)))
             (cl-assert (= 0 (logand (nth 2 r) (ash 1 27)))))))
