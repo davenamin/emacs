@@ -92,7 +92,10 @@ jobs:
 
           log ""
           log "===== MAKE IOS ====="
-          ( cd build-ios-sim && make ios > make-ios.out 2>&1 )
+          ## IOS_SELFTESTS=yes ships lisp/term/ios-tests.el, which the
+          ## self-test gate below depends on; a bundle built without
+          ## it has no ios-run-self-tests to run.
+          ( cd build-ios-sim && make ios IOS_SELFTESTS=yes > make-ios.out 2>&1 )
           echo "[make exit=$?]" >> "$OUT"
           echo "--- last 25 lines of make-ios.out ---" >> "$OUT"
           tail -25 build-ios-sim/make-ios.out >> "$OUT" 2>&1

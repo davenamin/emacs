@@ -269,10 +269,15 @@ minibuffer exit is unconditional once shown by this hook."
 ;; (terminal init files are loaded by emacs.c's window-system probe,
 ;; not via require), so the autoload file argument must include the
 ;; subdirectory or the load fails with "No such file" on first use.
-(autoload 'ios-run-self-tests "term/ios-tests"
-  "Run the iOS port's functional self-tests." t)
-(autoload 'ios-show-font-demo "term/ios-tests"
-  "Show a buffer of shaped and non-Latin text for visual inspection." t)
+;; Both are development aids, and the bundle omits the file holding
+;; them unless it was built with IOS_SELFTESTS=yes.  Register the
+;; commands only when it is there, so an ordinary build does not
+;; offer two commands that cannot run.
+(when (locate-library "term/ios-tests")
+  (autoload 'ios-run-self-tests "term/ios-tests"
+    "Run the iOS port's functional self-tests." t)
+  (autoload 'ios-show-font-demo "term/ios-tests"
+    "Show a buffer of shaped and non-Latin text for visual inspection." t))
 
 (provide 'ios-win)
 

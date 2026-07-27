@@ -346,6 +346,18 @@ App Store submission requirements this port already carries
     acceptance.  Store validation rejects icon-less binaries
     (ITMS-90704 family); Simulator / device development works
     fine without.
+
+  * Self-tests and the font demo.  lisp/term/ios-tests.el defines
+    ios-run-self-tests, which writes a results file for an automated
+    run to grade, and ios-show-font-demo, which fills a buffer with
+    shaped and non-Latin sample text to be looked at.  Both are
+    development aids, so the bundle leaves the file out and does not
+    register the two commands.  Pass
+
+      make ios IOS_SELFTESTS=yes
+
+    to include them.  The simulator diagnostic workflow does, because
+    its pass/fail gate reads the results file.
   * App name.  Pass --with-ios-app-name=NAME at configure time to
     set the label under the home-screen icon
     (CFBundleDisplayName) and the short name system UI uses
