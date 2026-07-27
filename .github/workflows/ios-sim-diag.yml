@@ -216,8 +216,30 @@ jobs:
           run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
                   SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
             xcrun simctl launch booted org.gnu.emacs
-          log "--- sleeping 30s for Emacs init + self-tests to do something ---"
-          sleep 35
+          # Wait for the self-tests to land their results file rather
+          # than for a fixed interval.  The auto-input driver types
+          # M-x ios-run-self-tests about 16s in and the battery grows
+          # over time, so a fixed window silently tightens until a
+          # slow runner misses it; polling ends as soon as the file
+          # appears and only gives up after a margin no run needs.
+          RESULTS_WAIT="$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>/dev/null)/Documents/ios-test-results.txt"
+          log "--- waiting for self-test results (up to 150s) ---"
+          waited=0
+          while [ "$waited" -lt 150 ]; do
+            if [ -s "$RESULTS_WAIT" ]; then
+              log "results appeared after ${waited}s"
+              break
+            fi
+            sleep 5
+            waited=$((waited + 5))
+            # The container path is only knowable once iOS creates it.
+            if [ ! -e "$RESULTS_WAIT" ]; then
+              RESULTS_WAIT="$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>/dev/null)/Documents/ios-test-results.txt"
+            fi
+          done
+          [ -s "$RESULTS_WAIT" ] || log "results did not appear within ${waited}s"
+          # A little longer so the font demo is on screen for the shot.
+          sleep 5
           log "--- capturing simulator screenshot ---"
           mkdir -p ci-diag
           run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
