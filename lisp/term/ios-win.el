@@ -106,12 +106,38 @@ family per script lets the fontset pick one the driver can open."
                         (font-spec :family (cdr entry))
                         nil 'prepend))))
 
+(defun ios--redirect-sibling-files ()
+  "Keep lock, auto-save and backup files inside the app's container.
+The Files picker grants access to the chosen document alone, not to
+the directory holding it, so writing the neighbours Emacs normally
+creates -- the lock \".#name\", the auto-save \"#name#\" and the
+backup \"name~\" -- is refused by the sandbox.  Locks additionally
+rely on symbolic links, which iCloud Drive does not support.
+
+Called once per session rather than at load time: these are absolute
+paths under the container, whose identifier changes when the app is
+reinstalled, and this file is preloaded into the dump."
+  (let ((locks   (expand-file-name "locks/" user-emacs-directory))
+        (saves   (expand-file-name "auto-saves/" user-emacs-directory))
+        (backups (expand-file-name "backups/" user-emacs-directory)))
+    (dolist (dir (list locks saves backups))
+      (condition-case nil
+          (make-directory dir t)
+        (file-error nil)))
+    (setq lock-file-name-transforms `(("\\`\\(.+\\)\\'" ,locks t))
+          auto-save-file-name-transforms `(("\\`\\(.+\\)\\'" ,saves t))
+          backup-directory-alist `((".*" . ,backups))
+          ;; Writing a backup by renaming replaces the file's inode,
+          ;; which loses the identity iCloud tracks the document by.
+          backup-by-copying t)))
+
 (cl-defmethod window-system-initialization (&context (window-system ios)
                                                      &optional _display)
   "Set up the iOS window system.
 WINDOW-SYSTEM is `ios'.  DISPLAY is ignored."
   (create-default-fontset)
   (ios--setup-fontset-fallbacks)
+  (ios--redirect-sibling-files)
   ;; Seed frame-background-mode from the OS-wide appearance so the
   ;; default theme picks dark or light accordingly.
   (when (fboundp 'ios-system-appearance)
@@ -145,16 +171,17 @@ WINDOW-SYSTEM is `ios'.  DISPLAY is ignored."
 (setq interprogram-paste-function #'ios-interprogram-paste)
 
 ;; Files-app integration.  ios-pick-file is implemented in C; it
-;; presents UIDocumentPickerViewController and blocks until the user
-;; picks something or cancels.
+;; presents UIDocumentPickerViewController and returns at once,
+;; leaving Emacs responsive while the picker is up.  Whatever the
+;; user chooses arrives later as a drag-n-drop event.
 (declare-function ios-pick-file "iosfns.m" ())
 
 (defun ios-find-file ()
-  "Pick a file via the iOS Files app and open it."
+  "Pick a file via the iOS Files app and open it.
+The picker is presented asynchronously; the chosen file arrives as a
+drag-n-drop event and is visited by `ios-handle-drag-n-drop'."
   (interactive)
-  (let ((path (ios-pick-file)))
-    (when (and path (file-readable-p path))
-      (find-file path))))
+  (ios-pick-file))
 
 (defun ios-handle-drag-n-drop (event)
   "Visit the files in the drag-n-drop EVENT.

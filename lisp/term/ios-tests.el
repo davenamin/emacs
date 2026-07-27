@@ -325,6 +325,49 @@ Results land in ~/ios-test-results.txt; one line per test."
       (cl-assert (stringp dir))
       (cl-assert (file-exists-p (expand-file-name "dir" dir)))))
 
+  ;;; --- Sibling files of an external document -----------------------
+
+  ;; The Files picker grants access to the chosen document only, so
+  ;; the lock, auto-save and backup Emacs would write beside it are
+  ;; refused by the sandbox.  All three have to land in the container.
+
+  (let* ((foreign "/private/var/mobile/Library/Mobile Documents/doc.txt")
+         (foreign-dir (file-name-directory foreign))
+         (in-container-p
+          (lambda (path dir)
+            (and (stringp path)
+                 (string-prefix-p (expand-file-name dir user-emacs-directory)
+                                  path)
+                 ;; and emphatically not next to the document
+                 (not (string-prefix-p foreign-dir path))))))
+
+    (ios-test-deftest sibling-dirs-exist
+      "the lock, auto-save and backup directories are created"
+      (dolist (d '("locks/" "auto-saves/" "backups/"))
+        (cl-assert (file-directory-p
+                    (expand-file-name d user-emacs-directory)))))
+
+    (ios-test-deftest lock-file-redirected
+      "a lock file for an external document lands in the container"
+      (cl-assert (funcall in-container-p
+                          (make-lock-file-name foreign) "locks/")))
+
+    (ios-test-deftest auto-save-file-redirected
+      "an auto-save file for an external document lands in the container"
+      (with-temp-buffer
+        (setq buffer-file-name foreign)
+        (cl-assert (funcall in-container-p
+                            (make-auto-save-file-name) "auto-saves/"))))
+
+    (ios-test-deftest backup-file-redirected
+      "a backup file for an external document lands in the container"
+      (cl-assert (funcall in-container-p
+                          (make-backup-file-name foreign) "backups/")))
+
+    (ios-test-deftest backups-copy-rather-than-rename
+      "backups preserve the original file, which iCloud tracks by inode"
+      (cl-assert backup-by-copying)))
+
   ;;; --- Hardware key translation -----------------------------------
 
   ;; `ios-translate-key' runs the same translation a real key press
