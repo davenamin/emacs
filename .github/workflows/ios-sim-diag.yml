@@ -275,10 +275,9 @@ jobs:
           RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
           log ""
           # Portable dump: the first launch finds no dump, runs loadup
-          # from source and writes one; a second launch has to load it.
-          # A single launch only ever exercises the writing half, which
-          # is how the batch-mode guard that stopped the dump ever
-          # being written reached a device unnoticed.
+          # from source and writes one; a second launch loads it.  Both
+          # halves are checked, since a single launch exercises only
+          # the writing one.
           PDMP="$DATA_CONTAINER/Library/Application Support/Emacs/emacs.pdmp"
           STDOUT_LOG="$DATA_CONTAINER/Documents/emacs-stdout.log"
           log ""
