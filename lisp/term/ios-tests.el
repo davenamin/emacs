@@ -378,7 +378,8 @@ Results land in ~/ios-test-results.txt; one line per test."
 
   (let ((hid-a 4) (hid-comma 54) (hid-f 9)
         (hid-escape 41) (hid-tab 43) (hid-return 40) (hid-left 80)
-        (shift 131072) (control 262144) (option 524288))
+        (shift 131072) (control 262144) (option 524288)
+        (command 1048576))
     (cl-flet ((xlate (&rest args) (apply #'ios-translate-key args)))
 
       (ios-test-deftest key-escape-is-esc
@@ -408,29 +409,39 @@ Results land in ~/ios-test-results.txt; one line per test."
         (cl-assert (equal '(ascii 1 0)
                           (xlate hid-a (logior control shift) "A" "a"))))
 
-      (ios-test-deftest key-option-is-meta-when-asked
-        "with ios-option-modifier meta, Option-f is M-f"
+      (ios-test-deftest key-option-is-meta-by-default
+        "Option-f is M-f, not Meta plus the layer glyph"
         ;; -characters reports the Option layer's florin sign here, so
         ;; the base character has to come from the other string.
-        (let ((ios-option-modifier 'meta))
-          (let ((r (xlate hid-f option (string #x192) "f")))
-            (cl-assert (eq 'ascii (nth 0 r)))
-            (cl-assert (= ?f (nth 1 r)))
-            (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27)))))))
-
-      (ios-test-deftest key-option-default-keeps-layer
-        "by default Option enters the layer glyph on an ordinary key"
         (let ((r (xlate hid-f option (string #x192) "f")))
-          (cl-assert (= #x192 (nth 1 r)))
-          (cl-assert (= 0 (logand (nth 2 r) (ash 1 27))))))
+          (cl-assert (eq 'ascii (nth 0 r)))
+          (cl-assert (= ?f (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
 
-      (ios-test-deftest key-option-default-takes-shifted-char
-        "by default the character comes from the shifted string"
-        ;; With Option left to the layout there is no reason to read
-        ;; the unshifted string, which would report a comma here.
-        (let ((r (xlate hid-comma (logior option shift) "<" ",")))
+      (ios-test-deftest key-command-is-meta-by-default
+        "Command-f is M-f as well, so either key serves"
+        (let ((r (xlate hid-f command "f" "f")))
+          (cl-assert (= ?f (nth 1 r)))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))
+
+      (ios-test-deftest key-command-keeps-shifted-punctuation
+        "Command-Shift-comma is M-< where Option-Shift-comma is not"
+        ;; Only Option substitutes the unshifted string, so Command
+        ;; reads the character the layout already shifted.
+        (let ((r (xlate hid-comma (logior command shift) "<" ",")))
           (cl-assert (= ?< (nth 1 r)))
-          (cl-assert (= 0 (logand (nth 2 r) (ash 1 27))))))
+          (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27)))))
+        ;; The documented limitation of Option, asserted so a change
+        ;; to it is deliberate rather than accidental.
+        (let ((r (xlate hid-comma (logior option shift) "<" ",")))
+          (cl-assert (= ?, (nth 1 r)))))
+
+      (ios-test-deftest key-option-none-keeps-layer
+        "with ios-option-modifier nil, Option enters the layer glyph"
+        (let ((ios-option-modifier nil))
+          (let ((r (xlate hid-f option (string #x192) "f")))
+            (cl-assert (= #x192 (nth 1 r)))
+            (cl-assert (= 0 (logand (nth 2 r) (ash 1 27)))))))
 
       (ios-test-deftest key-option-plist-per-kind
         "the plist form applies per event kind"
@@ -439,7 +450,8 @@ Results land in ~/ios-test-results.txt; one line per test."
           (let ((r (xlate hid-left option nil nil)))
             (cl-assert (eq 'non-ascii (nth 0 r)))
             (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27)))))
-          ;; ... while an ordinary key is left to the layout.
+          ;; ... while an ordinary key, absent from the plist, is
+          ;; left to the layout.
           (let ((r (xlate hid-f option (string #x192) "f")))
             (cl-assert (= #x192 (nth 1 r)))
             (cl-assert (= 0 (logand (nth 2 r) (ash 1 27)))))))

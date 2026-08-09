@@ -2076,22 +2076,25 @@ Each SYMBOL is `control', `meta', `alt', `super' or `hyper'.  A value
 of nil or `none' leaves the key to the keyboard layout, which uses
 Option to enter the alternate characters printed on Apple keyboards.
 
-The default leaves ordinary keys to the layout and makes Option mean
-Meta for function keys, following the Emacs Mac Port.  UIKit reports
-the character for an Option combination without its shift, so with
-Option acting as a modifier on ordinary keys, Option-Shift-comma
-arrives as M-, rather than M-<; leaving the layout in charge avoids
-that, at the cost of reaching Meta through the Escape prefix or the
-accessory bar.  Set this to `meta' to have Option act as Meta
-throughout, accepting that limitation.  */);
-  Vios_option_modifier = list4 (QCfunction, Qmeta, QCmouse, Qmeta);
+Option is Meta by default, as on the other Apple ports.  Note that
+UIKit reports the character for an Option combination without its
+shift, so Option-Shift-comma arrives as M-, rather than M-<.  Command
+is Meta as well and does not have that problem, so it is the one to
+use for Meta with shifted punctuation; a value of nil or `none' here
+gives the alternate characters back instead.  */);
+  Vios_option_modifier = Qmeta;
 
   DEFVAR_LISP ("ios-command-modifier", Vios_command_modifier,
      doc: /* Modifier the Command key produces.
-Takes the same values as `ios-option-modifier'.  Note that iPadOS
-reserves several Command combinations, such as Command-Space and
-Command-H, which never reach Emacs.  */);
-  Vios_command_modifier = Qsuper;
+Takes the same values as `ios-option-modifier'.
+
+Command is Meta by default, alongside Option.  The two are read
+independently, so either key serves, and their limits do not
+overlap: iPadOS reserves Command-Space, Command-Tab, Command-H and
+Command-Q, which never reach Emacs, while Option loses the shift on
+punctuation.  Use Option for M-q and Command for M-<.  Set this to
+`super' for the usual Apple arrangement.  */);
+  Vios_command_modifier = Qmeta;
 
   DEFVAR_LISP ("ios-control-modifier", Vios_control_modifier,
      doc: /* Modifier the Control key produces.
