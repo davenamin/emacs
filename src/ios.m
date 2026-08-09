@@ -111,6 +111,23 @@ ios_logging_enabled (void)
   return enabled;
 }
 
+/* Milliseconds since the first log line of this process.  NSDate
+   prints whole seconds, which is too coarse to compare one startup
+   against another -- loading the dump rather than running loadup is
+   a difference of a few seconds at most.  The clock is monotonic so
+   the figures survive any wall-clock adjustment mid-launch.  */
+static double
+ios_log_elapsed_ms (void)
+{
+  static double origin;
+  static dispatch_once_t once;
+  struct timespec ts;
+  clock_gettime (CLOCK_MONOTONIC, &ts);
+  double now = ts.tv_sec * 1000.0 + ts.tv_nsec / 1.0e6;
+  dispatch_once (&once, ^{ origin = now; });
+  return now - origin;
+}
+
 void
 ios_launch_log (NSString *msg)
 {
@@ -120,8 +137,8 @@ ios_launch_log (NSString *msg)
       NSString *path = ios_documents_path (@"emacs-launch.log");
       if (path)
         {
-          NSString *line = [NSString stringWithFormat:@"%@ %@\n",
-                            [NSDate date], msg];
+          NSString *line = [NSString stringWithFormat:@"%@ [%.1fms] %@\n",
+                            [NSDate date], ios_log_elapsed_ms (), msg];
           FILE *f = fopen (path.UTF8String, "a");
           if (f != NULL)
             {
