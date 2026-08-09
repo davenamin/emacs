@@ -274,6 +274,52 @@ jobs:
           # without downloading the artifact.
           RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
           log ""
+          # Portable dump: the first launch finds no dump, runs loadup
+          # from source and writes one; a second launch has to load it.
+          # A single launch only ever exercises the writing half, which
+          # is how the batch-mode guard that stopped the dump ever
+          # being written reached a device unnoticed.
+          PDMP="$DATA_CONTAINER/Library/Application Support/Emacs/emacs.pdmp"
+          STDOUT_LOG="$DATA_CONTAINER/Documents/emacs-stdout.log"
+          log ""
+          log "--- portable dump ---"
+          if [ -s "$PDMP" ]; then
+            log "dump written: $(wc -c < "$PDMP" | tr -d ' ') bytes"
+          else
+            log "dump was not written to $PDMP"
+            FAILED_PDMP=1
+          fi
+          if grep -q "emacs-pdmp: wrote dump to" "$STDOUT_LOG" 2>/dev/null; then
+            log "first launch reported writing the dump"
+          else
+            log "first launch did not report writing a dump"
+            FAILED_PDMP=1
+          fi
+
+          # Relaunch and watch for the load.  No auto-input this time:
+          # the startup line is all that is wanted, and the self-tests
+          # have already run.
+          log "--- relaunching to exercise the load path ---"
+          run env SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
+            xcrun simctl launch booted org.gnu.emacs
+          waited=0
+          while [ "$waited" -lt 90 ]; do
+            if grep -q "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+            waited=$((waited + 5))
+          done
+          if grep -q "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+            log "second launch loaded the dump after ${waited}s"
+          else
+            log "second launch did not load the dump within ${waited}s"
+            log "pdmp lines seen:"
+            grep "emacs-pdmp:" "$STDOUT_LOG" >> "$OUT" 2>&1 || true
+            FAILED_PDMP=1
+          fi
+          run xcrun simctl terminate booted org.gnu.emacs
+
           log "--- self-test summary ---"
           if [ -f "$RESULTS" ]; then
             PASSED=$(grep -c '^PASS ' "$RESULTS" || true)
@@ -331,14 +377,19 @@ jobs:
 
           echo "" >> "$OUT"
           echo "===== END =====" >> "$OUT"
-          # Diagnostics are committed even on failure (next step is
-          # if: always()), but FAILED_SELFTESTS still surfaces the
-          # red X so the cycle is visibly broken.
+          # Diagnostics are uploaded even on failure (that step is
+          # if: always()), but these still surface the red X so the
+          # cycle is visibly broken.
+          rc=0
           if [ -n "$FAILED_SELFTESTS" ]; then
             echo "::error::iOS self-tests reported FAIL lines; see ci-diag/sim-install.txt"
-            exit 1
+            rc=1
           fi
-          true
+          if [ -n "$FAILED_PDMP" ]; then
+            echo "::error::portable dump was not written or not loaded; see ci-diag/sim-install.txt"
+            rc=1
+          fi
+          exit $rc
 
       # Diagnostics are published as run artifacts rather than
       # committed, so captured logs and screenshots stay out of the
