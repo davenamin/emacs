@@ -195,10 +195,11 @@ Emacs a file (Files.app share sheet, Mail attachment, etc.)."
 (global-set-key [drag-n-drop] #'ios-handle-drag-n-drop)
 
 (defcustom ios-auto-show-keyboard t
-  "If non-nil, automatically show the soft keyboard when entering the minibuffer.
-Hardware-keyboard users may prefer to disable this so the on-screen
-keyboard never covers the canvas during M-x.  Auto-hide on
-minibuffer exit is unconditional once shown by this hook."
+  "If non-nil, raise the soft keyboard when Emacs expects typing.
+The keyboard comes up on entering the minibuffer, is put away again
+on leaving it, and returns when a tap moves point.  Users with a
+hardware keyboard may prefer nil, which leaves the soft keyboard
+alone entirely so it never covers the canvas."
   :group 'ios
   :type 'boolean)
 
@@ -208,18 +209,38 @@ minibuffer exit is unconditional once shown by this hook."
 (defvar ios--keyboard-shown-by-minibuffer nil
   "Non-nil when the current minibuffer session brought up the keyboard.")
 
+(defvar ios--keyboard-hidden-by-emacs nil
+  "Non-nil while the soft keyboard is hidden by `ios-hide-keyboard'.")
+
 (defun ios--minibuffer-setup ()
   (when ios-auto-show-keyboard
-    (setq ios--keyboard-shown-by-minibuffer t)
+    (setq ios--keyboard-shown-by-minibuffer t
+          ios--keyboard-hidden-by-emacs nil)
     (ios-show-keyboard)))
 
 (defun ios--minibuffer-exit ()
   (when ios--keyboard-shown-by-minibuffer
-    (setq ios--keyboard-shown-by-minibuffer nil)
+    (setq ios--keyboard-shown-by-minibuffer nil
+          ios--keyboard-hidden-by-emacs t)
     (ios-hide-keyboard)))
+
+(defun ios--show-keyboard-after-click ()
+  "Bring the soft keyboard back when a tap moves point.
+Tapping makes the canvas first responder, which is what raises the
+keyboard normally, but that cannot undo `ios-hide-keyboard': hiding
+substitutes an empty input view and deliberately keeps responder
+status, so hardware keys go on working, and only `ios-show-keyboard'
+puts the real one back.  Leaving the minibuffer hides the keyboard,
+so without this a tap afterwards has no way to recover it."
+  (when (and ios--keyboard-hidden-by-emacs
+             ios-auto-show-keyboard
+             (mouse-event-p last-command-event))
+    (setq ios--keyboard-hidden-by-emacs nil)
+    (ios-show-keyboard)))
 
 (add-hook 'minibuffer-setup-hook #'ios--minibuffer-setup)
 (add-hook 'minibuffer-exit-hook #'ios--minibuffer-exit)
+(add-hook 'post-command-hook #'ios--show-keyboard-after-click)
 
 ;; Named colors.  The C-level color lookup resolves hex literals
 ;; and the tty pseudo colors on its own; the full X11 name table
