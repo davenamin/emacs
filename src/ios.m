@@ -111,11 +111,11 @@ ios_logging_enabled (void)
   return enabled;
 }
 
-/* Milliseconds since the first log line of this process.  NSDate
-   prints whole seconds, which is too coarse to compare one startup
-   against another -- loading the dump rather than running loadup is
-   a difference of a few seconds at most.  The clock is monotonic so
-   the figures survive any wall-clock adjustment mid-launch.  */
+/* Milliseconds since the first log line of this process, so one
+   startup can be compared against another; NSDate prints whole
+   seconds, which loses the shape of anything faster.  The clock is
+   monotonic, so the figures survive a wall-clock adjustment during
+   launch.  */
 static double
 ios_log_elapsed_ms (void)
 {
