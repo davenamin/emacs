@@ -312,6 +312,35 @@ jobs:
           done
           if grep -q "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
             log "second launch loaded the dump after ${waited}s"
+            # Whether loading it is actually worth anything.  Each
+            # launch stamps its log lines with milliseconds since its
+            # own first line, so the figure on the x-create-frame line
+            # is that launch's time to a usable frame: the first ran
+            # loadup from source, the second loaded the dump.
+            LAUNCH_LOG="$DATA_CONTAINER/Documents/emacs-launch.log"
+            # Let the second launch get as far as its first frame.
+            waited=0
+            while [ "$waited" -lt 60 ]; do
+              [ "$(grep -c 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null)" -ge 2 ] && break
+              sleep 5
+              waited=$((waited + 5))
+            done
+            SRC_MS=$(grep 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                     | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
+            DUMP_MS=$(grep 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                      | sed -n '2s/.*\[\([0-9.]*\)ms\].*/\1/p')
+            if [ -n "$SRC_MS" ] && [ -n "$DUMP_MS" ]; then
+              log "time to first frame: ${SRC_MS}ms from source, ${DUMP_MS}ms from the dump"
+              if awk -v a="$SRC_MS" -v b="$DUMP_MS" 'BEGIN{exit !(b < a)}'; then
+                log "speedup: $(awk -v a="$SRC_MS" -v b="$DUMP_MS" \
+                                  'BEGIN{printf "%.1fx", a/b}')"
+              else
+                log "loading the dump was no faster than running loadup"
+                FAILED_PDMP=1
+              fi
+            else
+              log "could not read both x-create-frame timings"
+            fi
           else
             log "second launch did not load the dump within ${waited}s"
             log "pdmp lines seen:"
