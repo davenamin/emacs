@@ -90,7 +90,7 @@ PROVISIONING_PROFILE ?=
 DEVICE_ENTITLEMENTS  ?=
 
 .PHONY: all
-all: $(ios_appdir)/emacs
+all: sign
 
 ## Step 1: assemble the bundle template into $(ios_appdir).  Mirrors
 ## the tar-based dance in nextstep/Makefile.in.  Info.plist is
@@ -249,8 +249,9 @@ $(ios_appdir)/etc/charsets: $(ios_appdir)
 	touch $@ || true
 
 ## Step 2: drop the cross-compiled emacs binary into the bundle and
-## codesign.  Depend on the Lisp + data copy so an `all' build
-## produces a runnable bundle in one shot.
+## compile the icon asset catalog.  Depend on the Lisp + data copy so
+## an `all' build produces a runnable bundle in one shot.  Signing is
+## step 3, and is not part of this rule; see the comment there.
 $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
                      $(ios_appdir)/lisp/loadup.el \
                      $(ios_appdir)/etc/charsets
@@ -314,27 +315,95 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 	  echo "ios/Makefile: no AppIcon.png; skipping asset catalog"; \
 	  echo "  (App Store submissions require one; see ios/README)"; \
 	fi
-	@if [ -n "$(PROVISIONING_PROFILE)" ]; then \
-	  cp -f "$(PROVISIONING_PROFILE)" \
-	    "$(ios_appdir)/embedded.mobileprovision"; \
-	fi
-	@if [ -n "$(CODESIGN_IDENTITY)" ]; then \
-	  for dylib in $(ios_appdir)/tree-sitter/*.dylib; do \
-	    [ -f "$$dylib" ] || continue; \
-	    codesign --force --sign "$(CODESIGN_IDENTITY)" "$$dylib"; \
-	  done; \
-	  if [ -n "$(DEVICE_ENTITLEMENTS)" ]; then \
-	    codesign --force --sign "$(CODESIGN_IDENTITY)" \
-	      --entitlements "$(DEVICE_ENTITLEMENTS)" \
-	      "$(ios_appdir)"; \
-	  else \
-	    codesign --force --sign "$(CODESIGN_IDENTITY)" \
-	      "$(ios_appdir)"; \
-	  fi; \
-	else \
+
+## Step 3: code-sign the bundle.  Deliberately a phony target rather
+## than part of step 2.  Every input to signing is either a
+## command-line variable (CODESIGN_IDENTITY) or a file outside the
+## bundle (PROVISIONING_PROFILE, DEVICE_ENTITLEMENTS), and make can
+## compare none of those against the bundle's timestamp.  Folded into
+## the step 2 file rule, "make ipa CODESIGN_IDENTITY=..." was a no-op
+## whenever the bundle happened to be up to date: it repackaged an
+## older signature, or none, without saying so.
+.PHONY: sign
+sign: $(ios_appdir)/emacs
+	@if [ -z "$(CODESIGN_IDENTITY)" ]; then \
+	  rm -rf "$(ios_appdir)/_CodeSignature" \
+	         "$(ios_appdir)/embedded.mobileprovision"; \
 	  echo "ios/Makefile: CODESIGN_IDENTITY unset; producing"; \
 	  echo "  unsigned bundle suitable for the Simulator only."; \
-	fi
+	  exit 0; \
+	fi; \
+	set -e; \
+	if [ -n "$(PROVISIONING_PROFILE)" ]; then \
+	  cp -f "$(PROVISIONING_PROFILE)" \
+	    "$(ios_appdir)/embedded.mobileprovision"; \
+	elif [ -f "$(ios_appdir)/embedded.mobileprovision" ]; then \
+	  echo "ios/Makefile: the bundle carries an" >&2; \
+	  echo "  embedded.mobileprovision from an earlier build, but" >&2; \
+	  echo "  PROVISIONING_PROFILE is unset, so signing now would" >&2; \
+	  echo "  pair this identity with a profile you did not name." >&2; \
+	  echo "  Pass PROVISIONING_PROFILE, or delete that file." >&2; \
+	  exit 1; \
+	fi; \
+	for dylib in $(ios_appdir)/tree-sitter/*.dylib; do \
+	  [ -f "$$dylib" ] || continue; \
+	  codesign --force --sign "$(CODESIGN_IDENTITY)" "$$dylib"; \
+	done; \
+	if [ -n "$(DEVICE_ENTITLEMENTS)" ]; then \
+	  codesign --force --sign "$(CODESIGN_IDENTITY)" \
+	    --entitlements "$(DEVICE_ENTITLEMENTS)" "$(ios_appdir)"; \
+	else \
+	  codesign --force --sign "$(CODESIGN_IDENTITY)" "$(ios_appdir)"; \
+	fi; \
+	codesign --verify --strict "$(ios_appdir)"
+	@$(MAKE) check-signing-matches-profile
+
+## Reject locally what App Store Connect would reject on upload: a
+## bundle whose signing certificate is absent from the
+## DeveloperCertificates array of its own embedded.mobileprovision.
+## Transporter reports that as "Invalid Code Signing ... must be
+## signed with the certificate that is contained in the provisioning
+## profile", after the archive has been uploaded; the same comparison
+## costs a second here.  Certificates are matched by SHA-1
+## fingerprint, not by name, because the display names of a renewed
+## and a revoked certificate are identical.
+.PHONY: check-signing-matches-profile
+check-signing-matches-profile:
+	@test -f "$(ios_appdir)/embedded.mobileprovision" || exit 0; \
+	set -e; \
+	tmpd=`mktemp -d -t emacs-sign`; \
+	trap 'rm -rf "$$tmpd"' 0 1 2 3 15; \
+	codesign -d --extract-certificates="$$tmpd/sig" \
+	  "$(ios_appdir)" 2>/dev/null || true; \
+	test -f "$$tmpd/sig0" || { \
+	  echo "ios/Makefile: the bundle carries a provisioning" >&2; \
+	  echo "  profile but is not signed." >&2; \
+	  exit 1; }; \
+	signer=`openssl x509 -inform DER -in "$$tmpd/sig0" -noout \
+	          -fingerprint -sha1 | sed 's/.*=//'`; \
+	security cms -D -i "$(ios_appdir)/embedded.mobileprovision" \
+	  -o "$$tmpd/profile.plist"; \
+	i=0; match=no; \
+	while [ $$i -lt 20 ]; do \
+	  plutil -extract DeveloperCertificates.$$i raw -o "$$tmpd/c.b64" \
+	    "$$tmpd/profile.plist" 2>/dev/null || break; \
+	  openssl base64 -d -A -in "$$tmpd/c.b64" -out "$$tmpd/c.der"; \
+	  fp=`openssl x509 -inform DER -in "$$tmpd/c.der" -noout \
+	        -fingerprint -sha1 | sed 's/.*=//'`; \
+	  if [ "$$fp" = "$$signer" ]; then match=yes; break; fi; \
+	  i=`expr $$i + 1`; \
+	done; \
+	if [ "$$match" != yes ]; then \
+	  echo "ios/Makefile: the signing certificate is not in the" >&2; \
+	  echo "  embedded provisioning profile, so this bundle will be" >&2; \
+	  echo "  rejected on upload.  Signed by SHA-1 $$signer;" >&2; \
+	  echo "  the profile lists $$i certificate(s), none matching." >&2; \
+	  echo "  A development certificate against an App Store" >&2; \
+	  echo "  profile is the usual cause.  Compare against" >&2; \
+	  echo "  security find-identity -v -p codesigning." >&2; \
+	  exit 1; \
+	fi; \
+	echo "ios/Makefile: signing certificate matches the profile."
 
 ## Extract the provisioning profile's Entitlements dict to stdout
 ## as XML plist, ready to redirect into a file and pass back via
@@ -374,12 +443,12 @@ device-entitlements-template:
 ## Transporter.  ditto is Apple's archiver and preserves symlinks,
 ## permissions and extended attributes that a bare zip can drop --
 ## important because the codesign seal covers bundle contents.
-## The bundle should be signed with an Apple Distribution identity
-## + App Store provisioning profile before packaging for upload;
-## the target itself doesn't check that (an unsigned .ipa is still
-## useful for local inspection).
+## Depends on the sign target, which always runs, so passing
+## CODESIGN_IDENTITY here signs the bundle that actually gets
+## packaged.  With no identity the .ipa is unsigned, which is still
+## useful for local inspection but is not uploadable.
 .PHONY: ipa
-ipa: $(ios_appdir)/emacs
+ipa: sign
 	rm -rf "$(abs_builddir)/Payload" "$(abs_builddir)/Emacs.ipa"
 	$(MKDIR_P) "$(abs_builddir)/Payload"
 	cp -R "$(ios_appdir)" "$(abs_builddir)/Payload/"
