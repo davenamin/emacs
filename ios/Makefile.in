@@ -347,15 +347,26 @@ $(ios_appdir)/emacs: $(ios_appdir) $(ios_emacs_binary) \
 ## extraction is the only input needed.
 ##
 ## Inspection commands (Apple-documented): security cms -D -i ...
-## is QA1798's documented way to decode a provisioning profile.
+## is QA1798's documented way to decode a provisioning profile.  Its
+## output goes to a temporary file rather than down a pipe, because
+## PlistBuddy seeks within the file it reads and so cannot take one:
+## given /dev/stdin it reports "Cannot parse a NULL or zero-length
+## data" however much the pipe holds.
 .PHONY: device-entitlements-template
 device-entitlements-template:
 	@test -n "$(PROVISIONING_PROFILE)" || { \
 	  echo "Set PROVISIONING_PROFILE=path/to/Profile.mobileprovision"; \
 	  exit 2; }
-	@security cms -D -i "$(PROVISIONING_PROFILE)" \
-	  | /usr/libexec/PlistBuddy -x -c "Print :Entitlements" \
-	    /dev/stdin
+	@set -e; \
+	tmp=`mktemp -t emacs-provision`; \
+	trap 'rm -f "$$tmp"' 0 1 2 3 15; \
+	security cms -D -i "$(PROVISIONING_PROFILE)" > "$$tmp"; \
+	test -s "$$tmp" || { \
+	  echo "Could not decode $(PROVISIONING_PROFILE)."; \
+	  echo "  Expected a provisioning profile, which is CMS-signed;"; \
+	  echo "  check the path and that the file is not truncated."; \
+	  exit 1; }; \
+	/usr/libexec/PlistBuddy -x -c "Print :Entitlements" "$$tmp"
 
 ## Package the bundle as an .ipa: a zip archive whose top level is
 ## Payload/Emacs.app.  This is the container format App Store
