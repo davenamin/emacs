@@ -46,6 +46,11 @@ XCONFIGURE = @XCONFIGURE@
 ifneq ($(XCONFIGURE),)
 vpath %.c := $(srcdir)
 vpath %.h := $(srcdir)
+## The iOS cross-build is the only configuration that compiles .m
+## files out of tree, so it is the only one that needs this.  Without
+## it, whether src/ios*.m is found depends on the make implementation
+## falling back to VPATH for patterns no vpath directive covers.
+vpath %.m := $(srcdir)
 endif
 
 # abs_top_builddir is the name of the toplevel build directory under
@@ -699,8 +704,12 @@ buildobj.h: Makefile
 	done >$@.tmp
 	$(AM_V_at)mv $@.tmp $@
 
+## The iOS entries carry $(srcdir)/ because they are the only ones
+## reached by an out-of-tree build, and prerequisites here should not
+## rely on directory search.
 GLOBAL_SOURCES = $(base_obj:.o=.c) $(NS_OBJC_OBJ:.o=.m) \
-		 $(IOS_OBJC_OBJ:.o=.m) $(IOS_C_OBJ:.o=.c)
+		 $(addprefix $(srcdir)/,$(IOS_OBJC_OBJ:.o=.m)) \
+		 $(addprefix $(srcdir)/,$(IOS_C_OBJ:.o=.c))
 
 gl-stamp: $(libsrc)/make-docfile$(EXEEXT) $(GLOBAL_SOURCES)
 	$(AM_V_GLOBALS)$(libsrc)/make-docfile -d $(srcdir) -g $(doc_obj) > globals.tmp
