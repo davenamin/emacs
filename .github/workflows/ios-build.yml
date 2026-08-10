@@ -1,8 +1,7 @@
 # iOS cross-build CI for the claude/ios-port branch.
 #
-# Runs `make ios` on a GitHub-hosted macOS runner so the agent
-# can iterate on the iOS port without a human in the loop.  The
-# workflow installs the build dependencies via Homebrew, points
+# Runs `make ios` on a GitHub-hosted macOS runner.  The workflow
+# installs the build dependencies via Homebrew, points
 # xcode-select at the latest Xcode, then runs the same recipe a
 # developer would run by hand:
 #
@@ -14,9 +13,7 @@
 # On success the assembled Emacs.app bundle is uploaded as an
 # artifact (capped at a few MB -- the Mach-O itself, plus the
 # bundle template).  On failure the tail of make-ios.out is
-# surfaced in the job summary so the diagnostic is one click
-# away in the GitHub UI (and visible via the MCP github tools
-# the agent uses).
+# surfaced in the job summary.
 
 name: iOS cross-build
 

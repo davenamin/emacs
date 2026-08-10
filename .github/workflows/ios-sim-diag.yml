@@ -1,12 +1,7 @@
 name: iOS simulator-install diagnostic
 
 # Triggered on any push to claude/ios-port and via manual dispatch.
-# The earlier version had a paths: filter restricted to the workflow
-# file itself, which never fired -- GitHub Actions did not trigger
-# this workflow even on the commit that introduced it.  The simpler,
-# unfiltered push trigger matches the working ios-build.yml workflow
-# (which DID run on the same push).  This workflow is expensive (~20
-# min full cross-build), so push it sparingly.
+# A full cross-build plus simulator run takes about 20 minutes.
 on:
   push:
     branches:
