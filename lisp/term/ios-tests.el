@@ -58,9 +58,53 @@ records FAIL.  DOCSTRING is used as the test description in the log."
       (write-region (point-min) (point-max) path nil 'silent)))
   path)
 
+(defun ios-test--ert-suite-files ()
+  "Return the upstream ERT suites shipped in the bundle.
+Empty in any bundle built without IOS_SELFTESTS, which is every
+bundle meant for a device."
+  (let ((dir (expand-file-name "test" (ios-bundle-directory))))
+    (and (file-directory-p dir)
+         (sort (directory-files-recursively dir "-tests\\.el\\'")
+               #'string<))))
+
+(defun ios-test--run-ert-suites ()
+  "Load the bundled upstream ERT suites and run them.
+Records one line per test in `ios-test--out', in the same format the
+port's own probes use, so the automated run grades both alike.
+
+The selector matches the default of the upstream test Makefile:
+expensive and unstable tests are skipped.  Each test runs inside
+`condition-case' because a suite that signals outside a test body
+would otherwise cost the whole run."
+  (let ((files (ios-test--ert-suite-files)))
+    (when files
+      (require 'ert)
+      (dolist (file files)
+        (condition-case err
+            ;; Loaded rather than required: `ert-resource-directory'
+            ;; derives its path from the file being loaded, so the
+            ;; data directories copied alongside are found as they
+            ;; are in a host build.
+            (load file nil t)
+          (error
+           (push (format "FAIL ert-load/%s :: %S\n"
+                         (file-name-nondirectory file) err)
+                 ios-test--out))))
+      (dolist (test (ert-select-tests
+                     '(not (or (tag :expensive-test) (tag :unstable)))
+                     t))
+        (let* ((name (ert-test-name test))
+               (result (condition-case err (ert-run-test test) (error err))))
+          (push (if (and (ert-test-result-p result)
+                         (ert-test-result-expected-p test result))
+                    (format "PASS ert/%s\n" name)
+                  (format "FAIL ert/%s :: %S\n" name result))
+                ios-test--out))))))
+
 (defun ios-run-self-tests ()
   "Run the iOS port's functional self-tests.
-Results land in ~/ios-test-results.txt; one line per test."
+Results land in ~/ios-test-results.txt; one line per test.  When the
+bundle carries the upstream ERT suites, those run too."
   (interactive)
   (setq ios-test--out nil)
 
@@ -501,6 +545,10 @@ Results land in ~/ios-test-results.txt; one line per test."
         (let ((r (xlate hid-a control "a" "a" (ash 1 27))))
           (cl-assert (= 1 (nth 1 r)))
           (cl-assert (/= 0 (logand (nth 2 r) (ash 1 27))))))))
+
+  ;;; --- Upstream ERT suites ---------------------------------------
+
+  (ios-test--run-ert-suites)
 
   ;;; --- Write the results -----------------------------------------
 
