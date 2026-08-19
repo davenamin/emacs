@@ -60,14 +60,26 @@ records FAIL.  DOCSTRING is used as the test description in the log."
 
 (defun ios-test--describe (object)
   "Return a one-line printable rendering of OBJECT for the results file.
-ERT failure objects carry whatever data the test was comparing, which
-can run to kilobytes and can contain control characters.  Written out
-raw, those turn the results file into something grep treats as binary
-and refuses to print lines from, which hides the very failures the
-file exists to report."
+Failure data carries whatever the test was comparing, which can run to
+kilobytes and can contain control characters.  Written out raw, those
+turn the results file into something grep treats as binary and refuses
+to print lines from, which hides the very failures the file exists to
+report."
   (let ((s (replace-regexp-in-string
             "[[:cntrl:]]+" " " (format "%S" object))))
-    (if (> (length s) 300) (concat (substring s 0 300) "...") s)))
+    (if (> (length s) 500) (concat (substring s 0 500) "...") s)))
+
+(defun ios-test--result-detail (result)
+  "Return the part of ERT RESULT worth recording.
+An `ert-test-failed' object holds every `should' form the test
+evaluated, in order, and the one that failed is last -- so truncating
+the object itself keeps only assertions that passed.  Its condition
+carries just the failing form, which is the part that identifies the
+failure."
+  (if (and (fboundp 'ert-test-result-with-condition-p)
+           (ert-test-result-with-condition-p result))
+      (ert-test-result-with-condition-condition result)
+    result))
 
 (defun ios-test--ert-suite-files ()
   "Return the upstream ERT suites shipped in the bundle.
@@ -111,7 +123,8 @@ would otherwise cost the whole run."
                          (ert-test-result-expected-p test result))
                     (format "PASS ert/%s\n" name)
                   (format "FAIL ert/%s :: %s\n"
-                          name (ios-test--describe result)))
+                          name (ios-test--describe
+                                (ios-test--result-detail result))))
                 ios-test--out))))))
 
 (defun ios-run-self-tests ()
