@@ -1521,6 +1521,16 @@ by hand to see the underlying error.])])
      # pipe()+fcntl() fallback, which compiles cleanly on every
      # Apple SDK.  The iphoneos SDK reports pipe2 as unavailable on
      # its own so this override is also harmless there.
+     # gl_cv_func_memmem_works_always=no makes gnulib supply its own
+     # memmem.  Cross-compiling, gnulib cannot run its correctness
+     # probe and guesses "yes" for every platform that is neither
+     # glibc nor Cygwin, so the build keeps Apple's memmem -- which
+     # returns NULL when the haystack length is zero, where glibc and
+     # gnulib return the haystack.  src/fns.c reports that as no
+     # match, so (string-search "" "") answered nil instead of 0 and
+     # the upstream string-search test failed on device while passing
+     # on the host.  gnulib's probe cannot catch this on its own: it
+     # tests an empty needle only against a non-empty haystack.
      # The inner pass also generates ios/Emacs.base/Info.plist (the
      # bundle's on-disk plist, and for simulator builds the source of
      # the binary's embedded __info_plist section), so the
@@ -1534,6 +1544,7 @@ by hand to see the underlying error.])])
             IOS_APP_BUILD="$IOS_APP_BUILD" \
             IOS_DEPS="$IOS_DEPS" \
             ac_cv_func_pipe2=no \
+            gl_cv_func_memmem_works_always=no \
             $CONFIG_SHELL $0 $ios_passthrough], [],
        [AC_MSG_ERROR([Failed to cross-configure Emacs for iOS.])])
 
