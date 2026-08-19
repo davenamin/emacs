@@ -58,6 +58,17 @@ records FAIL.  DOCSTRING is used as the test description in the log."
       (write-region (point-min) (point-max) path nil 'silent)))
   path)
 
+(defun ios-test--describe (object)
+  "Return a one-line printable rendering of OBJECT for the results file.
+ERT failure objects carry whatever data the test was comparing, which
+can run to kilobytes and can contain control characters.  Written out
+raw, those turn the results file into something grep treats as binary
+and refuses to print lines from, which hides the very failures the
+file exists to report."
+  (let ((s (replace-regexp-in-string
+            "[[:cntrl:]]+" " " (format "%S" object))))
+    (if (> (length s) 300) (concat (substring s 0 300) "...") s)))
+
 (defun ios-test--ert-suite-files ()
   "Return the upstream ERT suites shipped in the bundle.
 Empty in any bundle built without IOS_SELFTESTS, which is every
@@ -87,8 +98,9 @@ would otherwise cost the whole run."
             ;; are in a host build.
             (load file nil t)
           (error
-           (push (format "FAIL ert-load/%s :: %S\n"
-                         (file-name-nondirectory file) err)
+           (push (format "FAIL ert-load/%s :: %s\n"
+                         (file-name-nondirectory file)
+                         (ios-test--describe err))
                  ios-test--out))))
       (dolist (test (ert-select-tests
                      '(not (or (tag :expensive-test) (tag :unstable)))
@@ -98,7 +110,8 @@ would otherwise cost the whole run."
           (push (if (and (ert-test-result-p result)
                          (ert-test-result-expected-p test result))
                     (format "PASS ert/%s\n" name)
-                  (format "FAIL ert/%s :: %S\n" name result))
+                  (format "FAIL ert/%s :: %s\n"
+                          name (ios-test--describe result)))
                 ios-test--out))))))
 
 (defun ios-run-self-tests ()

@@ -285,12 +285,27 @@ jobs:
             log "dump was not written to $PDMP"
             FAILED_PDMP=1
           fi
-          if grep -q "emacs-pdmp: wrote dump to" "$STDOUT_LOG" 2>/dev/null; then
+          if grep -aq "emacs-pdmp: wrote dump to" "$STDOUT_LOG" 2>/dev/null; then
             log "first launch reported writing the dump"
           else
             log "first launch did not report writing a dump"
             FAILED_PDMP=1
           fi
+
+          # Read the first launch's time to a usable frame, then move
+          # both logs aside so the relaunch writes into empty ones.
+          # Every launch appends to the same files, and the first
+          # launch emits more than one x-create-frame line -- the
+          # self-tests include suites that create frames of their own
+          # -- so picking the first and second occurrence in the
+          # combined file compared two frames of the same launch.
+          # Rotating drops the ordinal assumption entirely: each
+          # figure is the first x-create-frame of its own launch.
+          LAUNCH_LOG="$DATA_CONTAINER/Documents/emacs-launch.log"
+          SRC_MS=$(grep -a 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                   | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
+          mv -f "$LAUNCH_LOG" "$LAUNCH_LOG.first" 2>/dev/null || true
+          mv -f "$STDOUT_LOG" "$STDOUT_LOG.first" 2>/dev/null || true
 
           # Relaunch and watch for the load.  No auto-input this time:
           # the startup line is all that is wanted, and the self-tests
@@ -300,31 +315,28 @@ jobs:
             xcrun simctl launch booted org.gnu.emacs
           waited=0
           while [ "$waited" -lt 90 ]; do
-            if grep -q "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+            if grep -aq "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
               break
             fi
             sleep 5
             waited=$((waited + 5))
           done
-          if grep -q "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+          if grep -aq "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
             log "second launch loaded the dump after ${waited}s"
             # Whether loading it is actually worth anything.  Each
             # launch stamps its log lines with milliseconds since its
             # own first line, so the figure on the x-create-frame line
             # is that launch's time to a usable frame: the first ran
             # loadup from source, the second loaded the dump.
-            LAUNCH_LOG="$DATA_CONTAINER/Documents/emacs-launch.log"
             # Let the second launch get as far as its first frame.
             waited=0
             while [ "$waited" -lt 60 ]; do
-              [ "$(grep -c 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null)" -ge 2 ] && break
+              [ "$(grep -ac 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null)" -ge 1 ] && break
               sleep 5
               waited=$((waited + 5))
             done
-            SRC_MS=$(grep 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
-                     | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
-            DUMP_MS=$(grep 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
-                      | sed -n '2s/.*\[\([0-9.]*\)ms\].*/\1/p')
+            DUMP_MS=$(grep -a 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                      | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
             if [ -n "$SRC_MS" ] && [ -n "$DUMP_MS" ]; then
               log "time to first frame: ${SRC_MS}ms from source, ${DUMP_MS}ms from the dump"
               if awk -v a="$SRC_MS" -v b="$DUMP_MS" 'BEGIN{exit !(b < a)}'; then
@@ -340,22 +352,22 @@ jobs:
           else
             log "second launch did not load the dump within ${waited}s"
             log "pdmp lines seen:"
-            grep "emacs-pdmp:" "$STDOUT_LOG" >> "$OUT" 2>&1 || true
+            grep -a "emacs-pdmp:" "$STDOUT_LOG" >> "$OUT" 2>&1 || true
             FAILED_PDMP=1
           fi
           run xcrun simctl terminate booted org.gnu.emacs
 
           log "--- self-test summary ---"
           if [ -f "$RESULTS" ]; then
-            PASSED=$(grep -c '^PASS ' "$RESULTS" || true)
+            PASSED=$(grep -ac '^PASS ' "$RESULTS" || true)
             log "PASS lines: $PASSED"
             if [ "$PASSED" -eq 0 ]; then
               log "self-tests produced no PASS lines"
               FAILED_SELFTESTS=1
             fi
-            if grep -q '^FAIL ' "$RESULTS"; then
+            if grep -aq '^FAIL ' "$RESULTS"; then
               log "self-tests failed:"
-              grep '^FAIL ' "$RESULTS" | while IFS= read -r l; do log "  $l"; done
+              grep -a '^FAIL ' "$RESULTS" | while IFS= read -r l; do log "  $l"; done
               FAILED_SELFTESTS=1
             fi
           else
