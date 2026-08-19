@@ -177,6 +177,25 @@ else
 ios_selftest_exclude = --exclude=term/ios-tests.el
 endif
 
+## Upstream ERT suites to run inside the simulator alongside the
+## port's own probes, and the data directories two of them read.
+## Chosen for being pure Lisp: iOS has no fork or exec, no network,
+## and a filesystem confined to the container, so anything driving a
+## subprocess or reaching outside is unrunnable.  These travel under
+## the same IOS_SELFTESTS switch as ios-tests.el, so no bundle
+## anyone installs carries them.
+ios_ert_tests =					\
+  lisp/emacs-lisp/seq-tests.el			\
+  lisp/emacs-lisp/cl-lib-tests.el		\
+  lisp/emacs-lisp/subr-x-tests.el		\
+  lisp/faces-tests.el				\
+  src/buffer-tests.el				\
+  src/casefiddle-tests.el			\
+  src/fns-tests.el				\
+  src/regex-emacs-tests.el			\
+  src/xdisp-tests.el
+ios_ert_resources = lisp/faces-resources src/regex-resources
+
 $(ios_appdir)/lisp/loadup.el: $(ios_appdir) \
     $(wildcard $(abs_top_srcdir)/lisp/loaddefs.el)
 	@test -f $(abs_top_srcdir)/lisp/loaddefs.el || { \
@@ -199,6 +218,21 @@ $(ios_appdir)/lisp/loadup.el: $(ios_appdir) \
 	  ';; -*- no-byte-compile: t -*-' \
 	  "(if (fboundp 'normal-top-level-add-subdirs-to-load-path) (normal-top-level-add-subdirs-to-load-path))" \
 	  > $(ios_appdir)/lisp/subdirs.el
+	## The ERT suites, under the same switch.  The unconditional
+	## removal in the else branch matters: without it a bundle
+	## built for the simulator and then rebuilt for a device would
+	## keep the tests it was no longer supposed to have.
+	@if [ "$(IOS_SELFTESTS)" = yes ]; then \
+	  set -e; \
+	  for f in $(ios_ert_tests) $(ios_ert_resources); do \
+	    $(MKDIR_P) "$(ios_appdir)/test/`dirname $$f`"; \
+	    rm -rf "$(ios_appdir)/test/$$f"; \
+	    cp -R "$(abs_top_srcdir)/test/$$f" "$(ios_appdir)/test/$$f"; \
+	  done; \
+	  echo "ios/Makefile: shipped ERT suites for the simulator"; \
+	else \
+	  rm -rf "$(ios_appdir)/test"; \
+	fi
 	touch $@
 
 $(ios_appdir)/etc/charsets: $(ios_appdir)

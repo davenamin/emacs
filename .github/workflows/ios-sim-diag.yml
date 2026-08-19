@@ -213,14 +213,15 @@ jobs:
             xcrun simctl launch booted org.gnu.emacs
           # Wait for the self-tests to land their results file rather
           # than for a fixed interval.  The auto-input driver types
-          # M-x ios-run-self-tests about 16s in and the battery grows
-          # over time, so a fixed window silently tightens until a
-          # slow runner misses it; polling ends as soon as the file
-          # appears and only gives up after a margin no run needs.
+          # M-x ios-run-self-tests about 16s in, and the run now
+          # covers the bundled upstream ERT suites as well, loaded as
+          # source, so its duration moves with the test list.  Polling
+          # ends as soon as the file appears; the bound only has to
+          # exceed the slowest plausible run.
           RESULTS_WAIT="$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>/dev/null)/Documents/ios-test-results.txt"
-          log "--- waiting for self-test results (up to 150s) ---"
+          log "--- waiting for self-test results (up to 600s) ---"
           waited=0
-          while [ "$waited" -lt 150 ]; do
+          while [ "$waited" -lt 600 ]; do
             if [ -s "$RESULTS_WAIT" ]; then
               log "results appeared after ${waited}s"
               break

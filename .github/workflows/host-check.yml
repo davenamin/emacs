@@ -1,0 +1,74 @@
+name: host build and tests
+
+# The port edits configure.ac, Makefile.in and src/Makefile.in, which
+# ordinary non-iOS builds read as well, so a change meant for the
+# cross-build can break a plain one.  Nothing else in CI builds this
+# tree for the host.  Linux is used rather than macOS because it
+# exercises the same files and the runners are faster.
+#
+# The test list is a subset rather than "make check": the full suite
+# takes tens of minutes and carries upstream tests that are flaky or
+# environment-dependent, which would make a red run uninformative.
+# Widening it is a matter of adding target names below.
+
+on:
+  push:
+    branches:
+      - claude/ios-port
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential automake autoconf texinfo \
+            libncurses-dev
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          mkdir -p build-host
+          cd build-host
+          ../configure --without-all --without-x
+
+      - name: Build
+        run: make -C build-host -j"$(nproc)"
+
+      # The same suites the simulator job runs on device, plus
+      # coverage for the upstream files the port modifies.  Each
+      # target is one ERT file; a failure prints its log.
+      - name: Run selected test suites
+        env:
+          EMACS_TEST_TIMEOUT: 300
+        run: |
+          make -C build-host/test \
+            lisp/emacs-lisp/seq-tests \
+            lisp/emacs-lisp/cl-lib-tests \
+            lisp/emacs-lisp/subr-x-tests \
+            lisp/faces-tests \
+            src/buffer-tests \
+            src/casefiddle-tests \
+            src/fns-tests \
+            src/regex-emacs-tests \
+            src/xdisp-tests \
+            src/image-tests \
+            src/callproc-tests \
+            src/emacs-tests
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: host-test-logs
+          path: build-host/test/**/*.log
+          if-no-files-found: ignore
