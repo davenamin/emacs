@@ -361,6 +361,16 @@ jobs:
           if [ -f "$RESULTS" ]; then
             PASSED=$(grep -ac '^PASS ' "$RESULTS" || true)
             log "PASS lines: $PASSED"
+            # Skips are reported too.  A suite whose feature the build
+            # leaves out skips every test in it, and counting those as
+            # passes would put the coverage figure well above what
+            # actually ran.
+            SKIPPED=$(grep -ac '^SKIP ' "$RESULTS" || true)
+            log "SKIP lines: $SKIPPED"
+            if [ "$SKIPPED" -gt 0 ]; then
+              grep -a '^SKIP ' "$RESULTS" | head -80 \
+                | while IFS= read -r l; do log "  $l"; done
+            fi
             if [ "$PASSED" -eq 0 ]; then
               log "self-tests produced no PASS lines"
               FAILED_SELFTESTS=1

@@ -39,7 +39,13 @@ jobs:
           ./autogen.sh
           mkdir -p build-host
           cd build-host
-          ../configure --without-all --without-x --with-sqlite3
+          # --without-all turns off every OPTION_DEFAULT_ON, sqlite3
+          # and threads among them, and a suite whose feature is
+          # absent skips rather than fails -- so without asking for
+          # these back the job would report a pass while running
+          # neither.
+          ../configure --without-all --without-x \
+            --with-sqlite3 --with-threads
 
       - name: Build
         run: make -C build-host -j"$(nproc)"
