@@ -81,6 +81,28 @@ failure."
       (ert-test-result-with-condition-condition result)
     result))
 
+(defvar ios-test-ert-exclusions
+  '(;; Reaches `ask-user-about-supersession-threat', which errors out
+    ;; under `noninteractive' and otherwise calls `read-char-choice'.
+    ;; The app is a session, not a batch run, so the prompt waits for
+    ;; a keystroke nobody is there to supply.
+    fileio-tests--insert-file-contents-supersession
+    ;; Waits as well: the timeout could only fire because Emacs was
+    ;; idle enough to run a timer, which a loop inside scan-lists
+    ;; would not have allowed.  Which prompt is unestablished.
+    syntax-br-comments-c-b50
+    ;; Renders (record 'foo 1 2 3) through cl-print, which resolves
+    ;; `foo' as a class once cl-lib-tests has run -- that suite
+    ;; defines a one-slot struct by that name inside a test body.
+    ;; Upstream never collides here because its Makefile gives every
+    ;; test file a batch Emacs of its own, where this runner has only
+    ;; the one process the app already is.  The prin1 half of the
+    ;; pair still runs, and that is the half covering print.c.
+    print-tests-2-cl-print)
+  "Bundled ERT tests this runner skips, each for a reason above.
+They fail here on how the battery is run -- one shared, interactive
+process -- rather than on anything the port does differently.")
+
 (defvar ios-test-ert-timeout 30
   "Seconds any one bundled ERT test may take before it is failed.
 Generous next to the whole battery, which runs in seconds; the point
@@ -126,19 +148,20 @@ interruptible this way, but waiting is what the suites risk."
       (dolist (test (ert-select-tests
                      '(not (or (tag :expensive-test) (tag :unstable)))
                      t))
-        (let* ((name (ert-test-name test))
-               (result (condition-case err
-                           (with-timeout (ios-test-ert-timeout
-                                          'ios-test-timed-out)
-                             (ert-run-test test))
-                         (error err))))
-          (push (if (and (ert-test-result-p result)
-                         (ert-test-result-expected-p test result))
-                    (format "PASS ert/%s\n" name)
-                  (format "FAIL ert/%s :: %s\n"
-                          name (ios-test--describe
-                                (ios-test--result-detail result))))
-                ios-test--out))))))
+        (unless (memq (ert-test-name test) ios-test-ert-exclusions)
+          (let* ((name (ert-test-name test))
+                 (result (condition-case err
+                             (with-timeout (ios-test-ert-timeout
+                                            'ios-test-timed-out)
+                               (ert-run-test test))
+                           (error err))))
+            (push (if (and (ert-test-result-p result)
+                           (ert-test-result-expected-p test result))
+                      (format "PASS ert/%s\n" name)
+                    (format "FAIL ert/%s :: %s\n"
+                            name (ios-test--describe
+                                  (ios-test--result-detail result))))
+                  ios-test--out)))))))
 
 (defun ios-run-self-tests ()
   "Run the iOS port's functional self-tests.
