@@ -87,10 +87,6 @@ failure."
     ;; The app is a session, not a batch run, so the prompt waits for
     ;; a keystroke nobody is there to supply.
     fileio-tests--insert-file-contents-supersession
-    ;; Waits as well: the timeout could only fire because Emacs was
-    ;; idle enough to run a timer, which a loop inside scan-lists
-    ;; would not have allowed.  Which prompt is unestablished.
-    syntax-br-comments-c-b50
     ;; Renders (record 'foo 1 2 3) through cl-print, which resolves
     ;; `foo' as a class once cl-lib-tests has run -- that suite
     ;; defines a one-slot struct by that name inside a test body.
@@ -102,6 +98,14 @@ failure."
   "Bundled ERT tests this runner skips, each for a reason above.
 They fail here on how the battery is run -- one shared, interactive
 process -- rather than on anything the port does differently.")
+
+(defun ios-test--refuse-prompt (prompt &rest _)
+  "Fail the running test rather than wait on PROMPT.
+Nothing answers a prompt here, so one that reaches the minibuffer
+stalls the battery until the timeout, which then reports only that
+time ran out.  Quoting the prompt instead says which question was
+asked, and the failure arrives at once."
+  (error "ios-test: unanswerable prompt: %s" prompt))
 
 (defvar ios-test-ert-timeout 30
   "Seconds any one bundled ERT test may take before it is failed.
@@ -145,23 +149,36 @@ interruptible this way, but waiting is what the suites risk."
                          (file-name-nondirectory file)
                          (ios-test--describe err))
                  ios-test--out))))
-      (dolist (test (ert-select-tests
-                     '(not (or (tag :expensive-test) (tag :unstable)))
-                     t))
-        (unless (memq (ert-test-name test) ios-test-ert-exclusions)
-          (let* ((name (ert-test-name test))
-                 (result (condition-case err
-                             (with-timeout (ios-test-ert-timeout
-                                            'ios-test-timed-out)
-                               (ert-run-test test))
-                           (error err))))
-            (push (if (and (ert-test-result-p result)
-                           (ert-test-result-expected-p test result))
-                      (format "PASS ert/%s\n" name)
-                    (format "FAIL ert/%s :: %s\n"
-                            name (ios-test--describe
-                                  (ios-test--result-detail result))))
-                  ios-test--out)))))))
+      ;; `enable-local-variables' :safe reproduces what batch does
+      ;; with an unsafe file-local block -- apply the safe entries,
+      ;; skip the rest, ask nothing.  The syntax suite visits a data
+      ;; file carrying an `eval:', and `hack-local-variables-confirm'
+      ;; skips its query only under `noninteractive', which the app
+      ;; is not; the query would otherwise wait forever.
+      (let ((enable-local-variables :safe))
+        (cl-letf (((symbol-function 'y-or-n-p) #'ios-test--refuse-prompt)
+                  ((symbol-function 'yes-or-no-p) #'ios-test--refuse-prompt)
+                  ((symbol-function 'read-char-choice)
+                   #'ios-test--refuse-prompt)
+                  ((symbol-function 'read-char-from-minibuffer)
+                   #'ios-test--refuse-prompt))
+          (dolist (test (ert-select-tests
+                         '(not (or (tag :expensive-test) (tag :unstable)))
+                         t))
+            (unless (memq (ert-test-name test) ios-test-ert-exclusions)
+              (let* ((name (ert-test-name test))
+                     (result (condition-case err
+                                 (with-timeout (ios-test-ert-timeout
+                                                'ios-test-timed-out)
+                                   (ert-run-test test))
+                               (error err))))
+                (push (if (and (ert-test-result-p result)
+                               (ert-test-result-expected-p test result))
+                          (format "PASS ert/%s\n" name)
+                        (format "FAIL ert/%s :: %s\n"
+                                name (ios-test--describe
+                                      (ios-test--result-detail result))))
+                      ios-test--out)))))))))
 
 (defun ios-run-self-tests ()
   "Run the iOS port's functional self-tests.
