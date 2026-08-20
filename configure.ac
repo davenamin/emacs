@@ -1583,7 +1583,9 @@ if test "$with_ios" = "yes" || test "$XCONFIGURE" = "ios"; then
   with_pop=no
   with_harfbuzz=no
   with_native_compilation=no
-  with_threads=no
+  # Elisp threads are not in this list: iOS provides pthreads, which
+  # is all src/systhread.c asks for, and the upstream thread suite
+  # runs in the simulator to show it holds.
   with_rsvg=no
   with_libsystemd=no
   with_cairo=no

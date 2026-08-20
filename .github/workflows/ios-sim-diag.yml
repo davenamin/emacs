@@ -85,6 +85,8 @@ jobs:
             build-ios-sim/configure.out >> "$OUT" 2>&1
           grep -c 'Does Emacs use -ltree-sitter?.*yes' \
             build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'threading support in lisp?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
 
           log ""
           log "===== MAKE IOS ====="
