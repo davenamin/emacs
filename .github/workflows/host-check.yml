@@ -79,11 +79,13 @@ jobs:
             src/keymap-tests \
             src/lread-tests \
             src/marker-tests \
+            src/minibuf-tests \
             src/print-tests \
             src/regex-emacs-tests \
             src/search-tests \
             src/syntax-tests \
             src/textprop-tests \
+            src/thread-tests \
             src/timefns-tests \
             src/undo-tests \
             src/xdisp-tests \
