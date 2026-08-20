@@ -1870,11 +1870,36 @@ ios_auto_input_thread (void *unused)
   for (const char *p = cmd; *p; p++)
     ios_enqueue_key ((int) (unsigned char) *p);
 
+  /* Wait for the battery to write its results before typing
+     anything else.  These keys go into the same input queue Emacs
+     is reading, and pending input makes sit-for and read-event
+     return at once rather than waiting out their interval -- which
+     the thread tests, which need a moment to pass for a signal to
+     be delivered, read as a signal that never arrived.  Polling for
+     the file also decouples this from how long the battery takes.  */
+  {
+    const char *home = getenv ("HOME");
+    char results[1024];
+    if (home)
+      {
+        snprintf (results, sizeof results, "%s/ios-test-results.txt", home);
+        for (int i = 0; i < 180; i++)
+          {
+            struct stat st;
+            if (stat (results, &st) == 0 && st.st_size > 0)
+              break;
+            sleep (1);
+          }
+      }
+    else
+      sleep (60);
+  }
+
   /* Leave the font demo on screen.  It renders shaped Arabic,
      Devanagari and Tamil, RTL Hebrew, CJK, emoji and the
      proportional, bold and italic faces, so a screenshot shows
      shaping and coverage that the self-tests cannot grade.  */
-  sleep (3);
+  sleep (1);
   ios_launch_log (@"auto-input(thread): M-x ios-show-font-demo RET");
   const char *demo = "\x1bxios-show-font-demo\r";
   for (const char *p = demo; *p; p++)
