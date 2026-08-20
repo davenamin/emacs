@@ -218,11 +218,13 @@ ios_ert_tests =					\
   src/keymap-tests.el				\
   src/lread-tests.el				\
   src/marker-tests.el				\
+  src/minibuf-tests.el				\
   src/print-tests.el				\
   src/regex-emacs-tests.el			\
   src/search-tests.el				\
   src/syntax-tests.el				\
   src/textprop-tests.el				\
+  src/thread-tests.el				\
   src/timefns-tests.el				\
   src/undo-tests.el				\
   src/xdisp-tests.el				\

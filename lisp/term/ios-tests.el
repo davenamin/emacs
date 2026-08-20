@@ -100,12 +100,14 @@ They fail here on how the battery is run -- one shared, interactive
 process -- rather than on anything the port does differently.")
 
 (defun ios-test--refuse-prompt (prompt &rest _)
-  "Fail the running test rather than wait on PROMPT.
+  "Refuse PROMPT rather than wait on it.
 Nothing answers a prompt here, so one that reaches the minibuffer
 stalls the battery until the timeout, which then reports only that
-time ran out.  Quoting the prompt instead says which question was
-asked, and the failure arrives at once."
-  (error "ios-test: unanswerable prompt: %s" prompt))
+time ran out.  Signalling instead names the question and fails at
+once.  The condition is `inhibited-interaction', the one Emacs
+raises when `inhibit-interaction' forbids a prompt, because that is
+what tests covering unanswerable prompts expect to catch."
+  (signal 'inhibited-interaction (list prompt)))
 
 (defvar ios-test-ert-timeout 30
   "Seconds any one bundled ERT test may take before it is failed.
