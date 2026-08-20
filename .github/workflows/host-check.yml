@@ -32,14 +32,14 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends \
             build-essential automake autoconf texinfo \
-            libncurses-dev
+            libncurses-dev libsqlite3-dev
 
       - name: Configure
         run: |
           ./autogen.sh
           mkdir -p build-host
           cd build-host
-          ../configure --without-all --without-x
+          ../configure --without-all --without-x --with-sqlite3
 
       - name: Build
         run: make -C build-host -j"$(nproc)"
@@ -83,6 +83,7 @@ jobs:
             src/print-tests \
             src/regex-emacs-tests \
             src/search-tests \
+            src/sqlite-tests \
             src/syntax-tests \
             src/textprop-tests \
             src/thread-tests \

@@ -174,12 +174,21 @@ interruptible this way, but waiting is what the suites risk."
                                                 'ios-test-timed-out)
                                    (ert-run-test test))
                                (error err))))
-                (push (if (and (ert-test-result-p result)
-                               (ert-test-result-expected-p test result))
-                          (format "PASS ert/%s\n" name)
+                ;; Skipped first: `ert-test-result-expected-p' counts
+                ;; a skip as expected, so testing it alone would file
+                ;; a test that never ran under PASS and overstate what
+                ;; the battery covered.
+                (push (cond
+                       ((and (fboundp 'ert-test-skipped-p)
+                             (ert-test-skipped-p result))
+                        (format "SKIP ert/%s\n" name))
+                       ((and (ert-test-result-p result)
+                             (ert-test-result-expected-p test result))
+                        (format "PASS ert/%s\n" name))
+                       (t
                         (format "FAIL ert/%s :: %s\n"
                                 name (ios-test--describe
-                                      (ios-test--result-detail result))))
+                                      (ios-test--result-detail result)))))
                       ios-test--out)))))))))
 
 (defun ios-run-self-tests ()

@@ -222,6 +222,7 @@ ios_ert_tests =					\
   src/print-tests.el				\
   src/regex-emacs-tests.el			\
   src/search-tests.el				\
+  src/sqlite-tests.el				\
   src/syntax-tests.el				\
   src/textprop-tests.el				\
   src/thread-tests.el				\
