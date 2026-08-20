@@ -56,14 +56,39 @@ jobs:
             lisp/emacs-lisp/cl-lib-tests \
             lisp/emacs-lisp/subr-x-tests \
             lisp/faces-tests \
+            src/alloc-tests \
             src/buffer-tests \
-            src/casefiddle-tests \
-            src/fns-tests \
-            src/regex-emacs-tests \
-            src/xdisp-tests \
-            src/image-tests \
+            src/callint-tests \
             src/callproc-tests \
-            src/emacs-tests
+            src/casefiddle-tests \
+            src/character-tests \
+            src/charset-tests \
+            src/chartab-tests \
+            src/cmds-tests \
+            src/coding-tests \
+            src/data-tests \
+            src/doc-tests \
+            src/emacs-tests \
+            src/fileio-tests \
+            src/floatfns-tests \
+            src/fns-tests \
+            src/font-tests \
+            src/image-tests \
+            src/indent-tests \
+            src/json-tests \
+            src/keymap-tests \
+            src/lread-tests \
+            src/marker-tests \
+            src/print-tests \
+            src/regex-emacs-tests \
+            src/search-tests \
+            src/syntax-tests \
+            src/textprop-tests \
+            src/timefns-tests \
+            src/undo-tests \
+            src/xdisp-tests \
+            src/xfaces-tests \
+            src/xml-tests
 
       - name: Upload test logs
         if: always()

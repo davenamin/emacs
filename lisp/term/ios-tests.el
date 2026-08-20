@@ -81,6 +81,11 @@ failure."
       (ert-test-result-with-condition-condition result)
     result))
 
+(defvar ios-test-ert-timeout 30
+  "Seconds any one bundled ERT test may take before it is failed.
+Generous next to the whole battery, which runs in seconds; the point
+is to bound a test that waits rather than to police slow ones.")
+
 (defun ios-test--ert-suite-files ()
   "Return the upstream ERT suites shipped in the bundle.
 Empty in any bundle built without IOS_SELFTESTS, which is every
@@ -98,7 +103,11 @@ port's own probes use, so the automated run grades both alike.
 The selector matches the default of the upstream test Makefile:
 expensive and unstable tests are skipped.  Each test runs inside
 `condition-case' because a suite that signals outside a test body
-would otherwise cost the whole run."
+would otherwise cost the whole run, and inside `with-timeout'
+because a test that waits -- for input, or for a timer -- would
+otherwise hang the battery and leave the run with no results file
+at all, naming no culprit.  A tight loop in Lisp is not
+interruptible this way, but waiting is what the suites risk."
   (let ((files (ios-test--ert-suite-files)))
     (when files
       (require 'ert)
@@ -118,7 +127,11 @@ would otherwise cost the whole run."
                      '(not (or (tag :expensive-test) (tag :unstable)))
                      t))
         (let* ((name (ert-test-name test))
-               (result (condition-case err (ert-run-test test) (error err))))
+               (result (condition-case err
+                           (with-timeout (ios-test-ert-timeout
+                                          'ios-test-timed-out)
+                             (ert-run-test test))
+                         (error err))))
           (push (if (and (ert-test-result-p result)
                          (ert-test-result-expected-p test result))
                     (format "PASS ert/%s\n" name)

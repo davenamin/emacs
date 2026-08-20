@@ -184,17 +184,55 @@ endif
 ## subprocess or reaching outside is unrunnable.  These travel under
 ## the same IOS_SELFTESTS switch as ios-tests.el, so no bundle
 ## anyone installs carries them.
+## The src/ suites carry the most weight for a port: they exercise
+## the C layer, which is where a new platform diverges.  Suites that
+## drive subprocesses (process, callproc, emacs), load modules
+## (emacs-module), or need features iOS does not build (comp, lcms,
+## treesit grammars) are absent because they cannot run here at all.
+## ert-tests and ert-x-tests are absent for a different reason: they
+## exercise ERT itself, and the runner in ios-tests.el is an
+## ert-select-tests loop that they would be manipulating.
 ios_ert_tests =					\
   lisp/emacs-lisp/seq-tests.el			\
   lisp/emacs-lisp/cl-lib-tests.el		\
   lisp/emacs-lisp/subr-x-tests.el		\
   lisp/faces-tests.el				\
+  src/alloc-tests.el				\
   src/buffer-tests.el				\
+  src/callint-tests.el				\
   src/casefiddle-tests.el			\
+  src/character-tests.el			\
+  src/charset-tests.el				\
+  src/chartab-tests.el				\
+  src/cmds-tests.el				\
+  src/coding-tests.el				\
+  src/data-tests.el				\
+  src/doc-tests.el				\
+  src/fileio-tests.el				\
+  src/floatfns-tests.el				\
   src/fns-tests.el				\
+  src/font-tests.el				\
+  src/image-tests.el				\
+  src/indent-tests.el				\
+  src/json-tests.el				\
+  src/keymap-tests.el				\
+  src/lread-tests.el				\
+  src/marker-tests.el				\
+  src/print-tests.el				\
   src/regex-emacs-tests.el			\
-  src/xdisp-tests.el
-ios_ert_resources = lisp/faces-resources src/regex-resources
+  src/search-tests.el				\
+  src/syntax-tests.el				\
+  src/textprop-tests.el				\
+  src/timefns-tests.el				\
+  src/undo-tests.el				\
+  src/xdisp-tests.el				\
+  src/xfaces-tests.el				\
+  src/xml-tests.el
+ios_ert_resources =				\
+  lisp/faces-resources				\
+  src/lread-resources				\
+  src/regex-resources				\
+  src/syntax-resources
 
 $(ios_appdir)/lisp/loadup.el: $(ios_appdir) \
     $(wildcard $(abs_top_srcdir)/lisp/loaddefs.el)
