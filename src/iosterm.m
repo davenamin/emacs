@@ -903,6 +903,20 @@ ios_mouse_position (struct frame **fp, int insist,
   *time = 0;
 }
 
+/* terminal->delete_frame_hook.  Release what x-create-frame
+   allocated for F.  delete_frame leaves the output data, the frame's
+   face cache and the fonts that cache holds open to this hook; with
+   none installed, every deleted frame leaked all three.  */
+static void
+ios_delete_frame (struct frame *f)
+{
+  block_input ();
+  free_frame_faces (f);
+  xfree (f->output_data.ios);
+  f->output_data.ios = NULL;
+  unblock_input ();
+}
+
 /* Allocate the ios_display_info / struct terminal pair and wire it
    into the generic terminal infrastructure.  Mirrors
    android_term_init / x_term_init in shape: one display per app on
@@ -940,6 +954,7 @@ ios_term_init (void)
   terminal->menu_show_hook = ios_menu_show;
   terminal->popup_dialog_hook = ios_popup_dialog;
   terminal->set_new_font_hook = ios_new_font;
+  terminal->delete_frame_hook = ios_delete_frame;
   terminal->free_pixmap = ios_free_pixmap;
 
   /* Create the input wake pipe and register the read end with
