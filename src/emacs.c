@@ -38,6 +38,10 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "androidterm.h"
 #endif
 
+#ifdef HAVE_IOS
+#include "iosterm.h"
+#endif
+
 #if defined HAVE_ANDROID && !defined ANDROID_STUBIFY
 #include "sfntfont.h"
 #endif
@@ -956,6 +960,29 @@ load_pdump (int argc, char **argv, char *dump_file)
     fatal ("could not load dump file \"%s\": %s",
 	   dump_file, dump_error_to_string (result));
   return argv[0];
+#elif defined HAVE_IOS
+  /* iOS passes the sandbox dump path directly; there is no command
+     line to parse.  Loading is best-effort and never fatal: a missing
+     dump (first launch) or one rejected for a stale fingerprint (after
+     an app update) leaves Emacs uninitialized, so main runs loadup,
+     whose iOS branch dumps again for the next launch.  The outcome is
+     logged so the load path can be diagnosed from the app's captured
+     output.  */
+  if (dump_file)
+    {
+      int result = pdumper_load (dump_file, argv[0]);
+      if (result == PDUMPER_LOAD_SUCCESS)
+	fprintf (stderr, "emacs-pdmp: loaded dump from %s\n", dump_file);
+      else
+	fprintf (stderr,
+		 "emacs-pdmp: no dump loaded from %s (%s); "
+		 "running loadup from source\n",
+		 dump_file, dump_error_to_string (result));
+    }
+  else
+    fprintf (stderr, "emacs-pdmp: no dump path provided; "
+	     "running loadup from source\n");
+  return argv[0];
 #else
 
 #ifdef MSDOS
@@ -1316,9 +1343,12 @@ maybe_load_seccomp (int argc, char **argv)
 
 #endif  /* SECCOMP_USABLE */
 
-#if !defined HAVE_ANDROID || defined ANDROID_STUBIFY
+#if (!defined HAVE_ANDROID || defined ANDROID_STUBIFY) && !defined HAVE_IOS
 int
 main (int argc, char **argv)
+#elif defined HAVE_IOS
+int
+ios_emacs_init (int argc, char **argv, char *dump_file)
 #else
 int
 android_emacs_init (int argc, char **argv, char *dump_file)
@@ -1328,7 +1358,8 @@ android_emacs_init (int argc, char **argv, char *dump_file)
      for pointers.  */
   void *stack_bottom_variable;
   int old_argc;
-#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY)
+#if defined HAVE_PDUMPER && !(defined HAVE_ANDROID && !defined ANDROID_STUBIFY) \
+  && !defined HAVE_IOS
   char *dump_file;
 
   /* This is just a dummy argument used to avoid extra defines.  */
@@ -2459,6 +2490,16 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
       syms_of_sfntfont_android ();
 #endif /* !ANDROID_STUBIFY */
 #endif /* HAVE_ANDROID */
+
+#ifdef HAVE_IOS
+      syms_of_iosterm ();
+      syms_of_iosfns ();
+      syms_of_iosmenu ();
+      syms_of_iosselect ();
+      syms_of_iosfont ();
+      syms_of_iosvfs ();
+      syms_of_fontset ();
+#endif /* HAVE_IOS */
 
       syms_of_gnutls ();
 

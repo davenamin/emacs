@@ -1,0 +1,51 @@
+cross/xcode-build/ -- Apple toolchain resolution for the iOS cross-build.
+
+This directory holds the small amount of shell glue needed for the
+recursive XCONFIGURE=ios configure invocation to find Apple's clang,
+the iOS SDK, and the right -arch / -isysroot / -mios-version-min flags
+to pass for an iOS target.
+
+It exists for the same reason cross/ndk-build/ exists for Android:
+the outer ./configure --with-ios run is an ordinary host build that
+does not produce iOS code; it re-invokes itself with XCONFIGURE=ios
+to do the actual cross-compile.  The recursive invocation needs to be
+told which compiler to use.  Rather than open-code that logic in
+configure.ac, it is consolidated here so it can be tested
+independently and so a curious reader has a single place to look.
+
+Unlike the NDK port, iOS has nothing analogous to Android's ndk-build
+Make-based build system, so this directory is intentionally tiny --
+one sourceable shell helper.
+
+Files:
+
+  xcode-toolchain.sh
+        Sourceable POSIX shell script.  When sourced (with $IOS_SDK
+        and $IOS_ARCH optionally set, and $IOS_DEPLOYMENT_TARGET
+        required), exports CC, CXX, AR, RANLIB, CFLAGS, LDFLAGS,
+        OBJCFLAGS for an iOS cross-compile.  Errors out if not on
+        macOS or if xcrun cannot resolve the requested SDK.
+
+Environment variables consumed:
+
+  IOS_SDK          Either "iphoneos" (device, default) or
+                   "iphonesimulator" (Simulator).
+  IOS_ARCH         CPU arch.  Defaults to arm64 for both SDKs;
+                   x86_64 is also valid for iphonesimulator on Intel
+                   Macs.
+  IOS_DEPLOYMENT_TARGET
+                   Minimum iOS version, e.g. 15.0.  Required.
+
+Environment variables exported:
+
+  CC, CXX, AR, RANLIB
+                   Resolved via `xcrun --sdk $IOS_SDK -f ...'.
+  CFLAGS, OBJCFLAGS, LDFLAGS
+                   Augmented (not replaced) with -arch, -isysroot,
+                   and the appropriate -m*-version-min flag.
+
+This script is invoked by the recursive XCONFIGURE=ios configure path
+in configure.ac.  It can also be sourced by hand for debugging:
+
+  IOS_DEPLOYMENT_TARGET=15.0 . cross/xcode-build/xcode-toolchain.sh
+  $CC --version

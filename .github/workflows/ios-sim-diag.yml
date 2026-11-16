@@ -1,0 +1,452 @@
+name: iOS simulator-install diagnostic
+
+# Triggered on any push to claude/ios-port-31.1 and via manual dispatch.
+# A full cross-build plus simulator run takes about 20 minutes.
+on:
+  push:
+    branches:
+      - claude/ios-port-31.1
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+
+jobs:
+  diag:
+    runs-on: macos-latest
+    timeout-minutes: 45
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: claude/ios-port-31.1
+
+      # Cached cross-compiled TLS stack (gmp, nettle, gnutls) for
+      # the simulator SDK; the build step inside the diagnostics
+      # script is a fast no-op on a cache hit.
+      - name: Cache iOS TLS deps
+        uses: actions/cache@v4
+        with:
+          path: ios-deps
+          key: ios-deps-iphonesimulator-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
+      - name: Run diagnostics
+        if: always()
+        run: |
+          set +e
+          OUT=ci-diag/sim-install.txt
+          mkdir -p ci-diag
+          : > "$OUT"
+          log() { echo "$@" | tee -a "$OUT"; }
+          run() {
+            echo "" >> "$OUT"
+            echo "\$ $*" >> "$OUT"
+            "$@" >> "$OUT" 2>&1
+            echo "[exit=$?]" >> "$OUT"
+          }
+
+          log "===== ENVIRONMENT ====="
+          run sw_vers
+          run xcodebuild -version
+          run xcrun --sdk iphonesimulator --show-sdk-path
+          run xcrun --sdk iphonesimulator --show-sdk-version
+          run xcrun simctl list runtimes
+
+          log ""
+          log "===== BUILD DEPS ====="
+          run brew update
+          run brew install automake autoconf libtool pkg-config texinfo
+
+          log ""
+          log "===== REGENERATE configure ====="
+          run ./autogen.sh
+
+          log ""
+          log "===== TLS DEPS (gmp, nettle, gnutls) ====="
+          run ios/build-deps.sh --sdk iphonesimulator \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphonesimulator"
+
+          log ""
+          log "===== CONFIGURE (iphonesimulator) ====="
+          mkdir -p build-ios-sim
+          ( cd build-ios-sim && \
+            IOS_SDK=iphonesimulator IOS_ARCH=arm64 IOS_DEPLOYMENT_TARGET=15.0 \
+              ../configure --with-ios \
+                --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphonesimulator" \
+                > configure.out 2>&1 )
+          echo "[configure exit=$?]" >> "$OUT"
+          tail -30 build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lgnutls?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lxml2?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -lsqlite3?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'Does Emacs use -ltree-sitter?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+          grep -c 'threading support in lisp?.*yes' \
+            build-ios-sim/configure.out >> "$OUT" 2>&1
+
+          log ""
+          log "===== MAKE IOS ====="
+          ## IOS_SELFTESTS=yes ships lisp/term/ios-tests.el, which the
+          ## self-test gate below depends on; a bundle built without
+          ## it has no ios-run-self-tests to run.
+          ( cd build-ios-sim && make ios IOS_SELFTESTS=yes > make-ios.out 2>&1 )
+          echo "[make exit=$?]" >> "$OUT"
+          echo "--- last 25 lines of make-ios.out ---" >> "$OUT"
+          tail -25 build-ios-sim/make-ios.out >> "$OUT" 2>&1
+          echo "--- make errors (if any) ---" >> "$OUT"
+          grep -nE 'error:|fatal:' build-ios-sim/make-ios.out >> "$OUT" 2>&1
+
+          APP=build-ios-sim/ios/Emacs.app
+
+          log ""
+          log "===== (B) OUR BUNDLE: STRUCTURE ====="
+          run find "$APP"
+          run ls -la "$APP"
+
+          log ""
+          log "===== (B) OUR BUNDLE: Info.plist (root) ====="
+          run /usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleExecutable" "$APP/Info.plist"
+          run /usr/libexec/PlistBuddy -c "Print CFBundleSupportedPlatforms" "$APP/Info.plist"
+          run plutil -lint "$APP/Info.plist"
+          run file "$APP/Info.plist"
+          run head -c 64 "$APP/Info.plist"
+
+          log ""
+          log "===== (B) OUR BUNDLE: binary ====="
+          run file "$APP/emacs"
+          run sh -c "otool -l '$APP/emacs' | grep -A4 LC_BUILD_VERSION"
+
+          log ""
+          log "===== (B) OUR BUNDLE: codesign BEFORE ====="
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+          log "--- ad-hoc re-sign the bundle ---"
+          run codesign --force --sign - "$APP"
+          run sh -c "codesign -dvvv '$APP' 2>&1 | grep -iE 'Identifier|Format|flags'"
+
+          log ""
+          log "===== (B) OUR BUNDLE: embedded __info_plist contents ====="
+          # Extract the section's hex bytes and decode back to plist.
+          run sh -c "otool -X -s __TEXT __info_plist '$APP/emacs' | awk '{for(i=2;i<=NF;i++) printf \"%s\", \$i; print \"\"}' | tr -d ' ' | xxd -r -p > /tmp/embedded.plist 2>/dev/null && plutil -p /tmp/embedded.plist 2>&1 | head -25"
+
+          log ""
+          log "===== BOOT SIMULATOR ====="
+          # Pick the first iPhone device type that exists on this runner.
+          DEVTYPE=$(xcrun simctl list devicetypes 2>/dev/null | grep -oE 'com\.apple\.CoreSimulator\.SimDeviceType\.iPhone-[A-Za-z0-9-]+' | head -1)
+          echo "devicetype=$DEVTYPE" >> "$OUT"
+          DEV=$(xcrun simctl create ci-diag-phone "$DEVTYPE" 2>>"$OUT")
+          log "device=$DEV"
+          run xcrun simctl boot "$DEV"
+          run xcrun simctl bootstatus "$DEV" -b
+
+          log ""
+          log "===== (A) MINIMAL REFERENCE APP ====="
+          REF=ref-app/Hello.app
+          mkdir -p ref-app
+          rm -rf "$REF"; mkdir -p "$REF"
+          # Write main.m via printf (avoids heredoc indentation pitfalls).
+          printf '%s\n' \
+            '#import <UIKit/UIKit.h>' \
+            'int main(int argc, char *argv[]) {' \
+            '  @autoreleasepool { return UIApplicationMain(argc, argv, nil, nil); }' \
+            '}' > ref-app/main.m
+          SIMSDK=$(xcrun --sdk iphonesimulator --show-sdk-path)
+          run xcrun --sdk iphonesimulator clang -arch arm64 \
+              -mios-simulator-version-min=15.0 -isysroot "$SIMSDK" \
+              -framework UIKit -framework Foundation \
+              -o "$REF/Hello" ref-app/main.m
+          # Write Info.plist via printf so there is NO leading whitespace
+          # on <?xml -- a parser requirement an indented heredoc would violate.
+          printf '%s\n' \
+            '<?xml version="1.0" encoding="UTF-8"?>' \
+            '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+            '<plist version="1.0">' \
+            '<dict>' \
+            '  <key>CFBundleExecutable</key><string>Hello</string>' \
+            '  <key>CFBundleIdentifier</key><string>org.gnu.hello</string>' \
+            '  <key>CFBundleName</key><string>Hello</string>' \
+            '  <key>CFBundlePackageType</key><string>APPL</string>' \
+            '  <key>CFBundleShortVersionString</key><string>1.0</string>' \
+            '  <key>CFBundleVersion</key><string>1</string>' \
+            '  <key>CFBundleSupportedPlatforms</key><array><string>iPhoneSimulator</string></array>' \
+            '  <key>DTPlatformName</key><string>iphonesimulator</string>' \
+            '  <key>MinimumOSVersion</key><string>15.0</string>' \
+            '  <key>LSRequiresIPhoneOS</key><true/>' \
+            '  <key>UIDeviceFamily</key><array><integer>1</integer><integer>2</integer></array>' \
+            '</dict>' \
+            '</plist>' > "$REF/Info.plist"
+          run plutil -lint "$REF/Info.plist"
+          run codesign --force --sign - "$REF"
+          run sh -c "codesign -dvvv '$REF' 2>&1 | grep -iE 'Identifier|flags'"
+          run find "$REF"
+          log "--- install reference app (expect SUCCESS -- this is the control) ---"
+          run xcrun simctl install "$DEV" "$REF"
+
+          log ""
+          log "===== (B) INSTALL OUR BUNDLE (the real test) ====="
+          run xcrun simctl install "$DEV" "$APP"
+
+          log ""
+          log "===== STRUCTURED DIFF: reference vs ours (Info.plist keys) ====="
+          run sh -c "plutil -convert json -o - '$REF/Info.plist' 2>&1"
+          run sh -c "plutil -convert json -o - '$APP/Info.plist' 2>&1"
+
+          log ""
+          log "===== LAUNCH OUR APP AND CAPTURE LOGS ====="
+          # Launch in the background -- simctl launch returns once
+          # springboard has spawned the process.  Then sleep so Emacs
+          # init has a chance to run, terminate the app, and read its
+          # in-sandbox log files.  If the app crashed before opening
+          # Documents/, the cat commands will report "(missing)" and
+          # the unified-log fallback may still have NSLog output.
+          # SIMCTL_CHILD_* variables are forwarded into the app's
+          # environment; EMACS_IOS_AUTO_INPUT enables the demo
+          # keystroke driver that is compiled in but inert for
+          # normal user launches.
+          # The screenshot is far more useful when the launch log
+          # and title strip are visible, and the log itself is only
+          # written when this is set, so flip EMACS_IOS_DEBUG_LOG
+          # alongside the auto-input driver.
+          run env SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT=1 \
+                  SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
+            xcrun simctl launch booted org.gnu.emacs
+          # Wait for the self-tests to land their results file rather
+          # than for a fixed interval.  The auto-input driver types
+          # M-x ios-run-self-tests about 16s in, and the run now
+          # covers the bundled upstream ERT suites as well, loaded as
+          # source, so its duration moves with the test list.  Polling
+          # ends as soon as the file appears; the bound only has to
+          # exceed the slowest plausible run.
+          RESULTS_WAIT="$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>/dev/null)/Documents/ios-test-results.txt"
+          log "--- waiting for self-test results (up to 600s) ---"
+          waited=0
+          while [ "$waited" -lt 600 ]; do
+            if [ -s "$RESULTS_WAIT" ]; then
+              log "results appeared after ${waited}s"
+              break
+            fi
+            sleep 5
+            waited=$((waited + 5))
+            # The container path is only knowable once iOS creates it.
+            if [ ! -e "$RESULTS_WAIT" ]; then
+              RESULTS_WAIT="$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>/dev/null)/Documents/ios-test-results.txt"
+            fi
+          done
+          [ -s "$RESULTS_WAIT" ] || log "results did not appear within ${waited}s"
+          # A little longer so the font demo is on screen for the shot.
+          sleep 5
+          log "--- capturing simulator screenshot ---"
+          mkdir -p ci-diag
+          run xcrun simctl io booted screenshot ci-diag/sim-screenshot.png
+          run xcrun simctl terminate booted org.gnu.emacs
+
+          # Retrieve the app's data container path AFTER launch, so
+          # iOS has created it.
+          DATA_CONTAINER=$(xcrun simctl get_app_container "$DEV" org.gnu.emacs data 2>>"$OUT")
+          log "data_container=$DATA_CONTAINER"
+          if [ -n "$DATA_CONTAINER" ] && [ -d "$DATA_CONTAINER" ]; then
+            log "--- Documents/ listing ---"
+            ls -la "$DATA_CONTAINER/Documents/" >> "$OUT" 2>&1
+            for f in ci-roundtrip.txt ios-test-results.txt emacs-launch.log emacs-stdout.log; do
+              log ""
+              log "--- $f ---"
+              if [ -f "$DATA_CONTAINER/Documents/$f" ]; then
+                cat "$DATA_CONTAINER/Documents/$f" >> "$OUT" 2>&1
+              else
+                echo "(missing)" >> "$OUT"
+              fi
+            done
+          else
+            log "(data container not present -- app may have failed before main)"
+          fi
+
+          # Self-test gate: any FAIL line in ios-test-results.txt
+          # fails the workflow, and so does a run that produced no
+          # results at all -- an absent or empty file means Emacs
+          # never reached the self-tests, which is a failure and not
+          # a pass.  Counts and FAIL lines go to the job log as well
+          # as the diagnostic file, so the outcome is readable
+          # without downloading the artifact.
+          RESULTS="$DATA_CONTAINER/Documents/ios-test-results.txt"
+          log ""
+          # Portable dump: the first launch finds no dump, runs loadup
+          # from source and writes one; a second launch loads it.  Both
+          # halves are checked, since a single launch exercises only
+          # the writing one.
+          PDMP="$DATA_CONTAINER/Library/Application Support/Emacs/emacs.pdmp"
+          STDOUT_LOG="$DATA_CONTAINER/Documents/emacs-stdout.log"
+          log ""
+          log "--- portable dump ---"
+          if [ -s "$PDMP" ]; then
+            log "dump written: $(wc -c < "$PDMP" | tr -d ' ') bytes"
+          else
+            log "dump was not written to $PDMP"
+            FAILED_PDMP=1
+          fi
+          if grep -aq "emacs-pdmp: wrote dump to" "$STDOUT_LOG" 2>/dev/null; then
+            log "first launch reported writing the dump"
+          else
+            log "first launch did not report writing a dump"
+            FAILED_PDMP=1
+          fi
+
+          # Read the first launch's time to a usable frame, then move
+          # both logs aside so the relaunch writes into empty ones.
+          # Every launch appends to the same files, and the first
+          # launch emits more than one x-create-frame line -- the
+          # self-tests include suites that create frames of their own
+          # -- so picking the first and second occurrence in the
+          # combined file compared two frames of the same launch.
+          # Rotating drops the ordinal assumption entirely: each
+          # figure is the first x-create-frame of its own launch.
+          LAUNCH_LOG="$DATA_CONTAINER/Documents/emacs-launch.log"
+          SRC_MS=$(grep -a 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                   | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
+          mv -f "$LAUNCH_LOG" "$LAUNCH_LOG.first" 2>/dev/null || true
+          mv -f "$STDOUT_LOG" "$STDOUT_LOG.first" 2>/dev/null || true
+
+          # Relaunch and watch for the load.  No auto-input this time:
+          # the startup line is all that is wanted, and the self-tests
+          # have already run.
+          log "--- relaunching to exercise the load path ---"
+          run env SIMCTL_CHILD_EMACS_IOS_DEBUG_LOG=1 \
+            xcrun simctl launch booted org.gnu.emacs
+          waited=0
+          while [ "$waited" -lt 90 ]; do
+            if grep -aq "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+              break
+            fi
+            sleep 5
+            waited=$((waited + 5))
+          done
+          if grep -aq "emacs-pdmp: loaded dump from" "$STDOUT_LOG" 2>/dev/null; then
+            log "second launch loaded the dump after ${waited}s"
+            # Whether loading it is actually worth anything.  Each
+            # launch stamps its log lines with milliseconds since its
+            # own first line, so the figure on the x-create-frame line
+            # is that launch's time to a usable frame: the first ran
+            # loadup from source, the second loaded the dump.
+            # Let the second launch get as far as its first frame.
+            waited=0
+            while [ "$waited" -lt 60 ]; do
+              [ "$(grep -ac 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null)" -ge 1 ] && break
+              sleep 5
+              waited=$((waited + 5))
+            done
+            DUMP_MS=$(grep -a 'x-create-frame' "$LAUNCH_LOG" 2>/dev/null \
+                      | sed -n '1s/.*\[\([0-9.]*\)ms\].*/\1/p')
+            if [ -n "$SRC_MS" ] && [ -n "$DUMP_MS" ]; then
+              log "time to first frame: ${SRC_MS}ms from source, ${DUMP_MS}ms from the dump"
+              if awk -v a="$SRC_MS" -v b="$DUMP_MS" 'BEGIN{exit !(b < a)}'; then
+                log "speedup: $(awk -v a="$SRC_MS" -v b="$DUMP_MS" \
+                                  'BEGIN{printf "%.1fx", a/b}')"
+              else
+                log "loading the dump was no faster than running loadup"
+                FAILED_PDMP=1
+              fi
+            else
+              log "could not read both x-create-frame timings"
+            fi
+          else
+            log "second launch did not load the dump within ${waited}s"
+            log "pdmp lines seen:"
+            grep -a "emacs-pdmp:" "$STDOUT_LOG" >> "$OUT" 2>&1 || true
+            FAILED_PDMP=1
+          fi
+          run xcrun simctl terminate booted org.gnu.emacs
+
+          log "--- self-test summary ---"
+          if [ -f "$RESULTS" ]; then
+            PASSED=$(grep -ac '^PASS ' "$RESULTS" || true)
+            log "PASS lines: $PASSED"
+            # Skips are reported too.  A suite whose feature the build
+            # leaves out skips every test in it, and counting those as
+            # passes would put the coverage figure well above what
+            # actually ran.
+            SKIPPED=$(grep -ac '^SKIP ' "$RESULTS" || true)
+            log "SKIP lines: $SKIPPED"
+            if [ "$SKIPPED" -gt 0 ]; then
+              grep -a '^SKIP ' "$RESULTS" | head -80 \
+                | while IFS= read -r l; do log "  $l"; done
+            fi
+            if [ "$PASSED" -eq 0 ]; then
+              log "self-tests produced no PASS lines"
+              FAILED_SELFTESTS=1
+            fi
+            if grep -aq '^FAIL ' "$RESULTS"; then
+              log "self-tests failed:"
+              grep -a '^FAIL ' "$RESULTS" | while IFS= read -r l; do log "  $l"; done
+              FAILED_SELFTESTS=1
+            fi
+          else
+            log "self-test results file absent"
+            FAILED_SELFTESTS=1
+          fi
+
+          # Fall back to the unified log for NSLog output -- captures
+          # the case where the file logger never ran.
+          log ""
+          log "--- unified log (process=emacs, last 2m) ---"
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR senderImagePath CONTAINS "emacs"' --last 2m --style compact 2>>"$OUT" \
+            | head -500 >> "$OUT" 2>&1
+
+          # Crash signatures in the unified log (signals, aborts, asserts).
+          log ""
+          log "--- unified log crash signatures ---"
+          xcrun simctl spawn "$DEV" log show --predicate 'process == "emacs" OR eventMessage CONTAINS[c] "emacs"' --last 2m --style compact 2>/dev/null \
+            | grep -iE 'crash|signal|abort|assert|fatal|terminating|exception|killed|SIG' >> "$OUT" 2>&1
+
+          # CrashReporter directories on the host -- iOS sim writes
+          # .ips crash reports here when an app crashes.  Catch both
+          # the per-device CoreSimulator path and the user-level
+          # DiagnosticReports path.  Print the most recent emacs* one.
+          log ""
+          log "--- crash reports ---"
+          for d in \
+            "$HOME/Library/Logs/CoreSimulator/$DEV/CrashReporter" \
+            "$HOME/Library/Logs/CoreSimulator/$DEV" \
+            "$HOME/Library/Logs/CoreSimulator/CrashReporter/Standalone" \
+            "$HOME/Library/Logs/DiagnosticReports"; do
+            log "  scanning $d (recursive)"
+            if [ -d "$d" ]; then
+              find "$d" -maxdepth 3 -name 'emacs*' -type f 2>/dev/null \
+                | head -5 >> "$OUT"
+              last=$(find "$d" -maxdepth 3 -name 'emacs*.ips' -type f \
+                       2>/dev/null | head -1)
+              if [ -n "$last" ]; then
+                log "  >>> most recent emacs report: $last"
+                head -240 "$last" >> "$OUT" 2>&1
+              fi
+            fi
+          done
+
+          echo "" >> "$OUT"
+          echo "===== END =====" >> "$OUT"
+          # Diagnostics are uploaded even on failure (that step is
+          # if: always()), but these still surface the red X so the
+          # cycle is visibly broken.
+          rc=0
+          if [ -n "$FAILED_SELFTESTS" ]; then
+            echo "::error::iOS self-tests reported FAIL lines; see ci-diag/sim-install.txt"
+            rc=1
+          fi
+          if [ -n "$FAILED_PDMP" ]; then
+            echo "::error::portable dump was not written or not loaded; see ci-diag/sim-install.txt"
+            rc=1
+          fi
+          exit $rc
+
+      # Diagnostics are published as run artifacts rather than
+      # committed, so captured logs and screenshots stay out of the
+      # source tree.
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ios-sim-diagnostics
+          path: ci-diag/
+          if-no-files-found: warn
+          retention-days: 30

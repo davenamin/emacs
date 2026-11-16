@@ -1352,7 +1352,16 @@ emacs_posix_spawn_init_actions (posix_spawn_file_actions_t *actions,
 
   /* Haiku appears to have linkable posix_spawn_file_actions_chdir,
      but it always fails.  So use the _np function instead.  */
-#if defined HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR && !defined HAIKU
+#if defined HAVE_IOS
+  /* iOS marks posix_spawn_file_actions_addchdir_np API_UNAVAILABLE
+     even though the symbol declaration is in the SDK header (so the
+     autoconf probe still saw it).  posix_spawn itself is restricted
+     by the iOS sandbox, so subprocess spawning will fail downstream
+     regardless; we just want compilation to succeed.  Skip the
+     chdir-in-child step and let the (doomed) spawn proceed.  */
+  (void) cwd;
+  error = 0;
+#elif defined HAVE_POSIX_SPAWN_FILE_ACTIONS_ADDCHDIR && !defined HAIKU
   error = posix_spawn_file_actions_addchdir (actions, cwd);
 #else
   error = posix_spawn_file_actions_addchdir_np (actions, cwd);

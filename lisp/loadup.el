@@ -320,6 +320,12 @@
       (load "term/common-win")
       (load "term/android-win")))
 
+(if (featurep 'ios)
+    (progn
+      (load "touch-screen")
+      (load "term/common-win")
+      (load "term/ios-win")))
+
 (if (or (eq system-type 'windows-nt)
         (featurep 'w32))
     (progn
@@ -369,6 +375,17 @@
 ;;"Eager macro-expansion failure: (void-function w32-convert-standard-filename)"
 ;; which happens while processing 'elisp-flymake-byte-compile', when
 ;; elisp-mode.elc is outdated.
+;; On iOS, preempt the `flymake-log' autoload before elisp-mode.el is
+;; loaded.  Its entry in ldefs-boot.el is marked `t' (macro), so eager
+;; macroexpansion of the `(flymake-log :warning ...)' calls inside
+;; elisp-flymake-byte-compile pulls in flymake.el, which signals
+;; `(wrong-type-argument stringp nil)' under the incomplete HOME and
+;; working-directory state that exists during loadup.  A no-op macro
+;; overrides the autoload; flymake itself remains available at runtime.
+(when (featurep 'ios)
+  (defmacro flymake-log (_level _msg &rest _args)
+    "Stub for use only during loadup on iOS; see loadup.el for rationale."
+    nil))
 (load "progmodes/elisp-mode")
 
 ;; Preload some constants and floating point functions.
@@ -562,8 +579,13 @@ directory got moved.  This is set to be a pair in the form of:
 ;; Avoid error if user loads some more libraries now.
 (setq purify-flag nil)
 
-;; Make sure we will attempt bidi reordering henceforth.
-(setq redisplay--inhibit-bidi nil)
+;; Make sure we will attempt bidi reordering henceforth, but only if
+;; the Unicode property tables loaded.  charprop.el is generated after
+;; temacs is built and is absent in cross-builds that do not dump, so
+;; flipping this unconditionally aborts bidi_initialize during the
+;; first redisplay.
+(when (featurep 'charprop)
+  (setq redisplay--inhibit-bidi nil))
 
 
 
@@ -595,6 +617,27 @@ directory got moved.  This is set to be a pair in the form of:
                   ;; Continue with loadup.
                   nil)
               (error nil))))))
+  (if (and (featurep 'ios)
+           (not noninteractive))
+      ;; Like Android, iOS cross-compiles temacs and does not dump at
+      ;; build time.  The first launch runs loadup to completion and
+      ;; dumps itself to the sandbox path the C startup code supplies
+      ;; in EMACS_PDMP; later launches load that dump instead, leaving
+      ;; `pdumper-stats' non-nil.  After an app update pdumper rejects
+      ;; the stale dump on its fingerprint, loadup runs again, and the
+      ;; write below replaces it.  Dumping must never be fatal here.
+      (let ((dump-file-name (getenv "EMACS_PDMP")))
+        (when (and dump-file-name
+                   (not (pdumper-stats)))
+          (let ((dump-temp-file-name (concat dump-file-name ".tmp")))
+            (condition-case err
+                (progn
+                  (dump-emacs-portable dump-temp-file-name)
+                  (rename-file dump-temp-file-name dump-file-name t)
+                  (message "emacs-pdmp: wrote dump to %s" dump-file-name))
+              (error
+               (message "emacs-pdmp: dump failed: %S" err)
+               (ignore-errors (delete-file dump-temp-file-name)))))))
   (if dump-mode
       (let ((output (cond ((equal dump-mode "pdump") "emacs.pdmp")
                           ((equal dump-mode "pbootstrap")
@@ -664,7 +707,7 @@ directory got moved.  This is set to be a pair in the form of:
                                   (expand-file-name (concat name ".pdmp")
                                                     invocation-directory)
                                   t))))
-        (kill-emacs))))
+        (kill-emacs)))))
 
 ;; This file must be loaded each time Emacs is run from scratch, e.g., temacs.
 ;; So run the startup code now.  First, remove `-l loadup' from args.

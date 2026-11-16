@@ -24,17 +24,23 @@ builddir = @builddir@
 
 FIND_DELETE = @FIND_DELETE@
 
+# Which set of *.<suffix> cross-configure artifacts to consume.
+# Substituted by configure.ac based on whether --with-android or
+# --with-ios was given.  Empty for plain host builds, in which case
+# every rule in this Makefile is a no-op (the `all' target degenerates
+# to "do nothing").
+CROSS_SUFFIX = @CROSS_SUFFIX@
+
 -include $(top_builddir)/src/verbose.mk
 
-# Cross-compiling Emacs for Android.
-
-# The cross compiled binaries are built by having ``variant''
-# Makefiles generated at configure-time.  First,
-# $(top_builddir)/src/Makefile.android,
-# $(top_builddir)/lib/Makefile.android,
-# $(top_builddir)/lib/gnulib.mk.android and
-# $(top_builddir)/lib-src/Makefile.android are copied to their usual
-# locations in this directory.
+# Cross-compiling Emacs for either Android or iOS, depending on
+# $(CROSS_SUFFIX).  The cross-compiled binaries are built by having
+# ``variant'' Makefiles generated at configure-time.  First,
+# $(top_builddir)/src/Makefile.<suffix>,
+# $(top_builddir)/lib/Makefile.<suffix>,
+# $(top_builddir)/lib/gnulib.mk.<suffix> and (for Android)
+# $(top_builddir)/lib-src/Makefile.<suffix> are copied to their usual
+# locations in this directory, then ``make'' descends into each.
 
 # N.B. that LIB_SRCDIR is actually relative to builddir, because that
 # is where the gnulib files get linked.
@@ -48,30 +54,44 @@ SRC_TOP_SRCDIR = $(realpath $(top_srcdir))
 LIB_SRC_SRCDIR = $(realpath $(top_srcdir)/lib-src)
 LIB_SRC_TOP_SRCDIR = $(realpath $(top_src))
 
-# This is a list of binaries to build and install in lib-src.
+# This is a list of binaries to build and install in lib-src.  Android
+# builds and installs them on-device; iOS has no shell to run them in,
+# so they are skipped.
 
 LIBSRC_BINARIES = lib-src/etags lib-src/emacsclient \
 		  lib-src/ebrowse lib-src/hexl lib-src/movemail
 
 CLEAN_SUBDIRS = $(wildcard src lib-src lib etc)
 
+# The `all' target's contents are cross-target-specific.  Android
+# builds libemacs.so + android-emacs + the lib-src auxiliary binaries.
+# iOS builds a single statically-linked emacs Mach-O.  A plain host
+# build with no cross-target requested produces nothing here.
+
 .PHONY: all
+ifeq ($(CROSS_SUFFIX),android)
 all: lib/libgnu.a src/libemacs.so src/android-emacs $(LIBSRC_BINARIES)
+else ifeq ($(CROSS_SUFFIX),ios)
+all: lib/libgnu.a src/emacs
+else
+all:
+	@echo "cross/Makefile: nothing to do (CROSS_SUFFIX is empty)."
+endif
 
 # This Makefile relies on builddir and top_builddir being relative
-# paths in *.android.
+# paths in *.$(CROSS_SUFFIX).
 
 # This file is used to tell lib/gnulib.mk when
 # $(top_builddir)/config.status changes.
 config.status: $(top_builddir)/config.status
 	$(AM_V_GEN) touch config.status
 
-src/verbose.mk: $(srcdir)/verbose.mk.android
-	$(AM_V_SILENT) cp -f $(srcdir)/verbose.mk.android \
+src/verbose.mk: $(srcdir)/verbose.mk.$(CROSS_SUFFIX)
+	$(AM_V_SILENT) cp -f $(srcdir)/verbose.mk.$(CROSS_SUFFIX) \
 	  src/verbose.mk
 
 # Gnulib, make-fingerprint and make-docfile must be built before
-# entering any of the rules below, or they will get the Android
+# entering any of the rules below, or they will get the cross-target
 # versions of many headers.
 
 .PHONY: $(top_builddir)/lib/libgnu.a
@@ -90,12 +110,12 @@ PRE_BUILD_DEPS=$(top_builddir)/lib/libgnu.a		\
 	       $(top_builddir)/lib-src/make-fingerprint	\
 	       $(top_builddir)/lib-src/make-docfile
 
-lib/config.h: $(top_builddir)/src/config.h.android
-	$(AM_V_GEN) cp -f -p $(top_builddir)/src/config.h.android	\
+lib/config.h: $(top_builddir)/src/config.h.$(CROSS_SUFFIX)
+	$(AM_V_GEN) cp -f -p $(top_builddir)/src/config.h.$(CROSS_SUFFIX)	\
 	  lib/config.h
 
-lib-src/config.h: $(top_builddir)/src/config.h.android
-	$(AM_V_GEN) cp -f -p $(top_builddir)/src/config.h.android	\
+lib-src/config.h: $(top_builddir)/src/config.h.$(CROSS_SUFFIX)
+	$(AM_V_GEN) cp -f -p $(top_builddir)/src/config.h.$(CROSS_SUFFIX)	\
 	  lib-src/config.h
 
 # Figure out where build-aux is.
@@ -104,18 +124,18 @@ lib-src/config.h: $(top_builddir)/src/config.h.android
 
 relative_buildaux_dir := $(subst /,\/,$(top_srcdir)/build-aux)
 
-lib/gnulib.mk: $(top_builddir)/lib/gnulib.mk.android
+lib/gnulib.mk: $(top_builddir)/lib/gnulib.mk.$(CROSS_SUFFIX)
 	$(AM_V_GEN) \
 	  sed -e 's/^srcdir =.*$$/srcdir = $(subst /,\/,$(LIB_SRCDIR))/g' \
 	      -e 's/$(relative_buildaux_dir)/$(subst /,\/,../$(top_builddir))\/build-aux/g' \
-	    < $(top_builddir)/lib/gnulib.mk.android > $@
+	    < $(top_builddir)/lib/gnulib.mk.$(CROSS_SUFFIX) > $@
 
-lib/Makefile: $(top_builddir)/lib/Makefile.android
+lib/Makefile: $(top_builddir)/lib/Makefile.$(CROSS_SUFFIX)
 	$(AM_V_GEN) \
 	  sed -e 's/^top_srcdir =.*$$/top_srcdir = $(subst /,\/,$(LIB_TOP_SRCDIR))/g' \
 	      -e 's/^srcdir =.*$$/srcdir = $(subst /,\/,$(LIB_SRCDIR))/g' \
 	      -e 's/^VPATH =.*$$/VPATH = $(subst /,\/,$(LIB_SRCDIR))/g' \
-		< $(top_builddir)/lib/Makefile.android > $@
+		< $(top_builddir)/lib/Makefile.$(CROSS_SUFFIX) > $@
 
 # What is needed to build gnulib.
 LIB_DEPS = lib/config.h lib/gnulib.mk lib/Makefile
@@ -132,7 +152,7 @@ lib/libgnu.a: src/verbose.mk config.status $(LIB_DEPS) $(PRE_BUILD_DEPS)
 # Edit out anything saying -I($(top_srcdir)/lib) into
 # -I$../(srcdir)/lib; that should be covered by -I$(lib)
 
-src/Makefile: $(top_builddir)/src/Makefile.android
+src/Makefile: $(top_builddir)/src/Makefile.$(CROSS_SUFFIX)
 	$(AM_V_GEN) \
 	sed -e 's/^srcdir =.*$$/srcdir = $(subst /,\/,$(SRC_SRCDIR))/g' \
 	    -e 's/^top_srcdir =.*$$/top_srcdir = $(subst /,\/,$(LIB_TOP_SRCDIR))/g' \
@@ -141,7 +161,7 @@ src/Makefile: $(top_builddir)/src/Makefile.android
 	    -e 's/^libsrc =.*$$/libsrc = \.\.\/\.\.\/lib-src/g' \
 	    -e 's/libsrc =.*$$/libsrc = \.\.\/\.\.\/lib-src/g' \
 	    -e 's/-I\$$(top_srcdir)\/lib//g' \
-	    < $(top_builddir)/src/Makefile.android > $@
+	    < $(top_builddir)/src/Makefile.$(CROSS_SUFFIX) > $@
 
 src/epaths.h: $(top_builddir)/src/epaths.h
 	$(AM_V_GEN) cp -f -p $< $@
@@ -149,9 +169,13 @@ src/epaths.h: $(top_builddir)/src/epaths.h
 src/emacs-module.h: $(top_builddir)/src/emacs-module.h
 	$(AM_V_GEN) cp -f -p $< $@
 
-src/config.h: $(top_builddir)/src/config.h.android
+src/config.h: $(top_builddir)/src/config.h.$(CROSS_SUFFIX)
 	$(AM_V_GEN) cp -f -p $< $@
 
+# Android-only build targets: libemacs.so (the shared library that the
+# Android app loader pulls in at startup) and android-emacs (a tiny C
+# program that the Android launcher execs).  These rules are inactive
+# when CROSS_SUFFIX != android.
 .PHONY: src/android-emacs src/libemacs.so
 
 src/libemacs.so: src/Makefile src/config.h src/epaths.h \
@@ -162,17 +186,29 @@ src/android-emacs: src/Makefile src/config.h lib/libgnu.a \
   $(PRE_BUILD_DEPS)
 	$(MAKE) -C src android-emacs
 
+# iOS-only build target: a single statically-linked emacs Mach-O.
+# Equivalent to running ``make -C src emacs'' on a host build, but
+# with DUMPING=none so no temacs->pdmp dance is attempted (the iOS
+# binary can't be run on the host).
+.PHONY: src/emacs
+
+src/emacs: src/Makefile src/config.h src/epaths.h \
+  src/verbose.mk src/emacs-module.h lib/libgnu.a $(PRE_BUILD_DEPS)
+	$(MAKE) -C src emacs
+
 # Edit out SCRIPTS, it interferes with the build.
 # Make BASE_CFLAGS also include cross/lib as well as ../lib.
+# This rule is exercised only for Android; iOS skips lib-src entirely
+# (no shell, no PATH on device to run etags/emacsclient/etc.).
 
-lib-src/Makefile: $(top_builddir)/lib-src/Makefile.android
+lib-src/Makefile: $(top_builddir)/lib-src/Makefile.$(CROSS_SUFFIX)
 	$(AM_V_GEN) \
 	sed -e 's/-I\$${srcdir}\/\.\.\/lib//g' \
 	    -e 's/^srcdir=.*$$/srcdir = $(subst /,\/,$(LIB_SRC_SRCDIR))/g' \
 	    -e 's/^top_srcdir=.*$$/top_srcdir = $(subst /,\/,$(LIB_SRC_TOP_SRCDIR))/g' \
 	    -e 's/^SCRIPTS=.*$$/SCRIPTS=/g' \
 	    -e 's/-I\.\.\/lib/-I..\/lib -I..\/$(subst /,\/,$(srcdir))\/lib/g' \
-	  < $(top_builddir)/lib-src/Makefile.android > $@
+	  < $(top_builddir)/lib-src/Makefile.$(CROSS_SUFFIX) > $@
 
 .PHONY: $(LIBSRC_BINARIES)
 $(LIBSRC_BINARIES) &: src/verbose.mk $(top_builddir)/$@ lib/libgnu.a \
