@@ -1,0 +1,273 @@
+name: iOS port
+
+# Three jobs, each answering a different question about a push:
+#
+#   host       does an ordinary, non-iOS build of this tree still
+#              configure, compile and pass the upstream tests?
+#   device     does the port cross-compile against the device SDK and
+#              package as an .ipa?
+#   simulator  does the app run -- install, launch, pass its
+#              self-tests and the bundled upstream suites, write its
+#              portable dump and load it again?
+#
+# The trigger is a pattern rather than a branch name so the same file
+# serves every port branch unchanged.
+
+on:
+  push:
+    branches:
+      - 'claude/ios-port*'
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  # The port edits configure.ac, Makefile.in and src/Makefile.in,
+  # which non-iOS builds read as well, so a change meant for the
+  # cross-build can break a plain one.  Linux is used rather than
+  # macOS because it exercises the same files and the runners are
+  # faster.
+  #
+  # The test list is a subset rather than "make check": the full
+  # suite takes tens of minutes and carries upstream tests that are
+  # flaky or environment-dependent, which would make a red run
+  # uninformative.  Widening it is a matter of adding target names.
+  host:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential automake autoconf texinfo \
+            libncurses-dev libsqlite3-dev
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          mkdir -p build-host
+          cd build-host
+          # --without-all turns off every OPTION_DEFAULT_ON, sqlite3
+          # and threads among them, and a suite whose feature is
+          # absent skips rather than fails -- so without asking for
+          # these back the job would report a pass while running
+          # neither.
+          ../configure --without-all --without-x \
+            --with-sqlite3 --with-threads
+
+      - name: Build
+        run: make -C build-host -j"$(nproc)"
+
+      # The suites the simulator job runs on device, plus the ones
+      # that need subprocesses and so can only run here.  Each target
+      # is one ERT file; a failure prints its log.
+      - name: Run selected test suites
+        env:
+          EMACS_TEST_TIMEOUT: 300
+        run: |
+          make -C build-host/test \
+            lisp/emacs-lisp/seq-tests \
+            lisp/emacs-lisp/cl-lib-tests \
+            lisp/emacs-lisp/subr-x-tests \
+            lisp/faces-tests \
+            src/alloc-tests \
+            src/buffer-tests \
+            src/callint-tests \
+            src/callproc-tests \
+            src/casefiddle-tests \
+            src/character-tests \
+            src/charset-tests \
+            src/chartab-tests \
+            src/cmds-tests \
+            src/coding-tests \
+            src/data-tests \
+            src/doc-tests \
+            src/emacs-tests \
+            src/fileio-tests \
+            src/floatfns-tests \
+            src/fns-tests \
+            src/font-tests \
+            src/image-tests \
+            src/indent-tests \
+            src/json-tests \
+            src/keymap-tests \
+            src/lread-tests \
+            src/marker-tests \
+            src/minibuf-tests \
+            src/print-tests \
+            src/regex-emacs-tests \
+            src/search-tests \
+            src/sqlite-tests \
+            src/syntax-tests \
+            src/textprop-tests \
+            src/thread-tests \
+            src/timefns-tests \
+            src/undo-tests \
+            src/xdisp-tests \
+            src/xfaces-tests \
+            src/xml-tests
+
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: host-test-logs
+          path: build-host/test/**/*.log
+          if-no-files-found: ignore
+
+  # Builds against the device SDK (iphoneos, the default when IOS_SDK
+  # is unset) and packages the unsigned bundle as an .ipa.  Signing
+  # needs Apple credentials CI does not hold, so this stops at
+  # proving the device compile and the packaging work.
+  device:
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install automake autoconf libtool pkg-config texinfo
+
+      # The dependency stack (gmp, nettle, gnutls, libxml2,
+      # tree-sitter) is a ten-minute build from source, so the
+      # installed prefix is cached, keyed on the script that builds
+      # it; build-deps.sh does nothing on a cache hit.
+      - name: Cache iOS dependencies
+        uses: actions/cache@v5
+        with:
+          path: ios-deps
+          key: ios-deps-iphoneos-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
+      - name: Build iOS dependencies
+        run: |
+          ios/build-deps.sh --sdk iphoneos \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphoneos"
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          mkdir -p build-ios
+          cd build-ios
+          ../configure --with-ios \
+            --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphoneos" \
+            > configure.out 2>&1 || { tail -60 configure.out; exit 1; }
+          tail -40 configure.out
+          "$GITHUB_WORKSPACE/ios/ci/check-features.sh" configure.out
+
+      - name: Build
+        run: |
+          cd build-ios
+          make ios > make-ios.out 2>&1 || {
+            grep -nE 'error:|fatal:' make-ios.out | head -40
+            tail -80 make-ios.out
+            exit 1
+          }
+
+      - name: Verify the Mach-O
+        run: |
+          cd build-ios
+          file ios/Emacs.app/emacs
+          otool -l ios/Emacs.app/emacs | grep -A4 LC_BUILD_VERSION
+          # A bundle built without IOS_SELFTESTS must not carry the
+          # self-tests or the upstream suites.
+          test ! -e ios/Emacs.app/lisp/term/ios-tests.el
+          test ! -e ios/Emacs.app/test
+
+      - name: Package an unsigned .ipa
+        run: |
+          cd build-ios
+          make ios-ipa > ipa.out 2>&1 || { tail -40 ipa.out; exit 1; }
+          unzip -l ios/Emacs.ipa | grep -q 'Payload/Emacs.app/emacs'
+
+      - name: Upload the build log
+        if: failure()
+        uses: actions/upload-artifact@v6
+        with:
+          name: device-build-log
+          path: |
+            build-ios/configure.out
+            build-ios/make-ios.out
+          if-no-files-found: ignore
+          retention-days: 7
+
+  simulator:
+    runs-on: macos-latest
+    timeout-minutes: 60
+    env:
+      APP: build-ios-sim/ios/Emacs.app
+      BUNDLE_ID: org.gnu.emacs
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Show toolchain
+        run: |
+          sw_vers
+          xcodebuild -version
+          xcrun --sdk iphonesimulator --show-sdk-version
+
+      - name: Install build dependencies
+        run: |
+          brew update
+          brew install automake autoconf libtool pkg-config texinfo
+
+      - name: Cache iOS dependencies
+        uses: actions/cache@v5
+        with:
+          path: ios-deps
+          key: ios-deps-iphonesimulator-${{ runner.os }}-${{ hashFiles('ios/build-deps.sh') }}
+
+      - name: Build iOS dependencies
+        run: |
+          ios/build-deps.sh --sdk iphonesimulator \
+            --prefix "$GITHUB_WORKSPACE/ios-deps/iphonesimulator"
+
+      - name: Configure
+        run: |
+          ./autogen.sh
+          mkdir -p build-ios-sim
+          cd build-ios-sim
+          IOS_SDK=iphonesimulator IOS_ARCH=arm64 IOS_DEPLOYMENT_TARGET=15.0 \
+            ../configure --with-ios \
+              --with-ios-deps="$GITHUB_WORKSPACE/ios-deps/iphonesimulator" \
+              > configure.out 2>&1 || { tail -60 configure.out; exit 1; }
+          tail -40 configure.out
+          "$GITHUB_WORKSPACE/ios/ci/check-features.sh" configure.out
+
+      # IOS_SELFTESTS=yes ships lisp/term/ios-tests.el and the
+      # upstream ERT suites, which the steps below run; a bundle
+      # built without it has nothing to test with.
+      - name: Build
+        run: |
+          cd build-ios-sim
+          make ios IOS_SELFTESTS=yes > make-ios.out 2>&1 || {
+            grep -nE 'error:|fatal:' make-ios.out | head -40
+            tail -80 make-ios.out
+            exit 1
+          }
+
+      - name: Run the app in a simulator
+        run: ios/ci/simulator-test.sh "$APP" "$BUNDLE_ID" ci-diag
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: ios-sim-diagnostics
+          path: |
+            ci-diag/
+            build-ios-sim/configure.out
+            build-ios-sim/make-ios.out
+          if-no-files-found: warn
+          retention-days: 30
