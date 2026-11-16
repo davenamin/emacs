@@ -22,6 +22,13 @@ on:
 permissions:
   contents: read
 
+# A newer push to the same branch supersedes the run in progress; the
+# macOS runners are too scarce to spend on a commit nobody will read
+# the result for.
+concurrency:
+  group: ios-port-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # The port edits configure.ac, Makefile.in and src/Makefile.in,
   # which non-iOS builds read as well, so a change meant for the
