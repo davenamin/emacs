@@ -139,10 +139,10 @@ struct ios_display_info
   int smallest_char_width;
   int smallest_font_height;
 
-  /* Pixels per inch on each axis.  FRAME_RES_X / FRAME_RES_Y in
-     frame.h read these.  ios_term_init will populate them from
-     [UIScreen mainScreen] geometry (typically ~163 dpi for non-
-     Retina, ~326 for Retina, ~458 for Super Retina).  */
+  /* Points per inch on each axis, the density of the logical
+     coordinate space the port draws in (163 on iPhone, 132 on iPad),
+     not of the physical pixels.  FRAME_RES_X / FRAME_RES_Y in
+     frame.h read these; see ios_term_init.  */
   double resx, resy;
 
   /* Color depth in bits.  image.c branches on n_planes >= 2 to
