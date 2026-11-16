@@ -701,6 +701,10 @@ bundle carries the upstream ERT suites, those run too."
                           'face 'variable-pitch))
       (insert (propertize "bold weight\n" 'face 'bold))
       (insert (propertize "italic slant\n" 'face 'italic))
+      ;; The style spell checkers and Flymake mark text with.
+      (insert (propertize "wave underline"
+                          'face '(:underline (:style wave :color "red")))
+              "\n")
       (goto-char (point-min)))
     (switch-to-buffer buf)))
 

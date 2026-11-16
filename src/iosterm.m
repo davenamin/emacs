@@ -71,36 +71,18 @@ bool ios_defined_color (struct frame *f, const char *color_name,
                         Emacs_Color *color, bool alloc_p,
                         bool make_index);
 
-/* No-op redisplay hooks.  Generic redisplay reaches into the
-   per-port draw functions via FRAME_RIF (f)->draw_glyph_string etc.;
-   any NULL slot causes a NULL function-pointer SIGSEGV on the first
-   redisplay tick that wants to render.  These stubs accept the
-   arguments and return, so update_window_line / draw_glyphs etc.
-   complete without actually drawing anything visible.  The bring-up
-   trades visible glyphs for a non-crashing main loop; a CALayer
-   renderer will replace these one-by-one.  */
-/* The canvas-side text sink is implemented in ios.m so this file
-   stays free of UIKit imports.  See ios_canvas_draw_text there.  */
-extern void ios_canvas_draw_text (double x, double y,
+/* The canvas-side drawing sinks are implemented in ios.m, where the
+   view and its backing store live.  */
+extern void ios_canvas_fill_rect (double x, double y,
                                   double width, double height,
-                                  unsigned long fg_pixel,
-                                  unsigned long bg_pixel,
-                                  const char *utf8, double font_size,
-                                  unsigned deco, double cell_width,
+                                  unsigned long pixel,
                                   double clip_x, double clip_y,
                                   double clip_width, double clip_height);
-
-/* Decoration bits the canvas understands; must match the
-   EmacsDrawDeco enum in ios.m.  */
-enum
-{
-  IOS_DECO_UNDERLINE_SINGLE = 1 << 0,
-  IOS_DECO_UNDERLINE_WAVE   = 1 << 1,
-  IOS_DECO_OVERLINE         = 1 << 2,
-  IOS_DECO_STRIKE_THROUGH   = 1 << 3,
-  IOS_DECO_ITALIC           = 1 << 4,
-  IOS_DECO_BOLD             = 1 << 5,
-};
+extern void ios_canvas_draw_wave (double x, double y,
+                                  double width, double height,
+                                  unsigned long pixel,
+                                  double clip_x, double clip_y,
+                                  double clip_width, double clip_height);
 extern void ios_canvas_draw_cursor (double x, double y,
                                     double width, double height,
                                     unsigned long pixel, int style);
@@ -220,14 +202,12 @@ ios_draw_glyph_string (struct glyph_string *s)
       bg = cursor;
     }
 
-  /* Fill the glyph string's background; glyphs paint on top.  Empty
-     text is the canvas's clear primitive and carries the clip.  Even a
+  /* Fill the glyph string's background; glyphs paint on top.  Even a
      run with no drawable glyphs (stretch spaces behind `:align-to',
      glyphless characters) owns this rectangle, and skipping it would
      leave stale pixels behind.  */
   if (w > 0 && h > 0)
-    ios_canvas_draw_text ((double) s->x, (double) s->y, w, h,
-                          fg, bg, "", 0.0, 0, 0.0,
+    ios_canvas_fill_rect ((double) s->x, (double) s->y, w, h, bg,
                           (double) clip.x, (double) clip.y,
                           (double) clip.width, (double) clip.height);
 
@@ -313,13 +293,23 @@ ios_draw_glyph_string (struct glyph_string *s)
       xfree (xpos);
     }
 
-  /* Underline / overline / strike-through as thin rects, clipped to the
-     window area (so a partial last row does not overpaint the mode
-     line) and in each decoration's own colour.  Wave and dashed
-     underline styles render as a plain line for now.  */
+  /* Underline / overline / strike-through, clipped to the window area
+     (so a partial last row does not overpaint the mode line) and in
+     each decoration's own colour.  A wave underline is drawn as one;
+     the remaining styles are a straight line, as on X.  */
   if (s->face)
     {
-      if (s->face->underline != FACE_NO_UNDERLINE)
+      if (s->face->underline == FACE_UNDERLINE_WAVE)
+        {
+          /* The band x_draw_underwave uses: three pixels starting at
+             the baseline.  */
+          unsigned long uc = s->face->underline_defaulted_p
+                             ? fg : s->face->underline_color;
+          ios_canvas_draw_wave ((double) s->x, (double) s->ybase, w, 3.0, uc,
+                                (double) clip.x, (double) clip.y,
+                                (double) clip.width, (double) clip.height);
+        }
+      else if (s->face->underline != FACE_NO_UNDERLINE)
         {
           int thick = (font && font->underline_thickness > 0)
                       ? font->underline_thickness : 1;
@@ -416,8 +406,8 @@ ios_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
    define_frame_cursor: mouse pointer shapes; iOS has no drawn
    pointer.
 
-   flush_display: drawing commands reach the view queue as they
-   are issued and there is no back buffer to flip.
+   flush_display: every command paints into the view's backing
+   store as it is issued, and update_end requests the composite.
 
    update_window_begin/end: NULL in the Android port as well; the
    generic machinery does the per-window bookkeeping.
@@ -429,9 +419,8 @@ ios_draw_fringe_bitmap (struct window *w, struct glyph_row *row,
    show/hide_hourglass: implemented via pointer shapes on other
    ports; no pointer here.
 
-   default_font_parameter: the port has a single font family (the
-   system monospaced font), so there is no selection to make at
-   frame creation.  */
+   default_font_parameter: x-create-frame opens the default font
+   itself, so there is no selection left to make here.  */
 
 static void
 ios_noop_define_fringe_bitmap (int which, unsigned short *bits, int h, int wd)
@@ -664,14 +653,6 @@ ios_noop_update_window_end (struct window *w, bool cursor_on_p,
   (void) w; (void) cursor_on_p; (void) mouse_face_overwritten_p;
 }
 
-/* Terminal-level frame bracket.  Installed as
-   terminal->update_begin_hook / update_end_hook -- those fire ONCE
-   per frame redisplay (across all that frame's windows), so they
-   give a clean clear / request-draw bracket the per-window hooks
-   above can't.  */
-
-extern void ios_launch_log (NSString *);
-
 /* terminal->frame_up_to_date_hook.  Re-run the mouse highlight at
    its last known position once redisplay settles, so a highlight
    deferred during the update (or invalidated by text moving under
@@ -682,6 +663,11 @@ ios_frame_up_to_date (struct frame *f)
   FRAME_MOUSE_UPDATE (f);
 }
 
+/* Terminal-level frame bracket.  Installed as
+   terminal->update_begin_hook / update_end_hook -- those fire once
+   per frame redisplay (across all that frame's windows), so they
+   bracket the whole update in a way the per-window hooks above
+   cannot.  */
 static void
 ios_term_update_begin (struct frame *f)
 {
@@ -753,9 +739,9 @@ ios_scroll_run (struct window *w, struct run *run)
 
 /* Redisplay interface for iOS frames.  Shared gui_* helpers
    (defined in xdisp.c) cover the produce/write/insert/clear
-   paths; the ios_* entries draw through the EmacsUIView command
-   queue.  Slots left as noops are either unreachable on iOS or
-   have no useful implementation (see each function's comment).  */
+   paths; the ios_* entries paint into the EmacsUIView backing
+   store.  Slots left as noops are either unreachable on iOS or
+   have no useful implementation (see the comment above them).  */
 static struct redisplay_interface ios_redisplay_interface =
   {
     ios_frame_parm_handlers,
@@ -790,11 +776,9 @@ static struct redisplay_interface ios_redisplay_interface =
 
 /* Translate a port-specific keysym to its Lisp symbol name.
    keyboard.c's modify_event_symbol calls this when it can't find a
-   keysym in the prebuilt tables.  iOS doesn't surface raw keysyms
-   yet (input arrives as NSString via UIKeyCommand / UITextInput);
-   return an empty static buffer for now so the call links.  Once
-   UIKeyCommand handling lands, this will look up the matching
-   Emacs symbol name.  */
+   keysym in the prebuilt tables.  The port reports function keys as
+   the X keysyms those tables already cover (see ios_hid_to_xkeysym),
+   so there are no names of its own to add.  */
 char *
 get_keysym_name (int keysym)
 {
@@ -802,19 +786,6 @@ get_keysym_name (int keysym)
   buffer[0] = '\0';
   return buffer;
 }
-
-/* Allocate the ios_display_info / struct terminal pair and wire it
-   into the generic terminal infrastructure.  Mirrors
-   android_term_init / x_term_init in shape: one display per app on
-   iOS, so this is called exactly once at startup from init_display.
-
-   The terminal returned here has only its read_socket_hook hooked up
-   (to ios_read_socket, which is itself a stub draining nothing yet).
-   The remaining redisplay hooks stay NULL; xdisp.c's update_frame
-   path tolerates NULL hooks on non-window frames during early bring-
-   up.  The frame that we're attached to is the initial frame
-   (output_initial); a real output_ios frame will be created when
-   Fx_create_frame is implemented.  */
 
 /* terminal->set_new_font_hook.  Called by gui_set_font and
    x-create-frame to install FONT_OBJECT as the frame's primary
@@ -862,14 +833,9 @@ ios_new_font (struct frame *f, Lisp_Object font_object, int fontset)
   return font_object;
 }
 
-/* terminal->ring_bell_hook.  iOS has no audible bell; the
-   user-facing convention is a single haptic tap (matches
-   what other apps do when they want a discreet "no" beep).
-   Dispatched to the main queue because UIImpactFeedbackGenerator
-   wants the UI thread.  */
-/* Hoisted up here so ios_mouse_position below can reference them
-   directly; the publish / drain helpers further down use the same
-   storage.  */
+/* Last finger position.  Up here so ios_mouse_position below can
+   read it directly; the publish / drain helpers further down use the
+   same storage.  */
 static pthread_mutex_t ios_motion_lock = PTHREAD_MUTEX_INITIALIZER;
 static int  ios_motion_x = 0;
 static int  ios_motion_y = 0;
@@ -890,6 +856,11 @@ static bool ios_appearance_dirty = false;
    appearance flag.  */
 static bool ios_foreground_expose = false;
 
+/* terminal->ring_bell_hook.  iOS has no audible bell; the
+   user-facing convention is a single haptic tap (matches
+   what other apps do when they want a discreet "no" beep).
+   Dispatched to the main queue because UIImpactFeedbackGenerator
+   wants the UI thread.  */
 static void
 ios_ring_bell (struct frame *f)
 {
@@ -932,6 +903,11 @@ ios_mouse_position (struct frame **fp, int insist,
   *time = 0;
 }
 
+/* Allocate the ios_display_info / struct terminal pair and wire it
+   into the generic terminal infrastructure.  Mirrors
+   android_term_init / x_term_init in shape: one display per app on
+   iOS, so this is called exactly once at startup, from
+   init_display.  */
 struct terminal *
 ios_term_init (void)
 {
@@ -983,8 +959,8 @@ ios_term_init (void)
   /* Populate display geometry from UIKit.  This runs on the iOS bg
      pthread, not the main thread; UIScreen.mainScreen is documented
      thread-safe for property reads.  Fall back to sensible defaults
-     if a UIScreen isn't yet available (shouldn't happen post-launch
-     but the bring-up touches edge cases).  */
+     if a UIScreen isn't available, which should not happen once the
+     app has launched.  */
   @autoreleasepool {
     UIScreen *screen = UIScreen.mainScreen;
     if (screen)
@@ -1410,13 +1386,14 @@ ios_publish_canvas_size (double width, double height)
                   });
 }
 
-/* Last published canvas size, for x-create-frame: UIKit lays the
-   canvas out during app launch, seconds before loadup finishes and
-   the first frame is created, so by frame-creation time the real
-   canvas bounds are known.  Sizing the frame from them directly
-   avoids the whole-screen guess (and its visible snap when the
-   first resize event lands).  Returns false if no layout pass has
-   published yet (headless early startup).  */
+/* Last published canvas size, for x-create-frame, so the first frame
+   is laid out for the real canvas rather than for a whole-screen
+   guess that visibly snaps when the first resize lands.  This is the
+   latest size UIKit reported, settled or not: when the dump is loaded
+   the frame is created within a second of launch, which can be while
+   the keyboard is still sliding up, and the frame is then created at
+   the pre-keyboard height and resized once the animation settles.
+   Returns false if no layout pass has published yet.  */
 bool
 ios_get_canvas_size (int *w, int *h)
 {
