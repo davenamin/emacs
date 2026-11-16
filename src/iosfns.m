@@ -187,8 +187,8 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
   f->explicit_name = false;
 
   /* Register the font driver on this frame, then open the default
-     iOS font (Menlo via UIFont) so realize_default_face has a
-     FRAME_FONT to point at.  Without this, init_frame_faces aborts
+     iOS font (the monospaced system font) so realize_default_face
+     has a FRAME_FONT to point at.  Without this, init_frame_faces aborts
      because realize_default_face's XSETFONT(font_object, FRAME_FONT(f))
      dereferences a NULL pointer.  */
   register_font_driver (&ios_font_driver, f);
@@ -212,9 +212,9 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
       delete_frame (frame, Qnoelisp);
       error ("ios: failed to open the default font");
     }
-  /* Install the font into the frame directly (no set_new_font_hook
-     wired up yet on iOS).  These assignments mirror the relevant
-     prefix of android_new_font.  */
+  /* Install the font into the frame directly; the frame is not far
+     enough along for set_new_font_hook, which resizes it.  These
+     assignments mirror the relevant prefix of android_new_font.  */
   struct font *font = XFONT_OBJECT (font_obj);
   FRAME_FONT (f) = font;
   FRAME_BASELINE_OFFSET (f) = font->baseline_offset;
@@ -235,12 +235,13 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
      points; Retina scaling happens underneath).
 
      Preferred source: the canvas view's real laid-out bounds.
-     UIKit lays the canvas out during app launch, seconds before
-     loadup finishes and this function runs, so the published size
-     is essentially always available -- and sizing from it directly
-     means the first-ever redisplay already has the right cols and
-     rows, instead of a whole-screen guess that visibly snaps when
-     the first resize event lands.
+     UIKit lays the canvas out during app launch, before this
+     function runs, so the published size is essentially always
+     available -- and sizing from it directly means the first
+     redisplay already has the right cols and rows, instead of a
+     whole-screen guess that visibly snaps when the first resize
+     event lands.  See ios_get_canvas_size for what "published"
+     means while the keyboard is still animating.
 
      Fallback (canvas not yet laid out): the display's logical
      size, which at least has the right orientation.  */
@@ -279,11 +280,10 @@ DEFUN ("x-create-frame", Fx_create_frame, Sx_create_frame, 1, 1, 0,
      wrote above.  */
   change_frame_size (f, f->text_width, f->text_height, false, false, false);
 
-  /* DEBUG: verify the resize actually propagated into the root
-     window.  make_frame builds the root window with pixel sizes
-     computed while FRAME_COLUMN_WIDTH was still 1 (80px x 24px);
-     if these log lines still show ~80x24 the resize path bailed
-     somewhere.  */
+  /* Record the geometry in the launch log.  make_frame builds the
+     root window with pixel sizes computed while FRAME_COLUMN_WIDTH
+     was still 1 (80px x 24px); a line still showing about 80x24
+     means the resize above did not reach the root window.  */
   {
     struct window *rootw = XWINDOW (FRAME_ROOT_WINDOW (f));
     ios_launch_log ([NSString stringWithFormat:

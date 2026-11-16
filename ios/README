@@ -10,15 +10,16 @@ initialization in lisp/term/ios-win.el.  This directory holds:
   Emacs.base/                Bundle template (Info.plist template and
                              launch screen), assembled into the
                              output .app at build time.
-  Emacs/                     Objective-C app shell (main.m,
-                             AppDelegate, SceneDelegate).  These are
-                             linked into the same Mach-O as the Emacs
-                             core, and call into ios_main() from
-                             src/ios.m once UIKit has finished
-                             launching.
   Makefile.in                Bundle-assembly orchestration; mirrors
                              nextstep/Makefile.in's tar + copy +
                              codesign approach.
+  build-deps.sh              Cross-compiles the libraries the app
+                             links against (see "TLS" below).
+  ci/                        The checks continuous integration runs,
+                             as scripts that work on any Mac.
+
+The app's entry point, application delegate and canvas view are in
+src/ios.m, compiled into the same Mach-O as the rest of Emacs.
 
 Building
 --------
@@ -34,9 +35,15 @@ produces the simulator Emacs.app; install and launch with
   xcrun simctl install booted build-ios-sim/ios/Emacs.app
   xcrun simctl launch booted org.gnu.emacs
 
-See .github/workflows/ios-cross.yml and ios-sim-diag.yml for the
-exact CI invocations, including the install / launch / screenshot
-smoke test that runs on every push.
+To check a simulator build the way continuous integration does --
+install it on a throwaway simulator, run the self-tests and the
+bundled upstream test suites, and verify the portable dump is
+written and then loaded -- build with IOS_SELFTESTS=yes and run
+
+  ios/ci/simulator-test.sh build-ios-sim/ios/Emacs.app org.gnu.emacs out
+
+.github/workflows/ios-port.yml has the exact invocations for the
+simulator, the device SDK and an ordinary host build.
 
 TLS (GnuTLS)
 ------------
@@ -356,8 +363,9 @@ App Store submission requirements this port already carries
 
       make ios IOS_SELFTESTS=yes
 
-    to include them.  The simulator diagnostic workflow does, because
-    its pass/fail gate reads the results file.
+    to include them, along with the upstream ERT suites the
+    self-tests go on to run.  ios/ci/simulator-test.sh needs a bundle
+    built this way, because it grades the results file.
   * App name.  Pass --with-ios-app-name=NAME at configure time to
     set the label under the home-screen icon
     (CFBundleDisplayName) and the short name system UI uses
@@ -429,11 +437,12 @@ Submission items that remain YOUR decision:
     that calculus; TestFlight and personal-device installs are
     unaffected.
 
-Every launch bootstraps the Lisp environment from the bundled
-sources (the cross build cannot pre-dump, and no dump is written
-on device); startup takes a few seconds depending on hardware.
-Caching a pdumper image in the sandbox on first launch is the
-natural future optimization.
+The cross build cannot pre-dump, so the first launch bootstraps the
+Lisp environment from the bundled sources, which takes some tens of
+seconds, and then writes a portable dump into the app's Application
+Support directory.  Later launches load that dump and start in about
+a second.  The dump carries a fingerprint of the binary, so after an
+update it is rejected and written afresh.
 
 Runtime / threading model
 -------------------------
@@ -460,17 +469,18 @@ keep working.
 HOME and the working directory are the sandboxed Documents/
 folder (the one visible in the Files app); .emacs.d is created
 there.  All geometry is in logical points (Core Graphics applies
-the Retina scale underneath), and the display reports 163 ppi so
-the face engine's point<->pixel conversions agree with the
-drawing coordinate space.
+the Retina scale underneath), and the display reports the logical
+density -- 163 ppi on iPhone, 132 on iPad -- so the face engine's
+point<->pixel conversions agree with the drawing coordinate space.
 
 Feature status (each verified by the CI smoke test when landed)
 ----------------------------------------------------------------
 
 Works:
-  * Text rendering with face attributes: colors, bold, italic,
-    underline (single and wave), overline, strike-through, cursor
-    styles; per-(size, weight, slant) font caching.
+  * Text rendering through Core Text glyphs, with shaping for
+    complex scripts and per-script fallback fonts; face attributes:
+    colors, bold, italic, underline (straight and wave), overline,
+    strike-through; all cursor styles; fringe bitmaps.
   * Input: hardware keyboards including modifiers, arrows and
     F-keys; the software keyboard with an accessory bar (Esc,
     sticky Ctrl/Meta, Tab, C-g, arrow keys, M-x); tap as mouse-1,
@@ -497,20 +507,22 @@ Works:
     (iosimage.m); PNG, JPEG, GIF, TIFF, HEIC, BMP without
     third-party dependencies, decoded on the Emacs thread and
     cached through the standard image-cache.
-  * Self-test battery (lisp/term/ios-tests.el, M-x
-    ios-run-self-tests): twenty-four probes covering sandbox
-    identity, file round-trip, clipboard, geometry, appearance,
-    image load, face attributes, color-name resolution, theme
-    face-spec matching, frame parameters, frame-background-mode,
-    the
-    pinch / wheel / drag-n-drop event bindings, TLS (GnuTLS
-    availability and trust anchors), and documentation (DOC
-    docstrings and Info manuals).  One PASS / FAIL line per
-    probe is written to ~/ios-test-results.txt.
+  * Emacs Lisp threads (make-thread, mutexes, condition
+    variables), sqlite, libxml2, tree-sitter (with grammars shipped
+    in the bundle) and, given the dependency stack, GnuTLS.
+  * Self-tests (lisp/term/ios-tests.el, M-x ios-run-self-tests, in
+    bundles built with IOS_SELFTESTS=yes): the port's own probes --
+    sandbox identity, file round-trip, clipboard, geometry,
+    appearance, images, faces and colors, frame parameters, gesture
+    event bindings, TLS, documentation, Unicode tables, sibling-file
+    redirection and hardware-key translation -- followed by the
+    upstream ERT suites listed in ios/Makefile.in.  One PASS, FAIL
+    or SKIP line per test is written to ~/ios-test-results.txt.
 
 Known issues / deferred:
-  * Rendering uses an overpaint command list (correct, simple);
-    per-row damage tracking is the planned optimization.
+  * Each redisplay that paints composites the whole backing store
+    to the screen; compositing only the damaged rows is the planned
+    optimization.
   * Pane headers inside submenus are dropped -- action sheets
     have no section concept.
   * Subprocesses (make-process / call-process) work in the

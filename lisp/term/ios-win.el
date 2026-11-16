@@ -42,10 +42,12 @@
 (require 'dnd)
 (require 'touch-screen)
 
+(defgroup ios nil
+  "Running Emacs on iOS."
+  :group 'environment)
+
 (defvar ios-initialized nil
   "Non-nil when the iOS terminal has been initialized.")
-
-(declare-function ios-handle-args "iosfns.m")
 
 (add-to-list 'display-format-alist '(".*" . ios))
 

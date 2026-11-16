@@ -22,15 +22,15 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
    that the rest of the iOS port (iosterm.m, iosvfs.c, etc.) uses to
    talk back to UIKit.
 
-   UIApplicationMain instantiates EmacsAppDelegate, which must be
-   defined in this binary: classes in the bundle template sources
-   (ios/Emacs/) are not compiled into the cross-built executable,
-   so NSClassFromString would return nil.  The delegate redirects
-   stdout/stderr into the app's Documents/ directory and runs
-   ios_main() on a dedicated background thread so Emacs
-   initialization never blocks the UI thread.  Launch breadcrumbs
-   are appended to Documents/emacs-launch.log; NSLog alone is
-   unreliable on Simulator launches that happen outside
+   main, at the end of this file, is the process entry point.  It
+   hands control to UIApplicationMain, which instantiates
+   EmacsAppDelegate; the delegate builds the window and runs
+   ios_main() on a dedicated background thread, so Emacs
+   initialization never blocks the UI thread.  With
+   EMACS_IOS_DEBUG_LOG set, stdout and stderr are redirected into
+   the app's Documents/ directory and launch breadcrumbs are appended
+   to Documents/emacs-launch.log; NSLog alone is unreliable on
+   Simulator launches that happen outside
    `xcrun simctl launch --console'.  */
 
 #include <config.h>
@@ -321,48 +321,34 @@ ios_restore_bookmarks (void)
    thread just composites the bitmap.  EmacsDrawCommand carries
    one operation's parameters from the C entry points to the
    renderer.  */
-/* Command kinds: a draw command is either a glyph string or a
-   cursor.  Cursor commands carry no text; just the rectangle and
-   pixel.  */
 typedef NS_ENUM (NSUInteger, EmacsDrawKind) {
-  EmacsDrawKindText = 0,
+  /* A rectangle filled with the `bg' pixel.  */
+  EmacsDrawKindFill = 0,
   EmacsDrawKindCursorFilled,
   EmacsDrawKindCursorHollow,
   EmacsDrawKindCursorBar,
   EmacsDrawKindCursorHBar,
   EmacsDrawKindImage,
-  /* Real Core Text glyphs: glyphData / glyphPos carry the CGGlyph and
+  /* Core Text glyphs: glyphData / glyphPos carry the CGGlyph and
      CGPoint arrays, ctFont the face.  */
   EmacsDrawKindGlyphs,
-  /* Not a glyph op: blits the source band [y, y+height) within
+  /* A wave underline in the `fg' pixel, filling the band
+     [y, y+height) across [x, x+width).  */
+  EmacsDrawKindWave,
+  /* Not a paint op: blits the source band [y, y+height) within
      x-range [x, x+width) by shiftDy inside the backing store
      (scroll_run).  */
   EmacsDrawKindShift,
-};
-
-/* Bit flags for EmacsDrawCommand.deco.  Kept in sync with the
-   face decorators tested in iosterm.m's draw_glyph_string hook.  */
-typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
-  EmacsDrawDecoNone           = 0,
-  EmacsDrawDecoUnderlineSingle = 1 << 0,
-  EmacsDrawDecoUnderlineWave   = 1 << 1,
-  EmacsDrawDecoOverline        = 1 << 2,
-  EmacsDrawDecoStrikeThrough   = 1 << 3,
-  EmacsDrawDecoItalic          = 1 << 4,
-  EmacsDrawDecoBold            = 1 << 5,
 };
 
 @interface EmacsDrawCommand : NSObject
 @property (nonatomic) EmacsDrawKind kind;
 @property (nonatomic) CGFloat x;
 @property (nonatomic) CGFloat y;
-@property (nonatomic) CGFloat width;   /* background rect width */
-@property (nonatomic) CGFloat height;  /* background rect height */
+@property (nonatomic) CGFloat width;
+@property (nonatomic) CGFloat height;
 @property (nonatomic) uint32_t fg;     /* 0x00RRGGBB */
 @property (nonatomic) uint32_t bg;     /* 0x00RRGGBB */
-@property (nonatomic, copy) NSString *text;
-@property (nonatomic) CGFloat fontSize;
-@property (nonatomic) EmacsDrawDeco deco;
 @property (nonatomic) CGFloat shiftDy;   /* EmacsDrawKindShift only */
 /* Clip rectangle in Emacs (top-left) coordinates; clipWidth <= 0
    means unclipped.  Redisplay clips glyph strings to the window
@@ -373,11 +359,6 @@ typedef NS_OPTIONS (NSUInteger, EmacsDrawDeco) {
 @property (nonatomic) CGFloat clipY;
 @property (nonatomic) CGFloat clipWidth;
 @property (nonatomic) CGFloat clipHeight;
-/* Emacs cell (column) width in points.  Text is positioned per
-   composed character on this grid rather than with Core Text's
-   natural advances; 0 falls back to a single natural-advance
-   CTLine (pre-grid behavior).  */
-@property (nonatomic) CGFloat cellWidth;
 /* For EmacsDrawKindImage: a manually-CGImageRetained image.  CGImage
    is not toll-free-bridged to NSObject, so an ARC strong id would
    leak: the setter manages the retain explicitly, and dealloc
@@ -1222,188 +1203,67 @@ ios_queue_uikey (UIKey *key)
       return;
     }
 
-  if (cmd.kind != EmacsDrawKindText)
+  if (cmd.kind == EmacsDrawKindFill)
     {
-      /* Cursor commands: just paint the rectangle.  */
-      CGContextSetRGBFillColor (cg, fr, fg, fb, 1.0);
-      switch (cmd.kind)
+      if (cmd.width > 0 && cmd.height > 0)
         {
-        case EmacsDrawKindCursorFilled:
+          CGContextSetRGBFillColor (cg, br, bg, bb, 1.0);
           CGContextFillRect (cg, CGRectMake (cmd.x, by,
                                              cmd.width, cmd.height));
-          break;
-        case EmacsDrawKindCursorHollow:
-          CGContextSetRGBStrokeColor (cg, fr, fg, fb, 1.0);
-          CGContextSetLineWidth (cg, 1);
-          CGContextStrokeRect (cg, CGRectMake (cmd.x + 0.5, by + 0.5,
-                                               cmd.width - 1,
-                                               cmd.height - 1));
-          break;
-        case EmacsDrawKindCursorBar:
-          CGContextFillRect (cg, CGRectMake (cmd.x, by,
-                                             cmd.width > 0 ? cmd.width : 2,
-                                             cmd.height));
-          break;
-        case EmacsDrawKindCursorHBar:
-          CGContextFillRect (cg, CGRectMake (cmd.x, by, cmd.width, 2));
-          break;
-        default:
-          break;
         }
       return;
     }
 
-  /* Weight + italic from the face decoration flags.  Cache
-     resolved fonts: drawRect runs once per redisplay over
-     hundreds of commands, and UIFont lookup + descriptor
-     mutation per command dominated the profile.  Key packs
-     (size << 2 | bold | italic<<1); sizes are whole points
-     in practice so the int cast is lossless.  */
-  static NSMutableDictionary<NSNumber *, UIFont *> *fontCache;
-  if (!fontCache)
-    fontCache = [NSMutableDictionary dictionary];
-  BOOL wantBold   = (cmd.deco & EmacsDrawDecoBold) != 0;
-  BOOL wantItalic = (cmd.deco & EmacsDrawDecoItalic) != 0;
-  NSNumber *fontKey = @(((int) cmd.fontSize << 2)
-                        | (wantBold ? 1 : 0)
-                        | (wantItalic ? 2 : 0));
-  UIFont *font = fontCache[fontKey];
-  if (!font)
+  if (cmd.kind == EmacsDrawKindWave)
     {
-      UIFontWeight wt = wantBold ? UIFontWeightBold
-                                 : UIFontWeightRegular;
-      font = [UIFont monospacedSystemFontOfSize:cmd.fontSize
-                                         weight:wt];
-      if (!font)
-        font = [UIFont systemFontOfSize:cmd.fontSize];
-      if (wantItalic)
-        {
-          UIFontDescriptor *d = [font.fontDescriptor
-                                  fontDescriptorWithSymbolicTraits:
-                                  UIFontDescriptorTraitItalic];
-          if (d)
-            font = [UIFont fontWithDescriptor:d size:cmd.fontSize];
-        }
-      if (font)
-        fontCache[fontKey] = font;
-    }
-
-  if (cmd.width > 0 && cmd.height > 0)
-    {
-      CGContextSetRGBFillColor (cg, br, bg, bb, 1.0);
-      CGContextFillRect (cg, CGRectMake (cmd.x, by,
-                                         cmd.width, cmd.height));
-    }
-  if (cmd.text.length == 0)
-    return;
-  UIColor *uifg = [UIColor colorWithRed:fr green:fg blue:fb alpha:1.0];
-  NSDictionary *attrs = @{
-    NSFontAttributeName: font,
-    NSForegroundColorAttributeName: uifg,
-  };
-  CGFloat baseline = _backingH - cmd.y - font.ascender;
-  if (cmd.cellWidth > 0)
-    {
-      /* Position every composed character on Emacs's integer
-         cell grid.  A single CTLine advances by Core Text's
-         natural glyph widths (8.43pt for 14pt SF Mono), while
-         Emacs computes glyph positions from the ceil'd cell
-         width (9pt) -- so a run drawn with natural advances
-         disagrees with any later single-character repaint at
-         an Emacs-computed x (cursor passage), visibly
-         re-typesetting the row.  Per-cell placement makes the
-         two grids identical.  Characters whose natural width
-         is closer to two cells (CJK) get two.  */
-      __block CGFloat pen = cmd.x;
-      CGFloat cell = cmd.cellWidth;
-      [cmd.text enumerateSubstringsInRange:
-                  NSMakeRange (0, cmd.text.length)
-                options:
-                  NSStringEnumerationByComposedCharacterSequences
-                usingBlock:^(NSString *ch, NSRange sub,
-                             NSRange encl, BOOL *stop) {
-        (void) sub; (void) encl; (void) stop;
-        NSAttributedString *cas =
-          [[NSAttributedString alloc] initWithString:ch
-                                          attributes:attrs];
-        CTLineRef cl = CTLineCreateWithAttributedString
-          ((__bridge CFAttributedStringRef) cas);
-        if (cl != NULL)
-          {
-            double natural =
-              CTLineGetTypographicBounds (cl, NULL, NULL, NULL);
-            int ncells = (natural > cell * 1.5) ? 2 : 1;
-            CGContextSetTextPosition (cg, pen, baseline);
-            CTLineDraw (cl, cg);
-            CFRelease (cl);
-            pen += cell * ncells;
-          }
-        else
-          pen += cell;
-      }];
-    }
-  else
-    {
-      NSAttributedString *as = [[NSAttributedString alloc]
-                                 initWithString:cmd.text
-                                     attributes:attrs];
-      CTLineRef line = CTLineCreateWithAttributedString
-        ((__bridge CFAttributedStringRef) as);
-      if (line == NULL)
-        return;
-      CGContextSetTextPosition (cg, cmd.x, baseline);
-      CTLineDraw (line, cg);
-      CFRelease (line);
-    }
-
-  /* Decorations: stroke the same fg color underneath / above /
-     through the text.  Coordinates are in the flipped CG
-     space, so "below text" means smaller y, "above" larger.  */
-  if (cmd.deco & (EmacsDrawDecoUnderlineSingle
-                  | EmacsDrawDecoUnderlineWave
-                  | EmacsDrawDecoOverline
-                  | EmacsDrawDecoStrikeThrough))
-    {
+      /* A zigzag two points long per stroke, as x_draw_underwave
+         draws it.  The phase is taken from the absolute x, not from
+         where this run starts, so the waves of adjacent glyph
+         strings meet.  */
+      const CGFloat step = 2.0;
+      CGFloat top = _backingH - cmd.y - 0.5;
+      CGFloat bottom = _backingH - cmd.y - cmd.height + 0.5;
+      CGContextClipToRect (cg, CGRectMake (cmd.x, by,
+                                           cmd.width, cmd.height));
       CGContextSetRGBStrokeColor (cg, fr, fg, fb, 1.0);
       CGContextSetLineWidth (cg, 1.0);
-      CGFloat textWidth = (cmd.width > 0) ? cmd.width : 1;
-      if (cmd.deco & (EmacsDrawDecoUnderlineSingle
-                      | EmacsDrawDecoUnderlineWave))
+      long k = (long) floor (cmd.x / step);
+      CGContextBeginPath (cg);
+      CGContextMoveToPoint (cg, k * step, (k & 1) ? bottom : top);
+      for (CGFloat xx = k * step; xx < cmd.x + cmd.width; xx += step)
         {
-          CGFloat uy = baseline - 1.5;
-          if (cmd.deco & EmacsDrawDecoUnderlineWave)
-            {
-              /* Sketch a sine-ish wave below the baseline.  */
-              CGFloat amp = 1.5;
-              CGFloat step = 3.0;
-              CGContextBeginPath (cg);
-              CGContextMoveToPoint (cg, cmd.x, uy);
-              for (CGFloat xx = cmd.x; xx < cmd.x + textWidth; xx += step)
-                {
-                  CGFloat ny = uy + ((((int)(xx - cmd.x) / (int) step) & 1)
-                                      ? amp : -amp);
-                  CGContextAddLineToPoint (cg, xx + step, ny);
-                }
-              CGContextStrokePath (cg);
-            }
-          else
-            {
-              CGContextStrokeRect (cg, CGRectMake (cmd.x, uy,
-                                                   textWidth, 0));
-            }
+          k++;
+          CGContextAddLineToPoint (cg, k * step, (k & 1) ? bottom : top);
         }
-      if (cmd.deco & EmacsDrawDecoOverline)
-        {
-          CGFloat oy = baseline + font.ascender;
-          CGContextStrokeRect (cg, CGRectMake (cmd.x, oy,
-                                               textWidth, 0));
-        }
-      if (cmd.deco & EmacsDrawDecoStrikeThrough)
-        {
-          CGFloat sy = baseline + font.ascender * 0.4;
-          CGContextStrokeRect (cg, CGRectMake (cmd.x, sy,
-                                               textWidth, 0));
-        }
+      CGContextStrokePath (cg);
+      return;
+    }
+
+  /* Cursor commands: just paint the rectangle.  */
+  CGContextSetRGBFillColor (cg, fr, fg, fb, 1.0);
+  switch (cmd.kind)
+    {
+    case EmacsDrawKindCursorFilled:
+      CGContextFillRect (cg, CGRectMake (cmd.x, by,
+                                         cmd.width, cmd.height));
+      break;
+    case EmacsDrawKindCursorHollow:
+      CGContextSetRGBStrokeColor (cg, fr, fg, fb, 1.0);
+      CGContextSetLineWidth (cg, 1);
+      CGContextStrokeRect (cg, CGRectMake (cmd.x + 0.5, by + 0.5,
+                                           cmd.width - 1,
+                                           cmd.height - 1));
+      break;
+    case EmacsDrawKindCursorBar:
+      CGContextFillRect (cg, CGRectMake (cmd.x, by,
+                                         cmd.width > 0 ? cmd.width : 2,
+                                         cmd.height));
+      break;
+    case EmacsDrawKindCursorHBar:
+      CGContextFillRect (cg, CGRectMake (cmd.x, by, cmd.width, 2));
+      break;
+    default:
+      break;
     }
 }
 
@@ -1591,31 +1451,54 @@ ios_set_keyboard_visible (bool visible)
   });
 }
 
+/* Fill a rectangle with PIXEL, clipped to the CLIP_* rectangle when
+   CLIP_WIDTH is positive.  Redisplay uses this for the background of
+   a glyph string and for the straight-line decorations.  */
 void
-ios_canvas_draw_text (double x, double y, double width, double height,
-                      unsigned long fg_pixel, unsigned long bg_pixel,
-                      const char *utf8, double font_size,
-                      unsigned deco, double cell_width,
+ios_canvas_fill_rect (double x, double y, double width, double height,
+                      unsigned long pixel,
                       double clip_x, double clip_y,
                       double clip_width, double clip_height)
 {
   if (ios_is_backgrounded ())
     return;
   EmacsUIView *v = ios_canvas;
-  if (v == nil || utf8 == NULL)
+  if (v == nil)
     return;
   EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
-  cmd.kind = EmacsDrawKindText;
+  cmd.kind = EmacsDrawKindFill;
   cmd.x = x;
   cmd.y = y;
   cmd.width = width;
   cmd.height = height;
-  cmd.fg = (uint32_t) (fg_pixel & 0xffffff);
-  cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
-  cmd.text = [NSString stringWithUTF8String:utf8];
-  cmd.fontSize = font_size > 0 ? font_size : 14;
-  cmd.deco = (EmacsDrawDeco) deco;
-  cmd.cellWidth = cell_width;
+  cmd.bg = (uint32_t) (pixel & 0xffffff);
+  cmd.clipX = clip_x;
+  cmd.clipY = clip_y;
+  cmd.clipWidth = clip_width;
+  cmd.clipHeight = clip_height;
+  [v drawCommand:cmd];
+}
+
+/* Draw a wave underline in PIXEL through the band Y .. Y+HEIGHT,
+   clipped as above.  */
+void
+ios_canvas_draw_wave (double x, double y, double width, double height,
+                      unsigned long pixel,
+                      double clip_x, double clip_y,
+                      double clip_width, double clip_height)
+{
+  if (ios_is_backgrounded ())
+    return;
+  EmacsUIView *v = ios_canvas;
+  if (v == nil)
+    return;
+  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
+  cmd.kind = EmacsDrawKindWave;
+  cmd.x = x;
+  cmd.y = y;
+  cmd.width = width;
+  cmd.height = height;
+  cmd.fg = (uint32_t) (pixel & 0xffffff);
   cmd.clipX = clip_x;
   cmd.clipY = clip_y;
   cmd.clipWidth = clip_width;
@@ -1671,25 +1554,15 @@ ios_canvas_draw_glyphs (void *ctfont,
   [v drawCommand:cmd];
 }
 
-/* Clear a rectangular region.  Used by clear_frame_area /
-   clear_under_internal_border to erase stale content.  Implemented
-   as an EmacsDrawKindText command with empty text -- the background
-   fill in drawRect: handles the actual paint.  */
+/* Fill a rectangle with BG_PIXEL, unclipped.  Used to erase stale
+   content (clear_frame_area, the internal border) and for the small
+   solid shapes redisplay draws itself: fringe bitmaps, window
+   dividers, the vertical border.  */
 void
 ios_canvas_clear_rect (double x, double y, double width, double height,
                        unsigned long bg_pixel)
 {
-  if (ios_is_backgrounded ())
-    return;
-  EmacsUIView *v = ios_canvas;
-  if (v == nil) return;
-  EmacsDrawCommand *cmd = [[EmacsDrawCommand alloc] init];
-  cmd.kind = EmacsDrawKindText;
-  cmd.x = x; cmd.y = y;
-  cmd.width = width; cmd.height = height;
-  cmd.bg = (uint32_t) (bg_pixel & 0xffffff);
-  cmd.text = @"";
-  [v drawCommand:cmd];
+  ios_canvas_fill_rect (x, y, width, height, bg_pixel, 0, 0, 0, 0);
 }
 
 /* Image draw: enqueue an EmacsDrawKindImage command holding a
@@ -2003,7 +1876,7 @@ ios_emacs_bg_thread (void *unused)
   if (debug_ui)
     {
       UILabel *title = [[UILabel alloc] init];
-      title.text = @"GNU Emacs (iOS bring-up)";
+      title.text = @"Emacs launch log";
       title.textColor = UIColor.whiteColor;
       title.font = [UIFont boldSystemFontOfSize:20];
       title.textAlignment = NSTextAlignmentCenter;
@@ -2116,7 +1989,7 @@ ios_emacs_bg_thread (void *unused)
   /* Suspend redisplay output: the canvas isn't visible, and iOS
      terminates backgrounded apps that keep doing work.  The Emacs
      thread keeps running so timers stay accurate, but
-     ios_canvas_draw_text et al. become no-ops until the app
+     the ios_canvas_* entry points become no-ops until the app
      returns to the foreground.  */
   ios_set_backgrounded (true);
 }
@@ -2127,14 +2000,10 @@ ios_emacs_bg_thread (void *unused)
 }
 
 /* iOS hands files opened from Files / Mail / Safari / share
-   sheet to the app via this callback.  The URL is security-scoped;
-   start access, then enqueue a synthetic key sequence that lands
-   in *scratch* as (find-file "PATH") -- Emacs's command loop
-   evaluates it and the user sees the file open.
-
-   Building a NON_ASCII_KEYSTROKE_EVENT for each char keeps us out
-   of any Lisp eval machinery on the wrong thread; the keystrokes
-   simply replay as if the user typed them.  */
+   sheet to the app via this callback.  The URL is security-scoped:
+   start access, remember a bookmark so the grant survives a
+   relaunch, and publish the path to the Emacs thread, which visits
+   the file.  */
 - (BOOL)application:(UIApplication *)application
             openURL:(NSURL *)url
             options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options
