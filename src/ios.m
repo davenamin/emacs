@@ -81,10 +81,10 @@ ios_documents_path (NSString *name)
 }
 
 /* Weakly-held reference to the on-screen log view installed by the
-   AppDelegate.  ios_launch_log appends each message here too so the
+   scene delegate.  ios_launch_log appends each message here too so the
    user can see live bring-up progress in the simulator / on a device,
    not just in the file logs.  Weak so the view can deallocate
-   normally when the AppDelegate tears down at app termination.  */
+   normally when its window goes away.  */
 __weak static UITextView *ios_log_view = nil;
 
 /* Append a timestamped MSG line to Documents/emacs-launch.log and
@@ -1299,8 +1299,8 @@ ios_queue_uikey (UIKey *key)
    Lisp side.  Weak so it auto-clears at app shutdown.  */
 __weak static EmacsUIView *ios_canvas = nil;
 
-/* Background lifecycle flag.  Set by applicationDidEnterBackground,
-   cleared by applicationDidBecomeActive.  Atomic so the Emacs
+/* Background lifecycle flag.  Set by sceneDidEnterBackground,
+   cleared by sceneDidBecomeActive.  Atomic so the Emacs
    thread can poll it without locking.  When set, all the
    ios_canvas_* entry points return early -- redisplay still runs
    on the Emacs side but produces no UIKit work, so a sleeping app
@@ -1642,6 +1642,9 @@ ios_canvas_scroll (double x, double y, double width, double height,
   [v drawCommand:cmd];
 }
 
+/* The background last pushed to the canvas, or ~0UL for none.  */
+static unsigned long ios_canvas_background = ~0UL;
+
 /* Keep the view's own background in sync with the Emacs frame
    background so unpainted regions (sub-row slack at the bottom,
    margins during rotation) show the buffer's background instead
@@ -1652,10 +1655,9 @@ ios_canvas_scroll (double x, double y, double width, double height,
 void
 ios_canvas_set_background (unsigned long pixel)
 {
-  static unsigned long last = ~0UL;
-  if (pixel == last)
+  if (pixel == ios_canvas_background)
     return;
-  last = pixel;
+  ios_canvas_background = pixel;
   CGFloat r = ((pixel >> 16) & 0xff) / 255.0;
   CGFloat g = ((pixel >>  8) & 0xff) / 255.0;
   CGFloat b = ( pixel        & 0xff) / 255.0;
@@ -1785,8 +1787,8 @@ ios_auto_input_thread (void *unused)
 
 /* pthread entry that drives Emacs init.  Defined as a real function
    rather than a dispatch_async block so we can guarantee a 16 MB
-   stack -- see the pthread_create call in didFinishLaunchingWithOptions
-   for the SIGILL-on-stack-overflow rationale.  Returns NULL; the
+   stack -- see ios_start_emacs for the SIGILL-on-stack-overflow
+   rationale.  Returns NULL; the
    detached pthread implicitly cleans itself up when ios_main eventually
    exits (which it never does in normal operation).  */
 static void *
@@ -1815,30 +1817,111 @@ ios_emacs_bg_thread (void *unused)
 }
 
 
-/* ---- EmacsAppDelegate ----------------------------------------- */
+/* ---- Application and scene delegates -------------------------- */
 
-/* UIApplicationDelegate that boots Emacs.  Defined in this binary
-   so UIApplicationMain's NSClassFromString lookup succeeds.  Sets
-   up the window, canvas, and (in debug builds) the launch-log
-   strip, then starts the Emacs thread.  */
+/* The app uses the scene-based life cycle, which UIKit requires of
+   anything built with a current SDK (Apple's TN3187): the
+   application delegate only starts things that are per-process, and
+   the scene delegate owns the window and receives the activation,
+   backgrounding and open-file notifications.  Both classes are
+   defined in this binary so the lookups by name -- UIApplicationMain
+   for the first, the scene manifest in Info.plist for the second --
+   succeed.
 
-@interface EmacsAppDelegate : UIResponder <UIApplicationDelegate>
+   Emacs has one frame and one canvas, so the app declares a single
+   scene.  UIKit may still disconnect that scene while the app is in
+   the background and connect a fresh one later, so the window is
+   built on every connection while Emacs itself is started once.  */
+
+/* Start the Emacs thread, on the first call only.  ios_main never
+   returns (Emacs's main loop runs forever), so running it on the UI
+   thread would deadlock UIKit and trip the launch watchdog.
+
+   A dispatch_async background queue has only ~512 KB of stack on
+   iOS, which the Emacs Lisp interpreter blows through in ~500 levels
+   of recursion -- loadup.el's preload pass hit a SIGILL stack
+   overflow inside Fassq during eval_sub recursion.  Use a pthread
+   with an explicit 16 MB stack instead.  */
+static void
+ios_start_emacs (void)
+{
+  static bool started;
+  if (started)
+    return;
+  started = true;
+
+  pthread_attr_t attr;
+  pthread_attr_init (&attr);
+  pthread_attr_setstacksize (&attr, 16 * 1024 * 1024);
+  pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
+  pthread_t tid;
+  int pterr = pthread_create (&tid, &attr, ios_emacs_bg_thread, NULL);
+  pthread_attr_destroy (&attr);
+  ios_launch_log ([NSString stringWithFormat:
+                   @"pthread_create for the Emacs thread: rc=%d", pterr]);
+
+  /* Automated runs synthesize keystrokes a few seconds after launch
+     so a screenshot captures a working session rather than the
+     startup splash.  This is gated on EMACS_IOS_AUTO_INPUT, which
+     simctl passes through as SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT, so
+     an ordinary launch is never driven.  The keys are sent from a
+     dedicated thread using sleep() rather than dispatch_after on the
+     main queue: taking a screenshot perturbs the app lifecycle in a
+     way that can drop queued main-queue blocks.  */
+  if (getenv ("EMACS_IOS_AUTO_INPUT"))
+    {
+      pthread_t auto_thread;
+      pthread_attr_t auto_attr;
+      pthread_attr_init (&auto_attr);
+      pthread_attr_setdetachstate (&auto_attr, PTHREAD_CREATE_DETACHED);
+      pthread_create (&auto_thread, &auto_attr,
+                      ios_auto_input_thread, NULL);
+      pthread_attr_destroy (&auto_attr);
+    }
+}
+
+/* Hand URL, a file another app asked Emacs to open, to the Emacs
+   thread.  The URL is security-scoped: start access, remember a
+   bookmark so the grant survives a relaunch, and publish the path;
+   the Emacs thread turns that into a drag-n-drop event and visits
+   the file.  Lisp allocation is unsafe on this thread, and
+   synthesizing keystrokes instead would misfire if the minibuffer
+   happened to be active.  */
+static void
+ios_open_url (NSURL *url)
+{
+  if (url == nil)
+    return;
+  BOOL scoped = [url startAccessingSecurityScopedResource];
+  NSString *path = url.path;
+  if (path.length == 0)
+    {
+      if (scoped)
+        [url stopAccessingSecurityScopedResource];
+      return;
+    }
+  ios_save_bookmark (url);
+  ios_launch_log ([NSString stringWithFormat:@"open URL: %@", path]);
+  ios_publish_open_file (path.fileSystemRepresentation);
+}
+
+@interface EmacsSceneDelegate : UIResponder <UIWindowSceneDelegate>
 @property (strong, nonatomic) UIWindow *window;
 @end
 
-@implementation EmacsAppDelegate
+@implementation EmacsSceneDelegate
 
-- (BOOL)application:(UIApplication *)application
-    didFinishLaunchingWithOptions:(NSDictionary *)opts
+- (void) scene:(UIScene *)scene
+    willConnectToSession:(UISceneSession *)session
+                 options:(UISceneConnectionOptions *)options
 {
-  ios_redirect_stdio ();
-  ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: enter");
-  /* Re-acquire access to external documents the user opened in
-     previous sessions, before Emacs init starts visiting files
-     from recentf / desktop.  */
-  ios_restore_bookmarks ();
+  (void) session;
+  if (![scene isKindOfClass:[UIWindowScene class]])
+    return;
+  ios_launch_log (@"scene willConnectToSession: enter");
 
-  self.window = [[UIWindow alloc] initWithFrame:UIScreen.mainScreen.bounds];
+  self.window = [[UIWindow alloc]
+                  initWithWindowScene:(UIWindowScene *) scene];
   self.window.backgroundColor = UIColor.blackColor;
 
   UIViewController *vc = [[UIViewController alloc] init];
@@ -1917,60 +2000,41 @@ ios_emacs_bg_thread (void *unused)
 
   ios_log_view = logView;
   ios_canvas   = canvas;
+  /* A new canvas has not been told the frame's background; forget
+     the cached color so the next redisplay pushes it again.  */
+  ios_canvas_background = ~0UL;
 
   self.window.rootViewController = vc;
   [self.window makeKeyAndVisible];
-  ios_launch_log (@"AppDelegate window visible (log view installed)");
+  ios_launch_log (@"scene window visible");
 
-  /* Kick off Emacs initialization on a dedicated pthread.  ios_main
-     never returns (Emacs's main loop runs forever), so blocking the
-     UI thread on it would deadlock UIKit and trip the iOS launch
-     watchdog.
-     A dispatch_async background queue has only ~512 KB of stack on
-     iOS, which the Emacs Lisp interpreter blows through in ~500
-     levels of recursion -- loadup.el's preload pass hit a SIGILL
-     stack overflow inside Fassq during eval_sub recursion.  Use a
-     pthread with an explicit 16 MB stack instead.  */
-  pthread_attr_t attr;
-  pthread_attr_init (&attr);
-  pthread_attr_setstacksize (&attr, 16 * 1024 * 1024);
-  pthread_attr_setdetachstate (&attr, PTHREAD_CREATE_DETACHED);
-  pthread_t tid;
-  int pterr = pthread_create (&tid, &attr, ios_emacs_bg_thread, NULL);
-  pthread_attr_destroy (&attr);
-  ios_launch_log ([NSString stringWithFormat:
-                   @"AppDelegate: pthread_create rc=%d", pterr]);
+  /* The canvas exists now, so Emacs has somewhere to draw.  */
+  ios_start_emacs ();
 
-  ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions: returning YES");
-
-  /* Automated runs synthesize keystrokes a few seconds after launch
-     so a screenshot captures a working session rather than the
-     startup splash.  This is gated on EMACS_IOS_AUTO_INPUT, which
-     simctl passes through as SIMCTL_CHILD_EMACS_IOS_AUTO_INPUT, so
-     an ordinary launch is never driven.  The keys are sent from a
-     dedicated thread using sleep() rather than dispatch_after on the
-     main queue: taking a screenshot perturbs the app lifecycle in a
-     way that can drop queued main-queue blocks.  */
-  if (getenv ("EMACS_IOS_AUTO_INPUT"))
-    {
-      pthread_t auto_thread;
-      pthread_attr_t auto_attr;
-      pthread_attr_init (&auto_attr);
-      pthread_attr_setdetachstate (&auto_attr, PTHREAD_CREATE_DETACHED);
-      pthread_create (&auto_thread, &auto_attr,
-                      ios_auto_input_thread, NULL);
-      pthread_attr_destroy (&auto_attr);
-    }
-  return YES;
+  /* A file that launched the app arrives with the connection
+     rather than through scene:openURLContexts:.  */
+  for (UIOpenURLContext *context in options.URLContexts)
+    ios_open_url (context.URL);
 }
 
-- (void)applicationDidBecomeActive:(UIApplication *)application
+- (void) sceneDidDisconnect:(UIScene *)scene
 {
-  ios_launch_log (@"AppDelegate applicationDidBecomeActive");
+  (void) scene;
+  ios_launch_log (@"sceneDidDisconnect");
+  /* The system has reclaimed the scene.  Let the window and canvas
+     go; the drawing entry points do nothing without a canvas, and a
+     later connection builds new ones.  */
+  self.window = nil;
+}
+
+- (void) sceneDidBecomeActive:(UIScene *)scene
+{
+  (void) scene;
+  ios_launch_log (@"sceneDidBecomeActive");
   ios_set_backgrounded (false);
   /* Force a full repaint: the backing store received no draws
-     while backgrounded, so parts of it are stale until Emacs
-     redraws from scratch.  */
+     while backgrounded -- or, after a reconnection, is new -- so it
+     is stale until Emacs redraws from scratch.  */
   ios_publish_foreground_expose ();
   /* UIKit resigns the first responder around scene deactivation;
      without re-acquiring it here, hardware keyboard input is dead
@@ -1978,55 +2042,67 @@ ios_emacs_bg_thread (void *unused)
   [ios_canvas becomeFirstResponder];
 }
 
-- (void)applicationWillResignActive:(UIApplication *)application
+- (void) sceneWillResignActive:(UIScene *)scene
 {
-  ios_launch_log (@"AppDelegate applicationWillResignActive");
+  (void) scene;
+  ios_launch_log (@"sceneWillResignActive");
 }
 
-- (void)applicationDidEnterBackground:(UIApplication *)application
+- (void) sceneDidEnterBackground:(UIScene *)scene
 {
-  ios_launch_log (@"AppDelegate applicationDidEnterBackground");
+  (void) scene;
+  ios_launch_log (@"sceneDidEnterBackground");
   /* Suspend redisplay output: the canvas isn't visible, and iOS
      terminates backgrounded apps that keep doing work.  The Emacs
-     thread keeps running so timers stay accurate, but
-     the ios_canvas_* entry points become no-ops until the app
-     returns to the foreground.  */
+     thread keeps running so timers stay accurate, but the
+     ios_canvas_* entry points become no-ops until the app returns
+     to the foreground.  */
   ios_set_backgrounded (true);
 }
 
-- (void)applicationWillTerminate:(UIApplication *)application
+/* Files opened from Files / Mail / Safari / a share sheet while the
+   app is running.  */
+- (void) scene:(UIScene *)scene
+    openURLContexts:(NSSet<UIOpenURLContext *> *)contexts
 {
-  ios_launch_log (@"AppDelegate applicationWillTerminate");
+  (void) scene;
+  for (UIOpenURLContext *context in contexts)
+    ios_open_url (context.URL);
 }
 
-/* iOS hands files opened from Files / Mail / Safari / share
-   sheet to the app via this callback.  The URL is security-scoped:
-   start access, remember a bookmark so the grant survives a
-   relaunch, and publish the path to the Emacs thread, which visits
-   the file.  */
+@end
+
+@interface EmacsAppDelegate : UIResponder <UIApplicationDelegate>
+@end
+
+@implementation EmacsAppDelegate
+
 - (BOOL)application:(UIApplication *)application
-            openURL:(NSURL *)url
-            options:(NSDictionary<UIApplicationOpenURLOptionsKey, id> *)options
+    didFinishLaunchingWithOptions:(NSDictionary *)opts
 {
-  if (url == nil)
-    return NO;
-  BOOL scoped = [url startAccessingSecurityScopedResource];
-  (void) scoped;
-  ios_save_bookmark (url);
-  NSString *path = url.path;
-  if (path.length == 0)
-    {
-      if (scoped) [url stopAccessingSecurityScopedResource];
-      return NO;
-    }
-  ios_launch_log ([NSString stringWithFormat:
-                   @"AppDelegate openURL: %@", path]);
-  /* Publish the path; the Emacs thread builds a DRAG_N_DROP_EVENT
-     from it inside read_socket (Lisp allocation is unsafe on
-     this thread, and synthesizing keystrokes would misfire if
-     the minibuffer happens to be active).  */
-  ios_publish_open_file (path.fileSystemRepresentation);
+  (void) application; (void) opts;
+  ios_redirect_stdio ();
+  ios_launch_log (@"AppDelegate didFinishLaunchingWithOptions");
+  /* Re-acquire access to external documents the user opened in
+     previous sessions, before Emacs init starts visiting files
+     from recentf / desktop.  */
+  ios_restore_bookmarks ();
   return YES;
+}
+
+/* Name the scene delegate here as well as in Info.plist's scene
+   manifest, so a bundle whose plist loses the entry still gets a
+   window.  */
+- (UISceneConfiguration *)application:(UIApplication *)application
+    configurationForConnectingSceneSession:(UISceneSession *)session
+                                   options:(UISceneConnectionOptions *)options
+{
+  (void) application; (void) options;
+  UISceneConfiguration *config
+    = [[UISceneConfiguration alloc] initWithName:@"Default Configuration"
+                                     sessionRole:session.role];
+  config.delegateClass = [EmacsSceneDelegate class];
+  return config;
 }
 
 @end
@@ -2034,18 +2110,6 @@ ios_emacs_bg_thread (void *unused)
 
 /* ---- Entry points --------------------------------------------- */
 
-/* C-level Emacs entry point invoked from the AppDelegate on its
-   background queue.  Resolves the dump file path, then hands off to
-   the renamed emacs.c main().  Wraps the call with launch-log lines
-   so a hang inside ios_emacs_init can be localized.  */
-
-/* Point Emacs at the bundled lisp/ and etc/ trees.  Without this the
-   stock $prefix/share/emacs/$VERSION paths apply -- those resolve
-   into /usr/local on the runner and into the simulator's sandbox
-   root on a device, neither of which exists.  Setting EMACSLOADPATH
-   and EMACSDATA before ios_emacs_init is the same mechanism the
-   Android port uses; the load-path bootstrap in emacs.c reads these
-   envvars before computing the built-in fallback list.  */
 /* C-callable accessor for the sandbox path enumeration declared
    in iosvfs.c.  Returns a pointer into an internal cache; callers
    must not free.  */
@@ -2081,6 +2145,13 @@ ios_sandbox_directory (int which)
   return cache[which] ? cache[which].fileSystemRepresentation : NULL;
 }
 
+/* Point Emacs at the bundled lisp/ and etc/ trees.  Without this the
+   stock $prefix/share/emacs/$VERSION paths apply -- those resolve
+   into /usr/local on the runner and into the simulator's sandbox
+   root on a device, neither of which exists.  Setting EMACSLOADPATH
+   and EMACSDATA before ios_emacs_init is the same mechanism the
+   Android port uses; the load-path bootstrap in emacs.c reads these
+   envvars before computing the built-in fallback list.  */
 static void
 ios_setenv_bundle_paths (void)
 {
@@ -2138,6 +2209,10 @@ ios_setenv_bundle_paths (void)
     }
 }
 
+/* C-level Emacs entry point, run on the thread ios_start_emacs
+   creates.  Resolves the dump file path, then hands off to the
+   renamed emacs.c main().  Wraps the call with launch-log lines so a
+   hang inside ios_emacs_init can be localized.  */
 int
 ios_main (int argc, char **argv)
 {
@@ -2165,7 +2240,8 @@ ios_main (int argc, char **argv)
    The bundle's CFBundleExecutable IS this binary, so on launch iOS
    transfers control here directly.  We hand off to UIApplicationMain
    with EmacsAppDelegate (defined above), which spins up the run
-   loop and triggers didFinishLaunchingWithOptions.  */
+   loop; UIKit then connects the scene, whose delegate builds the
+   window and starts Emacs.  */
 
 int
 main (int argc, char *argv[])
