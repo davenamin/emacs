@@ -479,7 +479,7 @@ can be determined, a default according to the shell type is used."
        (t (error "Unexpected case in shell--unquote&requote-argument!")))
       (setq qpos (match-end 0)))
     (funcall push (substring qstr qpos) (length qstr))
-    (list (mapconcat #'identity (nreverse ustrs) "")
+    (list (mapconcat #'identity (nreverse ustrs))
           qupos #'comint-quote-filename)))
 
 (defun shell--unquote-argument (str)
@@ -524,7 +524,7 @@ can be determined, a default according to the shell type is used."
              ((match-beginning 1)       ;Single quote.
               (push (match-string 1) arg))
              (t (push (match-string 0) arg))))
-          (push (mapconcat #'identity (nreverse arg) "") args)))
+          (push (mapconcat #'identity (nreverse arg)) args)))
       (cons (nreverse args) (nreverse begins)))))
 
 (defun shell-get-old-input ()
@@ -996,7 +996,7 @@ Make the shell buffer the current buffer, and return it.
        (lambda (proc event)
          (when sentinel
            (funcall sentinel proc event))
-         (unless (buffer-live-p proc)
+         (unless (process-live-p proc)
            (kill-buffer buffer))))))
   buffer)
 

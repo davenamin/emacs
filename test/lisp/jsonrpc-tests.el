@@ -87,7 +87,6 @@ INITARGS are passed to `make-instance' for `jsonrpc--test-client'."
        (when ,conn
          (ignore-errors
           (jsonrpc-request ,conn 'harakiri nil :timeout 1)
-          (accept-process-output nil 0.1)
           (kill-buffer (jsonrpc--events-buffer ,conn))
           (jsonrpc-shutdown ,conn))))))
 
@@ -307,6 +306,248 @@ Vaguely similar to Julia's JETLS (bug#80623), but more complex."
         (jsonrpc-shutdown conn)
         (setq conn nil)))
     (should-not warned)))
+
+(ert-deftest shutdown-promptly-after-exit ()
+  "Check `jsonrpc-shutdown' returns in time."
+  (skip-when (eq system-type 'windows-nt))
+  (let (warned elapsed)
+    (cl-letf (((symbol-function 'jsonrpc--warn)
+               (lambda (fmt &rest args)
+                 (setq warned (apply #'format fmt args)))))
+      (jsonrpc--with-python-fixture
+          ("jsonrpc-resources/server-harakiri.py" conn)
+        (jsonrpc-notify conn 'harakiri nil)
+        (let ((start (float-time)))
+          (jsonrpc-shutdown conn)
+          (setq elapsed (- (float-time) start)))
+        (setq conn nil)))
+    (should-not warned)
+    (should (< elapsed 0.25))))
+
+(ert-deftest shutdown-cleanup-kills-all-buffers ()
+  "Check `jsonrpc-shutdown' with CLEANUP kills all buffers."
+  (skip-when (eq system-type 'windows-nt))
+  (let (buffers)
+    (jsonrpc--with-python-fixture
+        ("jsonrpc-resources/server-harakiri.py" conn)
+      (setq buffers (list (process-buffer (jsonrpc--process conn))
+                          (jsonrpc-stderr-buffer conn)
+                          (jsonrpc-events-buffer conn)))
+      (should (cl-every #'buffer-live-p buffers))
+      (jsonrpc-notify conn 'harakiri nil)
+      (jsonrpc-shutdown conn t)
+      (should-not (cl-some #'buffer-live-p buffers))
+      (setq conn nil))))
+
+(defun jsonrpc--test-buffers (conn)
+  "List CONN's process, stderr and events buffers."
+  (list (process-buffer (jsonrpc--process conn))
+        (jsonrpc-stderr-buffer conn)
+        (jsonrpc-events-buffer conn)))
+
+(defun jsonrpc--test-wait-killed (buffers)
+  "Wait for all BUFFERS to be killed, failing after 2s."
+  (with-timeout (2 (ert-fail "Buffers still live after 2s"))
+    (while (cl-some #'buffer-live-p buffers)
+      (accept-process-output nil 0.01))))
+
+(ert-deftest async-shutdown-after-exit ()
+  "Async `jsonrpc-shutdown' returns at once, cleans up after exit."
+  (skip-when (eq system-type 'windows-nt))
+  (let (warned)
+    (cl-letf (((symbol-function 'jsonrpc--warn)
+               (lambda (&rest _) (setq warned t))))
+      (jsonrpc--with-python-fixture
+          ("jsonrpc-resources/server-harakiri.py" conn)
+        (let ((buffers (jsonrpc--test-buffers conn))
+              (start (float-time)))
+          (jsonrpc-notify conn 'harakiri nil)
+          (jsonrpc-shutdown conn t t)
+          (should (< (- (float-time) start) 0.05))
+          (jsonrpc--test-wait-killed buffers)
+          (should-not (jsonrpc-running-p conn))
+          (setq conn nil))))
+    (should-not warned)))
+
+(ert-deftest async-shutdown-kills-stubborn-server ()
+  "Async `jsonrpc-shutdown' deletes a server that doesn't exit."
+  (skip-when (eq system-type 'windows-nt))
+  (let ((warnings 0))
+    (cl-letf (((symbol-function 'jsonrpc--warn)
+               (lambda (&rest _) (cl-incf warnings))))
+      (jsonrpc--with-python-fixture
+          ("jsonrpc-resources/server-harakiri.py" conn)
+        (let ((buffers (jsonrpc--test-buffers conn))
+              (start (float-time)))
+          ;; don't send any exit notification to the server
+          (jsonrpc-shutdown conn t t)
+          (should (jsonrpc-running-p conn))
+          (jsonrpc--test-wait-killed buffers)
+          (should (>= (- (float-time) start) 0.25))
+          (should-not (jsonrpc-running-p conn))
+          (setq conn nil))))
+    (should (= warnings 1))))
+
+(ert-deftest async-shutdown-after-sentinel ()
+  "Async `jsonrpc-shutdown' cleans up at once once the sentinel ran."
+  (skip-when (eq system-type 'windows-nt))
+  (jsonrpc--with-python-fixture
+      ("jsonrpc-resources/server-harakiri.py" conn)
+    (let ((buffers (jsonrpc--test-buffers conn))
+          (proc (jsonrpc--process conn)))
+      (jsonrpc-notify conn 'harakiri nil)
+      (with-timeout (2 (ert-fail "Sentinel didn't run"))
+        (while (not (process-get proc 'jsonrpc-sentinel-done))
+          (accept-process-output nil 0.01)))
+      ;; The sentinel already killed the process buffer.
+      (should (cl-every #'buffer-live-p (cdr buffers)))
+      (jsonrpc-shutdown conn t t)
+      (should-not (cl-some #'buffer-live-p buffers))
+      (setq conn nil))))
+
+(ert-deftest same-name-connections-dont-share-buffers ()
+  "Check two connections with the same name get separate buffers.
+Shutting one down leaves the other's buffers alone."
+  (skip-when (eq system-type 'windows-nt))
+  (skip-unless (executable-find "python3"))
+  (let* ((name "jsonrpc-same-name")
+         (script (expand-file-name "jsonrpc-resources/server-emacsrpc.py"
+                                   jsonrpc--test-dir))
+         (make-conn
+          (lambda ()
+            (jsonrpc-process-connection
+             :name name
+             :process
+             (lambda ()
+               (make-process
+                :name name :command (list "python3" script)
+                :connection-type 'pipe :noquery t
+                ;; The old handshake: find jsonrpc's stderr buffer by name.
+                :stderr (get-buffer-create (format "*%s stderr*" name)))))))
+         (a (funcall make-conn))
+         (b (funcall make-conn))
+         (buffers-of (lambda (conn)
+                       (list (process-buffer (jsonrpc--process conn))
+                             (jsonrpc-stderr-buffer conn)
+                             (jsonrpc-events-buffer conn)))))
+    (unwind-protect
+        (let ((a-buffers (funcall buffers-of a))
+              (b-buffers (funcall buffers-of b)))
+          (should (cl-every #'buffer-live-p (append a-buffers b-buffers)))
+          (should-not (cl-intersection a-buffers b-buffers))
+          (jsonrpc-notify a 'harakiri nil)
+          (jsonrpc-shutdown a t)
+          (should (cl-every #'buffer-live-p b-buffers))
+          (should (= 3 (jsonrpc-request b '+ [1 2] :timeout 3))))
+      (dolist (conn (list a b))
+        (when (jsonrpc-running-p conn)
+          (ignore-errors (jsonrpc-notify conn 'harakiri nil))
+          (jsonrpc-shutdown conn t))
+        (kill-buffer (jsonrpc-events-buffer conn))))))
+
+(ert-deftest dead-connection-kills-process-buffer ()
+  "Check that a dead connection's buffer dies even without CLEANUP.
+Otherwise every reconnection under the same name would make garbage.."
+  (skip-when (eq system-type 'windows-nt))
+  (let (output events)
+    (jsonrpc--with-python-fixture
+        ("jsonrpc-resources/server-harakiri.py" conn)
+      (setq output (process-buffer (jsonrpc--process conn))
+            events (jsonrpc-events-buffer conn))
+      (jsonrpc-notify conn 'harakiri nil)
+      (jsonrpc-shutdown conn)
+      (setq conn nil))
+    (unwind-protect
+        (progn (should-not (buffer-live-p output))
+               (should (buffer-live-p events)))
+      (kill-buffer events))))
+
+(ert-deftest bug-82046-failed-send-cleans-up ()
+  (skip-when (eq system-type 'windows-nt))
+  (jsonrpc--with-python-fixture
+      ("jsonrpc-resources/server-emacsrpc.py" conn)
+    (delete-process (jsonrpc--process conn))
+    (should-error (jsonrpc-async-request conn '+ [1 2] :timeout 2))
+    (should-error (jsonrpc-request conn '+ [1 2] :timeout 2))
+    (should-not (jsonrpc--continuations conn))
+    (should-not (jsonrpc--scontrol conn))))
+
+;; The following tests make the write of a big request block, so that
+;; Emacs runs timers and reads process output while waiting for the pipe
+;; to drain (bug#82046).  FIXME: They also access some jsonrpc.el
+;; internals, but that's acceptable here.
+(defconst jsonrpc--test-big-blob (vector (make-string (* 1024 1024) ?x))
+  "Params big enough to fill a pipe's buffer.")
+
+(ert-deftest bug-82046-reply-during-send ()
+  (skip-when (eq system-type 'windows-nt))
+  (jsonrpc--with-python-fixture
+      ("jsonrpc-resources/server-emacsrpc.py" conn)
+    (let (result)
+      ;; The lambda will run as soon as it gets a chance _inside_ the
+      ;; big blob request's send.
+      (run-at-time 0 nil
+                   (lambda ()
+                     (setq result (jsonrpc-request conn '+ [1 2] :timeout 2))))
+      ;; We want this to return normally (2 seconds should be enough,
+      ;; ignore returns nil)
+      (should-not (jsonrpc-request conn 'ignore jsonrpc--test-big-blob
+                                   :timeout 2))
+      ;; Check the 1 + 2 was calculated remotely and everything is clean
+      (should (= 3 result))
+      (should-not (jsonrpc--continuations conn))
+      (should-not (jsonrpc--scontrol conn)))))
+
+(ert-deftest bug-82046-reply-parked-during-aborted-send ()
+  (skip-when (eq system-type 'windows-nt))
+  (jsonrpc--with-python-fixture
+      ("jsonrpc-resources/server-emacsrpc.py" conn)
+    (let (result)
+      ;; The async `+' reply will arrive during the send of the big sync
+      ;; request below, so it'll wait on the latter's sync-control
+      ;; "scontrol" entry.
+      (jsonrpc-async-request conn '+ [1 2]
+                             :success-fn (lambda (r) (setq result r))
+                             :timeout 3)
+      (jsonrpc-async-request conn 'sit-for [1] :timeout 3)
+      ;; The above sit-for will make the server stop reading for a
+      ;; while, and now we arrange for the big blob write, which will
+      ;; block, to be aborted.
+      (run-at-time 0.3 nil (lambda () (throw 'abort 'aborted)))
+      (should (eq 'aborted
+                  (catch 'abort
+                    (jsonrpc-request conn 'ignore jsonrpc--test-big-blob
+                                     :timeout 3))))
+      ;; Now there should be no outstanding synchronous request holding
+      ;; up other requests.
+      (should-not (jsonrpc--scontrol conn))
+      ;; Eventually our response should arrive (the fixture times
+      ;; out if it never does).
+      (while (not result) (accept-process-output nil 0.1))
+      (should (= 3 result)))))
+
+(ert-deftest bug-82046-aborted-send-spares-outer-request ()
+  (skip-when (eq system-type 'windows-nt))
+  (jsonrpc--with-python-fixture
+      ("jsonrpc-resources/server-emacsrpc.py" conn)
+    (let (result)
+      ;; The async `+' reply will arrive while the outer `sit-for'
+      ;; request a few lines below waits, so it'll wait on that
+      ;; request's "scontrol" entry.
+      (jsonrpc-async-request conn '+ [1 2]
+                             :success-fn (lambda (r) (setq result r))
+                             :timeout 3)
+      ;; Meanwhile, an inner sync request's blocked send is aborted.
+      ;; That mustn't disturb the outer request's scontrol entry.
+      (run-at-time 0.1 nil
+                   (lambda ()
+                     (run-at-time 0.2 nil (lambda () (throw 'abort 'aborted)))
+                     (catch 'abort
+                       (jsonrpc-request conn 'ignore jsonrpc--test-big-blob
+                                        :timeout 3))))
+      (should-not (jsonrpc-request conn 'sit-for [1] :timeout 3))
+      (while (not result) (accept-process-output nil 0.1))
+      (should (= 3 result)))))
 
 (provide 'jsonrpc-tests)
 ;;; jsonrpc-tests.el ends here

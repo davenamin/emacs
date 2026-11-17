@@ -43,8 +43,16 @@
 ;;     USER          is the user on the container to connect as (optional).
 ;;     CONTAINER     is the container to connect to.
 ;;
-;; "docker" and "podman" are inline methods, "dockercp" and "podmancp"
-;; are out-of-band methods.
+;; or WSL container (on MS-Windows only):
+;;
+;;     C-x C-f /wslc:USER@CONTAINER:/path/to/file
+;;
+;; Where:
+;;     USER          is the user on the container to connect as (optional).
+;;     CONTAINER     is the container to connect to.
+;;
+;; "docker", "podman" and "wslc" are inline methods, "dockercp" and
+;; "podmancp" are out-of-band methods.
 ;;
 ;;
 ;;
@@ -132,6 +140,15 @@
   :type '(choice (const "podman")
                  (string))
   :link '(tramp-info-link :tag "Tramp manual" tramp-podman-program))
+
+;;;###tramp-autoload
+(defcustom tramp-wslc-program "wslc"
+  "Name of the WSL container client program."
+  :group 'tramp
+  :version "32.1"
+  :type '(choice (const "wslc")
+                 (string))
+  :link '(tramp-info-link :tag "Tramp manual" tramp-wslc-program))
 
 ;;;###tramp-autoload
 (defcustom tramp-kubernetes-program "kubectl"
@@ -224,6 +241,10 @@ This is for out-of-band connections.")
 This is for out-of-band connections.")
 
 ;;;###tramp-autoload
+(defconst tramp-wslc-method "wslc"
+  "Tramp method name to connect to WSL containers.")
+
+;;;###tramp-autoload
 (defconst tramp-kubernetes-method "kubernetes"
   "Tramp method name to connect to Kubernetes containers.")
 
@@ -290,16 +311,44 @@ see its function help for a description of the format."
   (tramp-skeleton-completion-function method
     (when-let* ((raw-list
 		 (shell-command-to-string
-		  (concat program " ps --format '{{.ID}}\t{{.Names}}'")))
-		(lines (split-string raw-list "\n" 'omit))
+		  (format
+		   "%s ps --format %s" program
+		   (funcall
+		    (if (tramp-tramp-file-p default-directory)
+			#'tramp-shell-quote-argument #'shell-quote-argument)
+		    "{{.ID}}<>{{.Names}}"))))
+		(lines (string-lines raw-list 'omit))
 		(names
-		 (tramp-compat-seq-keep
+		 (seq-keep
 		  (lambda (line)
 		    (when (string-match
 			   (rx bol (group (1+ nonl))
-			       "\t" (? (group (1+ nonl))) eol)
+			       "<>" (? (group (1+ nonl))) eol)
 			   line)
 		      (or (match-string 2 line) (match-string 1 line))))
+		  lines)))
+      (mapcar (lambda (name) (list nil name)) names))))
+
+;;;###tramp-autoload
+(defun tramp-wslc-completion-function (method)
+  "List running WSL containers available for connection.
+
+This function is used by `tramp-set-completion-function', please
+see its function help for a description of the format."
+  (tramp-skeleton-completion-function method
+    ;; JSON is available unconditionally since Emacs 30.1.
+    ;; Emacs 29 must be configured --with-json.
+    (when-let* (((json-available-p))
+		(raw-list
+		 (shell-command-to-string (concat program " ps --format json")))
+		(lines (string-lines raw-list 'omit))
+		(names
+		 (seq-keep
+		  (lambda (line)
+		    (or (gethash
+			 "Names" (tramp-compat-funcall 'json-parse-string line))
+			(gethash
+			 "ID" (tramp-compat-funcall 'json-parse-string line))))
 		  lines)))
       (mapcar (lambda (name) (list nil name)) names))))
 
@@ -322,14 +371,14 @@ see its function help for a description of the format."
 		   " -o jsonpath='{range .items[*]}{\"|\"}{.metadata.name}"
 		   "{\":\"}{range .spec.containers[*]}{.name}{\",\"}"
 		   "{end}{end}'")))
-		(lines (split-string raw-list "|" 'omit)))
+		(lines (string-split raw-list "|" 'omit)))
       (let (names)
 	(dolist (line lines)
-	  (setq line (split-string line ":" 'omit))
+	  (setq line (string-split line ":" 'omit))
 	  ;; Pod name.
 	  (push (car line) names)
 	  ;; Container names.
-	  (dolist (elt (split-string (cadr line) "," 'omit))
+	  (dolist (elt (string-split (cadr line) "," 'omit))
 	    (push (concat elt "." (car line)) names)))
 	(mapcar (lambda (name) (list nil name)) (delq nil names))))))
 
@@ -444,9 +493,9 @@ see its function help for a description of the format."
   (tramp-skeleton-completion-function method
     (when-let* ((raw-list (shell-command-to-string (concat program " list -c")))
 		;; Ignore header line.
-		(lines (cdr (split-string raw-list "\n" 'omit)))
+		(lines (cdr (string-lines raw-list 'omit)))
 		;; We do not show container IDs.
-		(names (tramp-compat-seq-keep
+		(names (seq-keep
 			(lambda (line)
 			  (when (string-match
 				 (rx bol (1+ (not space))
@@ -465,9 +514,9 @@ see its function help for a description of the format."
   (tramp-skeleton-completion-function method
     (when-let* ((raw-list (shell-command-to-string (concat program " list")))
 		;; Ignore header line.
-		(lines (cdr (split-string raw-list "\n" 'omit)))
+		(lines (cdr (string-lines raw-list 'omit)))
 		;; We do not show container IDs.
-		(names (tramp-compat-seq-keep
+		(names (seq-keep
 			(lambda (line)
 			  (when (string-match
 				 (rx bol (1+ (not space))
@@ -491,8 +540,8 @@ see its function help for a description of the format."
 		 (shell-command-to-string
 		  ;; Ignore header line.
 		  (concat program " ps --columns=instance,application | cat -")))
-		(lines (split-string raw-list "\n" 'omit))
-		(names (tramp-compat-seq-keep
+		(lines (string-lines raw-list 'omit))
+		(names (seq-keep
 			(lambda (line)
 			  (when (string-match
 				 (rx bol (* space) (group (+ (not space)))
@@ -512,8 +561,8 @@ see its function help for a description of the format."
     (when-let* ((raw-list
 		 (shell-command-to-string (concat program " instance list")))
 		;; Ignore header line.
-		(lines (cdr (split-string raw-list "\n" 'omit)))
-		(names (tramp-compat-seq-keep
+		(lines (cdr (string-lines raw-list 'omit)))
+		(names (seq-keep
 			(lambda (line)
 			  (when (string-match
 				 (rx bol (group (1+ (not space)))
@@ -533,9 +582,9 @@ see its function help for a description of the format."
     (when-let* ((raw-list
 		 (shell-command-to-string (concat program " list --all -q")))
 		;; Ignore header line.
-		(lines (cdr (split-string raw-list "\n")))
+		(lines (cdr (string-lines raw-list)))
 		(first-words
-		 (mapcar (lambda (line) (car (split-string line))) lines))
+		 (mapcar (lambda (line) (car (string-split line))) lines))
 		(machines (seq-take-while (lambda (name) name) first-words)))
       (mapcar (lambda (m) (list nil m)) machines))))
 
@@ -670,6 +719,32 @@ see its function help for a description of the format."
   'tramp-kubernetes-connection-local-default-profile))
 
 ;;;###tramp-autoload
+(defun tramp--enable-wslc-method ()
+  "Enable connection to WSL containers."
+ (add-to-list 'tramp-methods
+              `(,tramp-wslc-method
+                (tramp-login-program ,tramp-wslc-program)
+                (tramp-login-args (("exec")
+                                   ("-it")
+                                   ("-u" "%u")
+				   ("-e" ,(format "TERM=%s" tramp-terminal-type))
+                                   ("%h")
+			           ("%l")))
+		(tramp-direct-async (,tramp-default-remote-shell "-c"))
+                (tramp-remote-shell ,tramp-default-remote-shell)
+                (tramp-remote-shell-login ("-l"))
+                (tramp-remote-shell-args ("-i" "-c"))
+		(tramp-completion-use-cache nil)))
+
+ (tramp-set-completion-function
+  tramp-wslc-method
+  `((tramp-wslc-completion-function ,tramp-wslc-method))))
+
+;;;###tramp-autoload
+(when (eq system-type 'windows-nt)
+  (defalias 'tramp-enable-wslc-method #'tramp--enable-wslc-method))
+
+;;;###tramp-autoload
 (defun tramp-enable-toolbox-method ()
   "Enable connection to Toolbox containers."
   (add-to-list 'tramp-methods
@@ -778,7 +853,7 @@ see its function help for a description of the format."
    tramp-apptainer-method
    `((tramp-apptainer--completion-function ,tramp-apptainer-method))))
 
-;; todo: check tramp-async-args and tramp-direct-async
+;; TODO: Check `tramp-async-args' and `tramp-direct-async'.
 ;;;###tramp-autoload
 (defun tramp-enable-nspawn-method ()
   "Enable connection to nspawn containers."

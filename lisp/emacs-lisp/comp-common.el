@@ -408,21 +408,21 @@ Used to modify the compiler environment."
   "All Limple operators.")
 
 (defconst comp-limple-lock-keywords
-  `((,(rx bol "(comment" (1+ not-newline)) . font-lock-comment-face)
+  `((,(rx bol "(comment" (1+ not-newline)) (0 'font-lock-comment-face))
     (,(rx "#(" (group-n 1 "mvar"))
-     (1 font-lock-function-name-face))
+     (1 'font-lock-function-name-face))
     (,(rx bol "(" (group-n 1 "phi"))
-     (1 font-lock-variable-name-face))
+     (1 'font-lock-variable-name-face))
     (,(rx bol "(" (group-n 1 (or "return" "unreachable")))
-     (1 font-lock-warning-face))
+     (1 'font-lock-warning-face))
     (,(rx (group-n 1 (or "entry"
                          (seq (or "entry_" "entry_fallback_" "bb_")
                               (1+ num) (? (or "_latch"
                                               (seq "_cstrs_" (1+ num))))))))
-     (1 font-lock-constant-face))
+     (1 'font-lock-constant-face))
     (,(rx-to-string
        `(seq "(" (group-n 1 (or ,@(mapcar #'symbol-name comp-limple-ops)))))
-     (1 font-lock-keyword-face)))
+     (1 'font-lock-keyword-face)))
   "Highlights used by `native-comp-limple-mode'.")
 
 (defconst comp-log-buffer-name "*Native-compile-Log*"
@@ -448,12 +448,7 @@ with `message'.  Otherwise, log with `comp-log-to-buffer'."
 (cl-defun comp-log-to-buffer (data &optional quoted)
   "Log DATA to `comp-log-buffer-name'."
   (let* ((print-f (if quoted #'prin1 #'princ))
-         (log-buffer
-          (or (get-buffer comp-log-buffer-name)
-              (with-current-buffer (get-buffer-create comp-log-buffer-name)
-                (unless (derived-mode-p 'compilation-mode)
-                  (emacs-lisp-compilation-mode))
-                (current-buffer))))
+         (log-buffer (get-buffer-create comp-log-buffer-name))
          (log-window (get-buffer-window log-buffer))
          (inhibit-read-only t)
          at-end-p)

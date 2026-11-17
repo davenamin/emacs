@@ -2909,7 +2909,7 @@ haiku_define_fringe_bitmap (int which, unsigned short *bits,
   block_input ();
   fringe_bmps[which] = BBitmap_new (wd, h, 1);
   if (!fringe_bmps[which])
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   BBitmap_import_fringe_bitmap (fringe_bmps[which], bits, wd, h);
   unblock_input ();
 }
@@ -2945,6 +2945,16 @@ haiku_scroll_run (struct window *w, struct run *run)
 	height = bottom_y - from_y;
       else
 	height = run->height;
+
+      /* Don't draw over the display parts above if destination is off
+         the top of the current window.  */
+      if (to_y < y)
+	{
+	  int d = y - to_y;
+	  height -= d;
+	  to_y += d;
+	  from_y += d;
+	}
     }
   else
     {
@@ -4526,7 +4536,7 @@ haiku_term_init (void)
       nbytes = sizeof "GNU Emacs" + sizeof " at ";
 
       if (ckd_add (&nbytes, nbytes, SBYTES (system_name)))
-	memory_full (SIZE_MAX);
+	memory_full_up ();
 
       name_buffer = alloca (nbytes);
       sprintf (name_buffer, "%s%s%s", "GNU Emacs",

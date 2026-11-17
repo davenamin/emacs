@@ -25,6 +25,16 @@
 
 (require 'ert-x)
 (require 'vc)
+(require 'vc-git)
+(require 'vc-hg)
+(require 'vc-dir)
+(require 'log-edit)
+(require 'dired-aux)
+
+(require 'vc-tests-helpers
+         (ert-resource-file "vc-tests-helpers"))
+
+(defvar vc-hg-global-switches)
 
 (ert-deftest vc-test-buffer-sync-fileset ()
   "Test `vc-buffer-sync-fileset'."
@@ -241,6 +251,569 @@
     (let ((vc-topic-branch-regexps t))
       (should (eq (vc--match-branch-name-regexps "master") 'topic))
       (should (eq (vc--match-branch-name-regexps "foo") 'trunk)))))
+
+(ert-deftest vc-test-vc-dir-on-symlink ()
+  "Test VC-Dir on a symlink to a repository.
+See bug#80803 and bug#80967."
+  ;; Git for Windows could fail in a symlinked tree.
+  (skip-when (eq system-type 'windows-nt))
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git)))
+      (ert-with-temp-directory tempdir
+        (let* ((default-directory tempdir)
+               (src (expand-file-name "src/" tempdir))
+               (dest (expand-file-name "dest/" tempdir))
+               (file (expand-file-name "foo" dest))
+               file-buf truename-dir symlink-dir)
+          (make-directory dest)
+          (let ((default-directory dest)
+                vc-async-checkin)
+            (vc-test--create-repo-function 'Git)
+            (write-region "foo\n" nil file nil 'nomessage)
+            (with-current-buffer (setq file-buf (find-file-noselect file))
+              (vc-register `(Git (,file)))
+              (vc-checkin (list file) 'Git)
+              (insert "Initial commit")
+              (let (vc-async-checkin)
+                (log-edit-done))))
+          (make-symbolic-link dest src)
+          ;; Emulate an interactive call to `vc-dir'.
+          (vc-dir (file-truename src) 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (should (equal default-directory dest))
+          (setq truename-dir (current-buffer))
+          ;; Now a `vc-dir' pointed at the symlink, which is unlike an
+          ;; interactive call to `vc-dir'.
+          (vc-dir src 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (should (equal default-directory src))
+          (setq symlink-dir (current-buffer))
+          (with-current-buffer file-buf
+            (insert "bar")
+            (basic-save-buffer))
+          (dolist (buf (list truename-dir symlink-dir))
+            (with-current-buffer buf
+              (let ((data (ewoc-data (ewoc-nth vc-ewoc 1))))
+                (should (equal (vc-dir-fileinfo->name data)
+                               (file-name-nondirectory file)))
+                (should (equal (vc-dir-fileinfo->state data)
+                               'edited))))))))))
+
+;; FIXME: This test only passes once.  Then there is some state left
+;; behind such that it doesn't pass if run again.
+(ert-deftest vc-test-vc-dir-next/previous () ; bug#81248
+  "Test navigating with `vc-dir-{next,previous}-{line,directory}'."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git)))
+      (ert-with-temp-directory tempdir
+        (let ((default-directory tempdir)
+              (n 0)
+              vc-dir-buf)
+          (vc-test--create-repo-function 'Git)
+          (dolist (file '("file01" "dir1/file11"))
+            (make-empty-file file t))
+          (vc-dir default-directory 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (setq vc-dir-buf (current-buffer))
+          (should (looking-at "VC backend :"))
+          (while (vc-dir--before-dotname-p)
+            (vc-dir-next-line 1)
+            (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+            (incf n 1)
+            (goto-char (point-min))
+            (forward-line n))
+          (vc-dir-next-line 1)
+          (should (looking-at "file01$"))
+          (vc-dir-next-line 1)
+          (should (looking-at "dir1/$"))
+          (vc-dir-next-line 1)
+          (should (looking-at "dir1/file11$"))
+          (vc-dir-next-line 1)
+          (should (looking-at "^$"))
+          (let ((end (point)))
+            (vc-dir-next-line 1)
+            (should (equal (point) end)))
+          (goto-char (point-min))
+          (vc-dir-next-directory)
+          (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-next-directory)
+          (should (and (looking-at "dir1/$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-next-directory)
+          (should (and (looking-at "dir1/$") (looking-back "^ +" (pos-bol))))
+          (goto-char (point-max))
+          (vc-dir-previous-line 1)
+          (should (looking-at "dir1/file11$"))
+          (vc-dir-previous-line 1)
+          (should (and (looking-at "dir1/$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-previous-line 1)
+          (should (looking-at "file01$"))
+          (vc-dir-previous-line 1)
+          (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-previous-line 1)
+          (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+          (goto-char (point-max))
+          (vc-dir-previous-directory)
+          (should (and (looking-at "dir1/$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-previous-directory)
+          (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+          (vc-dir-previous-directory)
+          (should (and (looking-at "\\./$") (looking-back "^ +" (pos-bol))))
+          ;; Simulate the case in which the status lines haven't come
+          ;; back yet.  This used to give a cryptic non-`user-error'.
+          (goto-char (point-min))
+          (ewoc-filter vc-ewoc #'ignore)
+          (should-error (vc-dir-next-line 1) :type 'user-error)
+          (kill-buffer vc-dir-buf))))))
+
+(ert-deftest vc-test-vc-dir-mark/unmark-all-dir-entry () ; bug#81249
+  "Test `vc-dir-{un}mark-all' called on directory entry."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git)))
+      (ert-with-temp-directory tempdir
+        (let ((default-directory tempdir)
+              (files '("file01" "file02" "dir1/file11" "dir1/file12"
+                       "dir2/file21" "dir2/file22"))
+              vc-dir-buf
+              dir-children)
+          (vc-test--create-repo-function 'Git)
+          (dolist (file files)
+            (make-empty-file file t))
+          (vc-dir default-directory 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (setq vc-dir-buf (current-buffer))
+          ;; Put point on line of "./" entry.
+          (goto-char (ewoc-location (ewoc-nth vc-ewoc 0)))
+          ;; Cumulatively mark file entries directory-wise.
+          (let ((next t))
+            (while next
+             (vc-dir-mark-all-files nil)
+             ;; Can't use this to set dir-children because it returns
+             ;; all files below directory entry, so loop over file
+             ;; entries until next directory entry.
+             ;; (vc-dir-find-child-files
+             ;;  (expand-file-name
+             ;;   (vc-dir-fileinfo->name
+             ;;    (ewoc-data (ewoc-locate vc-ewoc)))))
+             (catch 'done
+               (while t
+                 (vc-dir-next-line 1)
+                 (cond ((vc-dir-fileinfo->directory
+                          (ewoc-data (ewoc-locate vc-ewoc)))
+                        (throw 'done nil))
+                         ;; After last entry.
+                       ((looking-at "^$")
+                        (throw 'done (setq next nil)))
+                       (t
+                        (push (expand-file-name
+                               (vc-dir-fileinfo->name
+                                (ewoc-data (ewoc-locate vc-ewoc))))
+                              dir-children)))))
+             (should (seq-set-equal-p (vc-dir-marked-files) dir-children))))
+          (goto-char (ewoc-location (ewoc-nth vc-ewoc 0)))
+          ;; Cumulatively unmark file entries directory-wise.
+          (let ((next t))
+            (while next
+              (vc-dir-unmark-all-files nil)
+              (catch 'done
+                (while t
+                  (vc-dir-next-line 1)
+                  (cond ((vc-dir-fileinfo->directory
+                           (ewoc-data (ewoc-locate vc-ewoc)))
+                         (throw 'done nil))
+                          ;; After last entry.
+                        ((looking-at "^$")
+                         (throw 'done (setq next nil)))
+                        (t
+                         (setq dir-children
+                               (delete (expand-file-name
+                                        (vc-dir-fileinfo->name
+                                         (ewoc-data (ewoc-locate vc-ewoc))))
+                                       dir-children))))))
+              (should (seq-set-equal-p (vc-dir-marked-files) dir-children))))
+          (kill-buffer vc-dir-buf))))))
+
+(ert-deftest vc-test-vc-dir-mark-all-with-marked-directory () ; bug#81277
+  "Test `vc-dir-mark-all' called on a marked directory entry."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git)))
+      (ert-with-temp-directory tempdir
+        (let ((default-directory tempdir)
+              (files '("dir1/file11" "dir1/file12"))
+              vc-dir-buf)
+          (vc-test--create-repo-function 'Git)
+          (dolist (file files)
+            (make-empty-file file t))
+          (vc-dir default-directory 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (setq vc-dir-buf (current-buffer))
+          ;; Move point to "dir1/" entry line.
+          (goto-char (ewoc-location (ewoc-nth vc-ewoc 1)))
+          ;; Mark "dir1/".
+          (vc-dir-mark-file)
+          ;; Move back to "dir1/" entry.
+          (vc-dir-previous-line 1)
+          ;; Test that it's marked.
+          (should (vc-dir-fileinfo->marked (ewoc-data (ewoc-locate vc-ewoc))))
+          (vc-dir-mark-all-files nil)
+          ;; Now it should have been unmarked.
+          (should-not
+           (vc-dir-fileinfo->marked (ewoc-data (ewoc-locate vc-ewoc))))
+          ;; All its children should be marked.
+          (let ((dir-children (vc-dir-find-child-files
+                               (expand-file-name
+                                (vc-dir-fileinfo->name
+                                 (ewoc-data (ewoc-nth vc-ewoc 1)))))))
+            (should (seq-set-equal-p (vc-dir-marked-files) dir-children)))
+          (kill-buffer vc-dir-buf))))))
+
+(defun vc-test--vc-dir-unmark-file ()
+  "Execute `vc-dir-unmark-file' assuming \"y\" at `y-or-n-p' prompt."
+  (cl-letf (((symbol-function 'y-or-n-p)
+             (lambda (_prompt) t)))
+    (vc-dir-unmark-file)))
+
+(ert-deftest vc-test-vc-dir-unmark-file-with-marked-directory () ; bug#81277
+  "Test `vc-dir-unmark-file' with a marked ancestor directory."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git)))
+      (ert-with-temp-directory tempdir
+        (let ((default-directory tempdir)
+              (files '("dir1/file11" "dir1/file12"
+                       "dir1/dir2/file21" "dir1/dir2/file22"
+                       "dir1/dir3/file31" "dir1/dir3/file32"))
+              vc-dir-buf unmarked directories)
+          (vc-test--create-repo-function 'Git)
+          (dolist (file files)
+            (make-empty-file file t))
+          (vc-dir default-directory 'Git)
+          (while (vc-dir-busy) (sit-for 0.05))
+          (setq vc-dir-buf (current-buffer))
+          ;; Move point to "dir1/" entry line.
+          (goto-char (ewoc-location (ewoc-nth vc-ewoc 1)))
+          ;; Mark "dir1/".
+          (vc-dir-mark-file)
+          ;; On next entry simulate invoking `vc-dir-unmark-file' and
+          ;; answering "y" to `y-or-n-p' prompt.
+          (vc-test--vc-dir-unmark-file)
+          ;; Move back to that entry and test that it's unmarked.
+          (vc-dir-previous-line 1)
+          (should-not
+           (vc-dir-fileinfo->marked (ewoc-data (ewoc-locate vc-ewoc))))
+          (push (expand-file-name
+                 (vc-dir-fileinfo->name
+                  (ewoc-data (ewoc-locate vc-ewoc))))
+                unmarked)
+          ;; All other non-directory descendents of "dir1/" should be
+          ;; marked.
+          (let* ((dir-children (vc-dir-find-child-files
+                                (expand-file-name
+                                 (vc-dir-fileinfo->name
+                                  (ewoc-data (ewoc-nth vc-ewoc 1))))))
+                 (rest-children (seq-difference dir-children unmarked)))
+            (should (seq-set-equal-p (vc-dir-marked-files) rest-children)))
+          ;; All directory entries should be unmarked.
+          (goto-char (point-max))
+          (while (not (bobp))
+            (vc-dir-previous-directory)
+            (push (expand-file-name
+                   (vc-dir-fileinfo->name
+                    (ewoc-data (ewoc-locate vc-ewoc))))
+                  directories)
+            (when (equal
+                   (vc-dir-fileinfo->name (ewoc-data (ewoc-locate vc-ewoc)))
+                   (vc-dir-fileinfo->name (ewoc-data (ewoc-nth vc-ewoc 1))))
+              (goto-char (point-min))))
+          (should-not (seq-intersection directories (vc-dir-marked-files)))
+          (kill-buffer vc-dir-buf))))))
+
+(declare-function diff-add-change-log-entries-other-window "diff-mode")
+
+(ert-deftest vc-test-log-message-from-changelog () ; bug#80928
+  "Test automatic insertion of log message from ChangeLog."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git))
+          vc-dir-buf vc-diff-buf changelog-buf log-edit-buf
+          changelog-entry log-edit-entry)
+      (unwind-protect
+          (ert-with-temp-directory tempdir
+            (let* ((default-directory tempdir)
+                   (file (expand-file-name "README" default-directory))
+                   vc-async-checkin)
+              (vc-test--create-repo-function 'Git)
+              (write-region "hello\n" nil file)
+              (vc-register `(Git (,file)))
+              (vc-checkin (list file) 'Git) ; Makes *vc-log* current buffer.
+              (insert "Initial commit")
+              (let (vc-async-checkin)
+                (log-edit-done))
+              (write-region "Hello\n" nil "README" nil t)
+              (vc-dir default-directory 'Git)
+              (while (vc-dir-busy) (sit-for 0.05))
+              (setq vc-dir-buf (current-buffer))
+              (save-window-excursion
+                (vc-diff)
+                (setq vc-diff-buf (current-buffer))
+                (diff-add-change-log-entries-other-window)
+                (with-current-buffer (window-buffer (frame-first-window))
+                  (setq changelog-buf (current-buffer))
+                  (insert "Change text.")
+                  (forward-line -1)
+                  (newline-and-indent)
+                  (insert "Summary line")
+                  (newline)
+                  (save-restriction
+                    (log-edit-narrow-changelog)
+                    ;; ChangeLog entry ends with "\n\n" so omit last "\n" to
+                    ;; ensure equivalence with to commit log entry in the test.
+                    (let ((s (buffer-substring-no-properties
+                              (point-min) (1- (point-max)))))
+                      (setq changelog-entry
+                            (mapconcat #'concat (string-split s "\t")))))))
+              (vc-next-action nil)
+              (setq log-edit-buf (current-buffer))
+              (goto-char (point-min))
+              (re-search-forward "^Summary: " nil t)
+              (setq log-edit-entry
+                    (buffer-substring-no-properties (point) (point-max)))
+              (should (equal changelog-entry log-edit-entry))))
+        (dolist (buf (list vc-dir-buf vc-diff-buf changelog-buf
+                           log-edit-buf "*log-edit-files*" "*vc*"))
+          (kill-buffer buf))))))
+
+(ert-deftest vc-test-log-message-from-changelog-with-warning () ; bug#81909
+  "Test (not) displaying warning on insertion of log message."
+  (skip-unless (executable-find vc-git-program))
+  (vc-test--with-author-identity 'Git
+    (let ((vc-handled-backends '(Git))
+          buffers)
+      (unwind-protect
+          (ert-with-temp-directory tempdir
+            (let* ((default-directory tempdir)
+                   (data
+                    (list
+                     (list
+                      (expand-file-name "foo.el" default-directory)
+                      "(defun foo-do()\n  (quux 'do))"
+                      "(defun foo-do(&optional arg)\n  (quux (or arg 'do)))")
+                     (list
+                      (expand-file-name "bar.el" default-directory)
+                      "(defun bar-do()\n  (foo))"
+                      "(defun bar-do()\n  (foo quux-do))")))
+                   (files (mapcar #'car data))
+                   vc-async-checkin)
+              (make-empty-file "quux.el")
+              (push (expand-file-name "quux.el" default-directory) files)
+              (vc-test--create-repo-function 'Git)
+              (dolist (d data)
+                (write-region (nth 1 d) nil (nth 0 d)))
+              (vc-register `(Git ,files))
+              (vc-checkin files 'Git)   ; *vc-log* now current buffer.
+              (insert "Initial commit")
+              (let (vc-async-checkin)
+                (log-edit-done))        ; *vc-log* now killed.
+              (dolist (d data)
+                (write-region (nth 2 d) nil (nth 0 d)))
+              (vc-dir default-directory 'Git) ; *vc-dir* now current buffer.
+              (while (vc-dir-busy) (sit-for 0.05))
+              (push (current-buffer) buffers)
+              (save-window-excursion
+                (vc-diff)               ; *vc-diff* now current buffer.
+                (push (current-buffer) buffers)
+                (diff-add-change-log-entries-other-window)
+                (push (get-buffer "foo.el") buffers)
+                (push (get-buffer "bar.el") buffers)
+                (push (get-buffer (concat "*changes to " tempdir "*"))
+                      buffers))
+              (vc-next-action nil)      ; *vc-log* now current buffer.
+              (should-not (get-buffer "*Warnings*"))
+              (kill-buffer (get-buffer "*vc-log*"))
+              (switch-to-buffer (concat "*changes to " tempdir "*"))
+              (goto-char (point-max))
+              (re-search-backward "^\t\\*")
+              ;; Remove last entry from log buffer.
+              (delete-region (pos-bol) (+ (pos-eol) 2))
+              (switch-to-buffer (car (last buffers))) ; *vc-dir*
+              (vc-next-action nil)      ; *vc-log* now current buffer.
+              (should-not (get-buffer "*Warnings*"))
+              (kill-buffer (get-buffer "*vc-log*"))
+              (switch-to-buffer (concat "*changes to " tempdir "*"))
+              (goto-char (point-max))
+              ;; Add entry that's not in changeset.
+              (insert "\t* quux.el: \n\n")
+              (switch-to-buffer (car (last buffers))) ; *vc-dir*
+              (vc-next-action nil)      ; *vc-log* now current buffer.
+              (push (current-buffer) buffers)
+              (should (get-buffer "*Warnings*"))
+              (push (get-buffer "*Warnings*") buffers)))
+        (dolist (buf buffers)
+          (kill-buffer buf))))))
+
+(ert-deftest vc-test-dired-rename-file-between-repos ()
+  "Test `dired-rename-file' facility for moving files between repositories."
+  (skip-unless (executable-find vc-git-program))
+  (skip-unless (executable-find vc-hg-program))
+  (ert-with-temp-directory tempdir
+    (let ((default-directory tempdir)
+          (vc-handled-backends '(Git Hg))
+          (dired-vc-rename-file t)
+          (vc-async-checkin nil)
+          (git1 (expand-file-name "git1/" tempdir))
+          (git2 (expand-file-name "git2/" tempdir))
+          (hg (expand-file-name "hg/" tempdir)))
+      (vc-test--with-author-identity 'Git
+        (vc-test--with-author-identity 'Hg
+          (cl-flet ((create-repo (backend loc file)
+                      (make-directory loc t)
+                      (let ((default-directory loc))
+                        (write-region (format "%s\n%s\n" loc file)
+                                      nil file nil 0 nil 'excl)
+                        (vc-test--create-repo-function backend)
+                        (vc-register `(,backend (,file)))
+                        (vc-checkin (list file) backend)
+                        (insert "Creation")
+                        (log-edit-done)))
+                    (do-rename (repo from to ok-if-already-exists)
+                      (dired repo)
+                      (unwind-protect
+                          (dired-rename-file (expand-file-name from) to
+                                             ok-if-already-exists)
+                        (quit-window 'kill)))
+                    (reset ()
+                      (dolist (repo (list git1 git2 hg))
+                        (when (file-exists-p repo)
+                          (mapc #'vc-file-clearprops
+                                (directory-files repo 'full))
+                          (delete-directory repo 'recursive)))))
+            ;; Base case: moving within a repository.
+            (create-repo 'Git git1 "foo.txt")
+            (do-rename "git1/" "foo.txt" "bar.txt" nil)
+            (let ((default-directory git1))
+              (should (file-exists-p "bar.txt"))
+              (should (eq (vc-state "bar.txt" 'Git) 'added))
+              (should-not (file-exists-p "foo.txt"))
+              (should (eq (vc-state "foo.txt" 'Git) 'removed)))
+            (reset)
+
+            ;; Try to move an edited file.
+            (create-repo 'Git git1 "foo.txt")
+            (create-repo 'Git git2 "bar.txt")
+            (write-region "foo" nil "git1/foo.txt")
+            (should-error (do-rename "git1/" "foo.txt"
+                                     "../git2/baz.txt" nil))
+            (should-not (file-exists-p "git2/baz.txt"))
+            (reset)
+
+            ;; Test moving between repos with the same backend.
+            (create-repo 'Git git1 "foo.txt")
+            (create-repo 'Git git2 "bar.txt")
+            (let ((buf (find-file-noselect "git1/foo.txt")))
+              (unwind-protect
+                  (progn
+                    (do-rename "git1/" "foo.txt" "../git2/baz.txt" nil)
+                    (should (buffer-live-p buf)))
+                (kill-buffer buf)))
+            (let ((default-directory git1))
+              (should (eq (vc-state "foo.txt" 'Git) 'removed))
+              (should-not (file-exists-p "foo.txt")))
+            (let ((default-directory git2))
+              (should (file-exists-p "baz.txt"))
+              (should (eq (vc-state "baz.txt" 'Git) 'added)))
+            (reset)
+
+            ;; Test moving between repos with different backends, and
+            ;; passing a directory as second arg to `dired-rename-file'.
+            (create-repo 'Git git1 "foo.txt")
+            (create-repo 'Hg hg "bar.txt")
+            (do-rename "git1/" "foo.txt" "../hg/" nil)
+            (let ((default-directory git1))
+              (should (eq (vc-state "foo.txt" 'Git) 'removed))
+              (should-not (file-exists-p "foo.txt")))
+            (let ((default-directory hg))
+              (should (file-exists-p "foo.txt"))
+              (should (eq (vc-state "foo.txt" 'Hg) 'added)))
+            (reset)
+
+            ;; Already exists.
+            (create-repo 'Git git1 "foo.txt")
+            (create-repo 'Hg hg "foo.txt")
+            (should-error (do-rename "git1/" "foo.txt" "../hg/" nil)
+                          :type 'file-already-exists)
+            (do-rename "git1/" "foo.txt" "../hg/" 'ok-if-already-exists)
+            (let ((default-directory git1))
+              (should (eq (vc-state "foo.txt" 'Git) 'removed))
+              (should-not (file-exists-p "foo.txt")))
+            (let ((default-directory hg))
+              (should (file-exists-p "foo.txt"))
+              (should (eq (vc-state "foo.txt" 'Hg) 'edited)))
+            (reset)
+
+            ;; Moving into a non-repo.
+            (create-repo 'Git git1 "foo.txt")
+            (create-repo 'Git git2 "bar.txt")
+            (delete-directory (expand-file-name ".git/" git2)
+                              'recursive)
+            (do-rename "git1/" "foo.txt" "../git2/" nil)
+            (let ((default-directory git1))
+              (should (eq (vc-state "foo.txt" 'Git) 'removed))
+              (should-not (file-exists-p "foo.txt")))
+            (let ((default-directory git2))
+              (should (file-exists-p "foo.txt"))
+              (should (memq (vc-state "foo.txt" 'Git)
+                            '(nil unregistered))))
+            (reset)
+
+            ;; Moving a directory into a non-repo (bug#82058).
+            (make-directory "git1/sub/" t)
+            (create-repo 'Git git1 "sub/foo.txt")
+            (make-directory "git2/")
+            (do-rename "git1/" "sub" "../git2/" nil)
+            (let ((default-directory git1))
+              (should (eq (vc-state "sub/foo.txt" 'Git) 'removed))
+              (should-not (file-exists-p "sub/foo.txt")))
+            (let ((default-directory git2))
+              (should (file-exists-p "sub/foo.txt"))
+              (should (memq (vc-state "sub/foo.txt" 'Git)
+                            '(nil unregistered))))
+            (reset)
+
+            ;; Move directory containing an untracked file (bug#82058).
+            (make-directory "git1/sub/" t)
+            (create-repo 'Git git1 "foo.txt")
+            (make-empty-file "git1/sub/bar.txt" t)
+            (make-directory "git2/")
+            (do-rename "git1/" "sub" "../git2/" nil)
+            (let ((default-directory git1))
+              (should-not (file-exists-p "sub/bar.txt")))
+            (let ((default-directory git2))
+              (should (file-exists-p "sub/bar.txt"))
+              (should (memq (vc-state "sub/bar.txt" 'Git)
+                            '(nil unregistered))))
+            (reset)
+
+            ;; Test moving a symbolic link.  Symlinks are unreliable on
+            ;; MS-Windows, so skip this in that case.
+            (unless (eq system-type 'windows-nt)
+              (create-repo 'Git git1 "foo.txt")
+              (let ((default-directory git1))
+                (make-symbolic-link "foo.txt" "link")
+                (vc-register '(Git ("link")))
+                (vc-checkin '("link") 'Git)
+                (insert "Link creation")
+                (log-edit-done))
+              (create-repo 'Git git2 "bar.txt")
+              (do-rename "git1/" "link" "../git2/baz.txt" nil)
+              (let ((default-directory git1))
+                (should (eq (vc-state "link" 'Git) 'removed))
+                (should-not (file-exists-p "link")))
+              (let ((default-directory git2))
+                (should (file-symlink-p "baz.txt"))
+                (should (eq (vc-state "baz.txt" 'Git) 'added))))))))))
 
 (provide 'vc-test-misc)
 ;;; vc-test-misc.el ends here

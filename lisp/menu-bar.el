@@ -460,6 +460,9 @@ in the tool bar will close the current window where possible."
     (define-key menu [xref-apropos]
       '(menu-item "Find Apropos..." xref-find-apropos
                   :help "Find function/variables whose names match regexp"))
+    (define-key menu [xref-by-kind]
+      '(menu-item "Find Definition by Kind..." xref-find-by-kind
+                  :help "Find some certain kind of definition"))
 
     (define-key menu [xref-find-otherw]
       '(menu-item "Find Definition in Other Window..."
@@ -895,11 +898,9 @@ The selected font will be the default on both the existing and future frames."
                   :visible (memq (window-system) '(x w32))
                   :button (:radio
 			   . (and (window-divider-width-valid-p
-				   (cdr (assq 'bottom-divider-width
-					      (frame-parameters))))
+                                   (frame-bottom-divider-width))
 				  (window-divider-width-valid-p
-				   (cdr (assq 'right-divider-width
-					      (frame-parameters))))))))
+				   (frame-right-divider-width))))))
     (define-key menu [right-only]
       '(menu-item "Right Only"
                   menu-bar-right-window-divider
@@ -907,11 +908,9 @@ The selected font will be the default on both the existing and future frames."
                   :visible (memq (window-system) '(x w32))
                   :button (:radio
 			   . (and (not (window-divider-width-valid-p
-					(cdr (assq 'bottom-divider-width
-						   (frame-parameters)))))
+                                        (frame-bottom-divider-width)))
 				  (window-divider-width-valid-p
-				   (cdr (assq 'right-divider-width
-						     (frame-parameters))))))))
+				   (frame-right-divider-width))))))
     (define-key menu [bottom-only]
       '(menu-item "Bottom Only"
                   menu-bar-bottom-window-divider
@@ -919,11 +918,9 @@ The selected font will be the default on both the existing and future frames."
                   :visible (memq (window-system) '(x w32))
                   :button (:radio
 			   . (and (window-divider-width-valid-p
-				   (cdr (assq 'bottom-divider-width
-					      (frame-parameters))))
+                                   (frame-bottom-divider-width))
 				  (not (window-divider-width-valid-p
-					(cdr (assq 'right-divider-width
-						   (frame-parameters)))))))))
+				        (frame-right-divider-width)))))))
     (define-key menu [no-divider]
       '(menu-item "None"
                   menu-bar-no-window-divider
@@ -931,11 +928,9 @@ The selected font will be the default on both the existing and future frames."
                   :visible (memq (window-system) '(x w32))
                   :button (:radio
 			   . (and (not (window-divider-width-valid-p
-					(cdr (assq 'bottom-divider-width
-						   (frame-parameters)))))
+                                        (frame-bottom-divider-width)))
 				  (not (window-divider-width-valid-p
-					(cdr (assq 'right-divider-width
-						   (frame-parameters)))))))))
+				        (frame-right-divider-width)))))))
     menu))
 
 (defun menu-bar-showhide-fringe-ind-customize ()
@@ -1432,14 +1427,14 @@ mail status in mode line"))
 (defun menu-bar--toggle-truncate-long-lines ()
   "Toggle long lines mode."
   (interactive)
-  (if visual-line-mode (visual-line-mode 0))
+  (if visual-line-mode (visual-line-mode -1))
   (setq word-wrap nil)
   (toggle-truncate-lines 1))
 
 (defun menu-bar--wrap-long-lines-window-edge ()
   "Wrap long lines at window edge."
   (interactive)
-  (if visual-line-mode (visual-line-mode 0))
+  (if visual-line-mode (visual-line-mode -1))
   (setq word-wrap nil)
   (if truncate-lines (toggle-truncate-lines -1)))
 

@@ -2161,9 +2161,11 @@ ios_set_cursor_type (struct frame *f, Lisp_Object arg,
   (void) oldval;
 }
 
-/* Indexing must match frame.c's frame_parms[].  Setters we don't
-   yet implement (scroll bars, fringes, etc.) stay NULL; the few
-   shared GUI handlers (gui_set_font, gui_set_alpha, ...) take
+/* Indexing must match frame.c's frame_parms[], and the two must have
+   the same number of entries: handle_frame_param indexes this table
+   with any position frame_parms has, so a short table is read past
+   its end.  Setters the port does not implement stay NULL; the
+   shared GUI handlers (gui_set_font, gui_set_fullscreen, ...) take
    their place where they apply portably.  */
 static frame_parm_handler ios_frame_parm_handlers[] =
 {
@@ -2218,6 +2220,18 @@ static frame_parm_handler ios_frame_parm_handlers[] =
   NULL,                                      /* alpha-background */
   gui_set_borders_respect_alpha_background,  /* borders-respect-alpha-background */
   NULL,                                      /* use-frame-synchronization */
+  NULL,                                      /* display */
+  NULL,                                      /* left */
+  NULL,                                      /* top */
+  NULL,                                      /* width */
+  NULL,                                      /* height */
+  NULL,                                      /* parent-id */
+  NULL,                                      /* window-id */
+  NULL,                                      /* outer-window-id */
+  NULL,                                      /* explicit-name */
+  NULL,                                      /* modeline */
+  NULL,                                      /* buffer-list */
+  NULL,                                      /* buried-buffer-list */
 };
 
 #endif /* HAVE_IOS */

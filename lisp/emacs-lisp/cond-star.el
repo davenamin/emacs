@@ -48,8 +48,6 @@
 
 ;;; Code:
 
-(require 'cl-lib) ; for cl-assert
-
 ;;;###autoload
 (defmacro cond* (&rest clauses)
   "Extended form of traditional Lisp `cond' construct.
@@ -335,31 +333,34 @@ This is used for conditional exit clauses."
                       (when ,init-gensym
                         . ,true-exps)))))))
           ((eq pat-type 'bind-and*)
-           (let ((checks '()) (last t))
+           (let ((checks '()) (rebinds '()) (last t))
              (dolist (bind (cdr condition))
-               (push (list (car bind) (list 'and last (cadr bind)))
-                     checks)
-               (when (eq (caar checks) '_)
-                 (setcar (car checks) (make-symbol "s")))
-               (setq last (caar checks)))
-             (cond
-              ;; For explanations on these cases, see "Ordinary
-              ;; Lisp expression is the condition." below.
-              (rest
-               (let ((quit (gensym "quit")))
-                 `(catch ',quit
-                    (let* (,@(nreverse checks))
-                      (if ,last (throw ',quit ,(macroexp-progn true-exps))))
-                    ,iffalse)))
-              (uncondit-clauses
-               `(progn
-                  (let* (,@(nreverse checks))
-                    (if ,last ,(macroexp-progn true-exps)))
-                  ,(cond*-convert uncondit-clauses)))
-              (true-exps
-               `(let* (,@(nreverse checks))
-                  (if ,last ,(macroexp-progn true-exps))))
-              (t last))))
+               (let ((temp (gensym "s")))
+                 (push (list temp (list 'and last
+                                        (cond*-bind-around
+                                         rebinds
+                                         (if (symbolp bind) bind (cadr bind)))))
+                       checks)
+                 ;; No need to rebind a `_'.
+                 (when (and (consp bind) (not (eq (car bind) '_)))
+                   (push (list (car bind) temp) rebinds))
+                 (setq last temp)))
+             (macroexp-let*
+              (nreverse checks)
+              (let ((body (macroexp-if last
+                                       (cond*-bind-around
+                                        rebinds
+                                        (if true-exps
+                                            (macroexp-progn true-exps)
+                                          (macroexp-warn-and-return
+                                           "`bind-and*' clause with empty body"
+                                           nil '(empty-body cond*))))
+                                       iffalse)))
+                (if uncondit-clauses
+                    `(progn
+                       ,body
+                       ,(cond*-convert uncondit-clauses))
+                  body)))))
           ((eq pat-type 'pcase*)
            (if true-exps
                (progn
@@ -370,12 +371,13 @@ This is used for conditional exit clauses."
                    ;; where ELSE is supposed to run after THEN also (and
                    ;; with access to `x' and `y').
                    (error ":non-exit not supported with `pcase*'"))
-                 (cl-assert (or (null iffalse) rest))
+                 (unless (or (null iffalse) rest)
+                   (error "Assertion failed: (or (null iffalse) rest)"))
                  `(pcase ,(nth 2 condition)
                     (,(nth 1 condition) ,@true-exps)
                     (_ ,iffalse)))
-             (cl-assert (null iffalse))
-             (cl-assert (null rest))
+             (unless (and (null iffalse) (null rest))
+               (error "Assertion failed: (and (null iffalse) (null rest))"))
              `(pcase-let ((,(nth 1 condition) ,(nth 2 condition)))
                 (cond* . ,uncondit-clauses))))
           ((eq pat-type 'match*)
@@ -665,7 +667,7 @@ whether SUBPAT (as well as the subpatterns that contain/precede it) matches,"
            (dolist (elt elts)
              (let* ((result
                      (cond*-subpat elt cdr-ignore bindings inside-or
-                                   backtrack-aliases `(aref ,i ,data))))
+                                   backtrack-aliases `(aref ,data ,i))))
                (setq i (1+ i))
                (setq bindings (car result))
                (push (cdr result) expressions)))
@@ -781,34 +783,10 @@ whether SUBPAT (as well as the subpatterns that contain/precede it) matches,"
 
 (defun cond*-bind-around (bindings exp)
   "Wrap a `let*' around EXP, to bind those of BINDINGS used in EXP."
-  (let ((what-to-bind (cond*-used-within bindings exp)))
+  (let ((what-to-bind (macroexp--fgrep bindings exp)))
     (if what-to-bind
         `(let* ,(nreverse what-to-bind) ,exp)
       exp)))
-
-(defun cond*-used-within (bindings exp)
-  "Return the list of those bindings in BINDINGS which EXP refers to.
-This operates naively and errs on the side of overinclusion,
-and does not distinguish function names from variable names.
-That is safe for the purpose this is used for."
-  (cond ((symbolp exp)
-         (let ((which (assq exp bindings)))
-           (if which (list which))))
-        ((listp exp)
-         (let (combined (rest exp))
-           ;; Find the bindings used in each element of EXP
-           ;; and merge them together in COMBINED.
-           ;; It would be simpler to use dolist at each level,
-           ;; but this avoids errors from improper lists.
-           (while rest
-             (let ((in-this-elt (cond*-used-within bindings (car rest))))
-               (while in-this-elt
-                 ;; Don't insert the same binding twice.
-                 (unless (memq (car-safe in-this-elt) combined)
-                   (push (car-safe in-this-elt) combined))
-                 (pop in-this-elt)))
-             (pop rest))
-           combined))))
 
 ;; Construct a simplified equivalent to `(and . ,CONJUNCTS),
 ;; assuming that it will be used only as a truth value.

@@ -34,10 +34,6 @@
 (require 'cl-lib)
 (require 'tramp)
 
-;; `dired-*' declarations can be removed, starting with Emacs 29.1.
-(declare-function dired-compress-file "dired-aux")
-(declare-function dired-remove-file "dired-aux")
-(defvar dired-compress-file-suffixes)
 (defvar vc-bzr-program)
 (defvar vc-git-program)
 (defvar vc-hg-program)
@@ -1229,6 +1225,10 @@ characters need to be doubled.")
 (defconst tramp-bundle-read-file-names "\
 printf \"(\\n\"
 while IFS= read file; do
+  if (%m -n \"$1\") && (echo \"$file\" | grep -qe '^[-_./[:alnum:]~$]*$')
+  then
+    file=`eval echo \"$file\"`
+  fi
   printf \"(\"; %k \"$file\"
   if %q \"$file\"; then printf \" %%s\" t; else printf \" %%s\" nil; fi
   if %m -r \"$file\"; then printf \" %%s\" t; else printf \" %%s\" nil; fi
@@ -1241,6 +1241,10 @@ For every file, it returns a list with the absolute file name, and the
 tests for file existence, file readability, file directory, and file
 executable.  Input shall be read via here-document, otherwise the
 command could exceed maximum length of command line.
+
+If an argument $1 is given, the file names are expanded first (tilde,
+environment variables).
+
 Format specifiers are replaced by `tramp-expand-script', percent
 characters need to be doubled.")
 
@@ -1260,9 +1264,6 @@ characters need to be doubled.")
     (directory-files . tramp-handle-directory-files)
     (directory-files-and-attributes
      . tramp-sh-handle-directory-files-and-attributes)
-    ;; Starting with Emacs 29.1, `dired-compress-file' performed by
-    ;; default handler.
-    (dired-compress-file . tramp-sh-handle-dired-compress-file)
     (dired-uncache . tramp-handle-dired-uncache)
     (exec-path . tramp-sh-handle-exec-path)
     (expand-file-name . tramp-sh-handle-expand-file-name)
@@ -1308,7 +1309,6 @@ characters need to be doubled.")
     (lock-file . tramp-handle-lock-file)
     (make-auto-save-file-name . tramp-handle-make-auto-save-file-name)
     (make-directory . tramp-sh-handle-make-directory)
-    ;; `make-directory-internal' performed by default handler.
     (make-lock-file-name . tramp-handle-make-lock-file-name)
     (make-nearby-temp-file . tramp-handle-make-nearby-temp-file)
     (make-process . tramp-sh-handle-make-process)
@@ -1688,7 +1688,7 @@ user identified by VEC.  If there is no user specified in either
 VEC or USER, or if there is no home directory, return nil."
   (when (tramp-send-command-and-check
 	 vec (format
-	      "echo %s"
+	      "(echo %s)"
 	      (tramp-shell-quote-argument
 	       (concat "~" (or user (tramp-file-name-user vec))))))
     (with-current-buffer (tramp-get-buffer vec)
@@ -2584,7 +2584,7 @@ The method used must be an out-of-band method."
 	    copy-args
 	    (flatten-tree
 	     (mapcar
-	      (lambda (x) (if (string-search " " x) (split-string x) x))
+	      (lambda (x) (if (string-search " " x) (string-split x) x))
 	      copy-args))
 	    copy-env (apply #'tramp-expand-args v 'tramp-copy-env nil spec)
 	    remote-copy-program
@@ -2706,63 +2706,6 @@ The method used must be an out-of-band method."
      v (format "rm -f %s" (tramp-shell-quote-argument localname))
        "Couldn't delete %s" filename)))
 
-;; Dired.
-
-(defun tramp-sh-handle-dired-compress-file (file)
-  "Like `dired-compress-file' for Tramp files."
-  ;; Starting with Emacs 29.1, `dired-compress-file' is performed by
-  ;; default handler.
-  (if (>= emacs-major-version 29)
-      (tramp-run-real-handler #'dired-compress-file (list file))
-    ;; Code stolen mainly from dired-aux.el.
-    (with-parsed-tramp-file-name (expand-file-name file) nil
-      (tramp-flush-file-properties v localname)
-      (let ((suffixes dired-compress-file-suffixes)
-	    suffix)
-	;; See if any suffix rule matches this file name.
-	(while suffixes
-	  (let (case-fold-search)
-	    (if (string-match-p (car (car suffixes)) localname)
-		(setq suffix (car suffixes) suffixes nil))
-	    (setq suffixes (cdr suffixes))))
-
-	(cond ((file-symlink-p file) nil)
-	      ((and suffix (nth 2 suffix))
-	       ;; We found an uncompression rule.
-	       (with-tramp-progress-reporter
-                   v 0 (format "Uncompressing %s" file)
-		 (when (tramp-send-command-and-check
-			v (if (string-match-p (rx "%" (any "io")) (nth 2 suffix))
-                              (replace-regexp-in-string
-                               "%i" (tramp-shell-quote-argument localname)
-                               (nth 2 suffix))
-                            (concat (nth 2 suffix) " "
-                                    (tramp-shell-quote-argument localname))))
-		   (unless (string-match-p "\\.tar\\.gz" file)
-                     (dired-remove-file file))
-		   (string-match (car suffix) file)
-		   (concat (substring file 0 (match-beginning 0))))))
-	      (t
-	       ;; We don't recognize the file as compressed, so
-	       ;; compress it.  Try gzip.
-	       (with-tramp-progress-reporter v 0 (format "Compressing %s" file)
-		 (when (tramp-send-command-and-check
-			v (if (file-directory-p file)
-                              (format "tar -cf - %s | gzip -c9 > %s.tar.gz"
-                                      (tramp-shell-quote-argument
-                                       (file-name-nondirectory localname))
-                                      (tramp-shell-quote-argument localname))
-                            (concat "gzip -f "
-				    (tramp-shell-quote-argument localname))))
-		   (unless (file-directory-p file)
-                     (dired-remove-file file))
-		   (catch 'found nil
-                          (dolist (target (mapcar (lambda (suffix)
-                                                    (concat file suffix))
-                                                  '(".tar.gz" ".gz" ".z")))
-                            (when (file-exists-p target)
-                              (throw 'found target))))))))))))
-
 (defun tramp-sh-handle-insert-directory
     (filename switches &optional wildcard full-directory-p)
   "Like `insert-directory' for Tramp files."
@@ -2775,174 +2718,170 @@ The method used must be an out-of-band method."
     (unless wildcard
       (access-file filename "Reading directory"))
     (with-parsed-tramp-file-name (expand-file-name filename) nil
-      (let ((dired (tramp-get-ls-command-with v "--dired")))
-	(when (stringp switches)
-          (setq switches (split-string switches)))
-        ;; Newer coreutils versions of ls (9.5 and up) imply long format
-        ;; output when "--dired" is given.  Suppress this implicit rule.
-        (when dired
-          (let ((tem switches)
-                case-fold-search)
-            (catch 'long
-              (while tem
-                (when (and (not (string-match-p "--" (car tem)))
-                           (string-match-p "l" (car tem)))
-                  (throw 'long nil))
-                (setq tem (cdr tem)))
-              (setq dired nil))))
-	(setq switches
-	      (append switches (split-string (tramp-sh--quoting-style-options v))
-		      (when dired `(,dired))))
-	(unless dired
-	  (setq switches (seq-difference switches '("-N" "--dired")))))
-      (when wildcard
-        (setq wildcard (tramp-run-real-handler
-			#'file-name-nondirectory (list localname)))
-        (setq localname (tramp-run-real-handler
-			 #'file-name-directory (list localname))))
-      (unless (or full-directory-p (member "-d" switches))
-        (setq switches (append switches '("-d"))))
-      (setq switches (seq-uniq switches)
-	    switches (mapconcat #'tramp-shell-quote-argument switches " "))
-      (when wildcard
-	(setq switches (concat switches " " wildcard)))
-      (tramp-message
-       v 4 "Inserting directory `ls %s %s', wildcard %s, fulldir %s"
-       switches filename (if wildcard "yes" "no")
-       (if full-directory-p "yes" "no"))
-      ;; If `full-directory-p', we just say `ls -l FILENAME'.  Else we
-      ;; chdir to the parent directory, then say `ls -ld BASENAME'.
-      (if full-directory-p
+      (with-tramp-progress-reporter
+	  v 0 (format "Opening directory %s" filename)
+	(let ((dired (tramp-get-ls-command-with v "--dired")))
+	  (when (stringp switches)
+            (setq switches (string-split switches)))
+          ;; Newer coreutils versions of ls (9.5 and up) imply long
+          ;; format output when "--dired" is given.  Suppress this
+          ;; implicit rule.
+          (when dired
+            (let ((tem switches)
+                  case-fold-search)
+              (catch 'long
+		(while tem
+                  (when (and (not (string-match-p "--" (car tem)))
+                             (string-match-p "l" (car tem)))
+                    (throw 'long nil))
+                  (setq tem (cdr tem)))
+		(setq dired nil))))
+	  (setq switches
+		(append switches
+			(string-split (tramp-sh--quoting-style-options v))
+			(when dired `(,dired))))
+	  (unless dired
+	    (setq switches (seq-difference switches '("-N" "--dired")))))
+	(when wildcard
+          (setq wildcard (tramp-run-real-handler
+			  #'file-name-nondirectory (list localname)))
+          (setq localname (tramp-run-real-handler
+			   #'file-name-directory (list localname))))
+	(unless (or full-directory-p (member "-d" switches))
+          (setq switches (append switches '("-d"))))
+	(setq switches (seq-uniq switches)
+	      switches (mapconcat #'tramp-shell-quote-argument switches " "))
+	(when wildcard
+	  (setq switches (concat switches " " wildcard)))
+	(tramp-message
+	 v 4 "Inserting directory `ls %s %s', wildcard %s, fulldir %s"
+	 switches filename (if wildcard "yes" "no")
+	 (if full-directory-p "yes" "no"))
+	;; If `full-directory-p', we just say `ls -l FILENAME'.  Else
+	;; we chdir to the parent directory, then say `ls -ld
+	;; BASENAME'.
+	(if full-directory-p
+	    (tramp-send-command
+	     v (format "%s %s %s 2>%s"
+		       (tramp-get-ls-command v)
+		       switches
+		       (if wildcard
+			   localname
+			 (tramp-shell-quote-argument (concat localname ".")))
+                       (tramp-get-remote-null-device v)))
+	  (tramp-barf-unless-okay
+	   v (format "cd %s" (tramp-shell-quote-argument
+			      (tramp-run-real-handler
+			       #'file-name-directory (list localname))))
+	   "Couldn't `cd %s'"
+	   (tramp-shell-quote-argument
+	    (tramp-run-real-handler #'file-name-directory (list localname))))
 	  (tramp-send-command
 	   v (format "%s %s %s 2>%s"
 		     (tramp-get-ls-command v)
 		     switches
-		     (if wildcard
-			 localname
-		       (tramp-shell-quote-argument (concat localname ".")))
-                     (tramp-get-remote-null-device v)))
-	(tramp-barf-unless-okay
-	 v (format "cd %s" (tramp-shell-quote-argument
-			    (tramp-run-real-handler
-			     #'file-name-directory (list localname))))
-	 "Couldn't `cd %s'"
-	 (tramp-shell-quote-argument
-	  (tramp-run-real-handler #'file-name-directory (list localname))))
-	(tramp-send-command
-	 v (format "%s %s %s 2>%s"
-		   (tramp-get-ls-command v)
-		   switches
-		   (if (or wildcard
-			   (tramp-string-empty-or-nil-p
-			    (tramp-run-real-handler
-			     #'file-name-nondirectory (list localname))))
-		       ""
-		     (tramp-shell-quote-argument
-		      (tramp-run-real-handler
-                       #'file-name-nondirectory (list localname))))
-                   (tramp-get-remote-null-device v))))
+		     (if (or wildcard
+			     (tramp-string-empty-or-nil-p
+			      (tramp-run-real-handler
+			       #'file-name-nondirectory (list localname))))
+			 ""
+		       (tramp-shell-quote-argument
+			(tramp-run-real-handler
+			 #'file-name-nondirectory (list localname))))
+                     (tramp-get-remote-null-device v))))
 
-      (let ((beg-marker (copy-marker (point) nil))
-	    (end-marker (copy-marker (point) t))
-	    (emc enable-multibyte-characters))
-	;; We cannot use `insert-buffer-substring' because the Tramp
-	;; buffer changes its contents before insertion due to calling
-	;; `expand-file-name' and alike.
-	(insert (tramp-get-buffer-string (tramp-get-buffer v)))
+	(let ((beg-marker (copy-marker (point) nil))
+	      (end-marker (copy-marker (point) t))
+	      (emc enable-multibyte-characters))
+	  ;; We cannot use `insert-buffer-substring' because the Tramp
+	  ;; buffer changes its contents before insertion due to
+	  ;; calling `expand-file-name' and alike.
+	  (insert (tramp-get-buffer-string (tramp-get-buffer v)))
 
-	;; We must enable unibyte strings, because the "--dired"
-	;; output counts in bytes.
-	(set-buffer-multibyte nil)
-	(save-restriction
-	  (narrow-to-region beg-marker end-marker)
-	  ;; Check for "--dired" output.
-	  (when (search-backward-regexp
-		 (rx bol "//DIRED//" (+ blank) (group (+ nonl)) eol)
-		 nil 'noerror)
-	    (let ((beg (match-beginning 1))
-		  (end (match-end 0)))
-	      ;; Now read the numeric positions of file names.
-	      (goto-char beg)
-	      (while (< (point) end)
-		(let ((start (+ (point-min) (read (current-buffer))))
-		      (end (+ (point-min) (read (current-buffer)))))
-		  (if (memq (char-after end) '(?\n ?\ ))
-		      ;; End is followed by \n or by " -> ".
-		      (put-text-property start end 'dired-filename t))))))
-	  ;; Remove trailing lines.
-	  (goto-char (point-max))
-	  (while (search-backward-regexp (rx bol "//") nil 'noerror)
-	    (forward-line 1)
-	    (delete-region (match-beginning 0) (point))))
-	;; Reset multibyte if needed.
-	(set-buffer-multibyte emc)
-
-	(save-restriction
-	  (narrow-to-region beg-marker end-marker)
-	  ;; Some busyboxes are reluctant to discard colors.
-	  (unless (string-search
-		   "color" (tramp-get-connection-property v "ls" ""))
-	    (goto-char (point-min))
-	    (while (search-forward-regexp ansi-color-control-seq-regexp nil t)
-	      (replace-match "")))
-
-          ;; Now decode what read if necessary.  Stolen from `insert-directory'.
-	  (let ((coding (or coding-system-for-read
-			    file-name-coding-system
-			    default-file-name-coding-system
-			    'undecided))
-		coding-no-eol
-		val pos)
-	    (when (and enable-multibyte-characters
-		       (not (memq (coding-system-base coding)
-				  '(raw-text no-conversion))))
-	      ;; If no coding system is specified or detection is
-	      ;; requested, detect the coding.
-	      (if (eq (coding-system-base coding) 'undecided)
-		  (setq coding (detect-coding-region (point-min) (point) t)))
-	      (unless (eq (coding-system-base coding) 'undecided)
-		(setq coding-no-eol
-		      (coding-system-change-eol-conversion coding 'unix))
-		(goto-char (point-min))
-		(while (not (eobp))
-		  (setq pos (point)
-			val (get-text-property (point) 'dired-filename))
-		  (goto-char (next-single-property-change
-			      (point) 'dired-filename nil (point-max)))
-		  ;; Force no eol conversion on a file name, so that
-		  ;; CR is preserved.
-		  (decode-coding-region
-		   pos (point) (if val coding-no-eol coding))
-		  (if val (put-text-property pos (point) 'dired-filename t))))))
-
-	  ;; The inserted file could be from somewhere else.
-	  (when (and (not wildcard) (not full-directory-p))
+	  ;; We must enable unibyte strings, because the "--dired"
+	  ;; output counts in bytes.
+	  (set-buffer-multibyte nil)
+	  (save-restriction
+	    (narrow-to-region beg-marker end-marker)
+	    ;; Check for "--dired" output.
+	    (when (search-backward-regexp
+		   (rx bol "//DIRED//" (+ blank) (group (+ nonl)) eol)
+		   nil 'noerror)
+	      (let ((beg (match-beginning 1))
+		    (end (match-end 0)))
+		;; Now read the numeric positions of file names.
+		(goto-char beg)
+		(while (< (point) end)
+		  (let ((start (+ (point-min) (read (current-buffer))))
+			(end (+ (point-min) (read (current-buffer)))))
+		    (if (memq (char-after end) '(?\n ?\ ))
+			;; End is followed by \n or by " -> ".
+			(put-text-property start end 'dired-filename t))))))
+	    ;; Remove trailing lines.
 	    (goto-char (point-max))
-	    (when (file-symlink-p filename)
-	      (goto-char (search-backward "->" (point-min) 'noerror)))
-	    (search-backward
-	     (if (directory-name-p filename)
-		 "."
-	       (file-name-nondirectory filename))
-	     (point-min) 'noerror)
-	    (replace-match (file-relative-name filename) t))
+	    (while (search-backward-regexp (rx bol "//") nil 'noerror)
+	      (forward-line 1)
+	      (delete-region (match-beginning 0) (point))))
+	  ;; Reset multibyte if needed.
+	  (set-buffer-multibyte emc)
 
-	  ;; Try to insert the amount of free space.
-	  (goto-char (point-min))
-	  ;; First find the line to put it on.
-	  (when-let* (((search-forward-regexp
-			(rx bol (group (* blank) "total")) nil t))
-		      ;; Emacs 29.1 or later.
-		      ((not (fboundp 'dired--insert-disk-space)))
-		      (available (get-free-disk-space ".")))
-	    ;; Replace "total" with "total used", to avoid confusion.
-	    (replace-match "\\1 used in directory")
-	    (end-of-line)
-	    (insert " available " available)))
+	  (save-restriction
+	    (narrow-to-region beg-marker end-marker)
+	    ;; Some busyboxes are reluctant to discard colors.
+	    (unless (string-search
+		     "color" (tramp-get-connection-property v "ls" ""))
+	      (goto-char (point-min))
+	      (while
+		  (search-forward-regexp ansi-color-control-seq-regexp nil t)
+		(replace-match "")))
 
-	(prog1 (goto-char end-marker)
-	  (set-marker beg-marker nil)
-	  (set-marker end-marker nil))))))
+            ;; Now decode what read if necessary.  Stolen from
+            ;; `insert-directory'.
+	    (let ((coding (or coding-system-for-read
+			      file-name-coding-system
+			      default-file-name-coding-system
+			      'undecided))
+		  coding-no-eol
+		  val pos)
+	      (when (and enable-multibyte-characters
+			 (not (memq (coding-system-base coding)
+				    '(raw-text no-conversion))))
+		;; If no coding system is specified or detection is
+		;; requested, detect the coding.
+		(if (eq (coding-system-base coding) 'undecided)
+		    (setq coding
+			  (detect-coding-region (point-min) (point) t)))
+		(unless (eq (coding-system-base coding) 'undecided)
+		  (setq coding-no-eol
+			(coding-system-change-eol-conversion coding 'unix))
+		  (goto-char (point-min))
+		  (while (not (eobp))
+		    (setq pos (point)
+			  val (get-text-property (point) 'dired-filename))
+		    (goto-char (next-single-property-change
+				(point) 'dired-filename nil (point-max)))
+		    ;; Force no eol conversion on a file name, so that
+		    ;; CR is preserved.
+		    (decode-coding-region
+		     pos (point) (if val coding-no-eol coding))
+		    (when val
+		      (put-text-property pos (point) 'dired-filename t))))))
+
+	    ;; The inserted file could be from somewhere else.
+	    (when (and (not wildcard) (not full-directory-p))
+	      (goto-char (point-max))
+	      (when (file-symlink-p filename)
+		(goto-char (search-backward "->" (point-min) 'noerror)))
+	      (search-backward
+	       (if (directory-name-p filename)
+		   "."
+		 (file-name-nondirectory filename))
+	       (point-min) 'noerror)
+	      (replace-match (file-relative-name filename) t)))
+
+	  (prog1 (goto-char end-marker)
+	    (set-marker beg-marker nil)
+	    (set-marker end-marker nil)))))))
 
 ;; Canonicalization of file names.
 
@@ -2950,77 +2889,31 @@ The method used must be an out-of-band method."
   "Like `expand-file-name' for Tramp files.
 If the localname part of the given file name starts with \"/../\" then
 the result will be a local, non-Tramp, file name."
-  ;; If DIR is not given, use `default-directory' or "/".
-  (setq dir (or dir default-directory "/"))
-  ;; Handle empty NAME.
-  (when (string-empty-p name)
-    (setq name "."))
-  ;; On MS Windows, some special file names are not returned properly
-  ;; by `file-name-absolute-p'.  If `tramp-syntax' is `simplified',
-  ;; there could be the false positive "/:".
-  (if (or (and (eq system-type 'windows-nt)
-	       (string-match-p
-		(rx bol (| (: alpha ":") (: (literal (or null-device "")) eol)))
-		name))
-	  (and (not (tramp-tramp-file-p name))
-	       (not (tramp-tramp-file-p dir))))
-      (tramp-run-real-handler #'expand-file-name (list name dir))
-    ;; Unless NAME is absolute, concat DIR and NAME.
-    (unless (file-name-absolute-p name)
-      (setq name (file-name-concat dir name)))
-    ;; Dissect NAME.
-    (with-parsed-tramp-file-name name nil
-      ;; If connection is not established yet, run the real handler.
-      (if (not (tramp-connectable-p v))
-	  (tramp-drop-volume-letter
-	   (tramp-run-real-handler #'expand-file-name (list name)))
-	(unless (tramp-run-real-handler #'file-name-absolute-p (list localname))
-	  (setq localname (concat "~/" localname)))
-        ;; Tilde expansion shall be possible also for quoted localname.
-	(when (string-prefix-p "~" (file-name-unquote localname))
-	  (setq localname (file-name-unquote localname)))
-	;; Tilde expansion if necessary.  This needs a shell which
-	;; groks tilde expansion!  The function `tramp-find-shell' is
-	;; supposed to find such a shell on the remote host.  Please
-	;; tell me about it when this doesn't work on your system.
-	(when (string-match
-	       (rx bos "~" (group (* (not "/"))) (group (* nonl)) eos) localname)
-	  (let ((uname (match-string 1 localname))
-		(fname (match-string 2 localname))
-		hname)
-	    ;; We cannot simply apply "~/", because under sudo "~/" is
-	    ;; expanded to the local user home directory but to the
-	    ;; root home directory.  On the other hand, using always
-	    ;; the default user name for tilde expansion is not
-	    ;; appropriate either, because ssh and companions might
-	    ;; use a user name from the config file.
-	    (when (and (tramp-string-empty-or-nil-p uname)
-		       (string-match-p
-			(rx bos
-			    (| "su" "surs" "sudo" "sudors" "doas" "run0" "ksu")
-			    eos)
-			method))
-	      (setq uname user))
-	    (when (setq hname (tramp-get-home-directory v uname))
-	      (setq localname (concat hname fname)))))
-	;; There might be a double slash, for example when "~/"
-	;; expands to "/".  Remove this.
-	(while (string-match "//" localname)
-	  (setq localname (replace-match "/" t t localname)))
-	;; Do not keep "/..".
-	(when (string-match-p (rx bos "/" (** 1 2 ".") eos) localname)
-	  (setq localname "/"))
-	;; Do normal `expand-file-name' (this does "/./" and "/../"),
-	;; unless there are tilde characters in file name.
-	;; `default-directory' is bound, because on Windows there
-	;; would be problems with UNC shares or Cygwin mounts.
-	(let ((default-directory tramp-compat-temporary-file-directory))
-	  (tramp-make-tramp-file-name
-	   v (tramp-drop-volume-letter
-	      (if (string-prefix-p "~" localname)
-		  localname
-		(tramp-run-real-handler
-		 #'expand-file-name (list localname))))))))))
+  (tramp-skeleton-expand-file-name name dir
+    ;; Tilde expansion if necessary.  This needs a shell which
+    ;; groks tilde expansion!  The function `tramp-find-shell' is
+    ;; supposed to find such a shell on the remote host.  Please
+    ;; tell me about it when this doesn't work on your system.
+    (when (string-match
+	   (rx bos "~" (group (* (not "/"))) (group (* nonl)) eos) localname)
+      (let ((uname (match-string 1 localname))
+	    (fname (match-string 2 localname))
+	    hname)
+	;; We cannot simply apply "~/", because under sudo "~/" is
+	;; expanded to the local user home directory but to the
+	;; root home directory.  On the other hand, using always
+	;; the default user name for tilde expansion is not
+	;; appropriate either, because ssh and companions might
+	;; use a user name from the config file.
+	(when (and (tramp-string-empty-or-nil-p uname)
+		   (string-match-p
+		    (rx bos
+			(| "su" "surs" "sudo" "sudors" "doas" "run0" "ksu")
+			eos)
+		    method))
+	  (setq uname user))
+	(when (setq hname (tramp-get-home-directory v uname))
+	  (setq localname (concat hname fname)))))))
 
 ;;; Remote processes:
 
@@ -3060,7 +2953,7 @@ will be used."
 	     ;; length.  Therefore, we modify the command.
 	     (heredoc (and (not (bufferp stderr))
 			   (stringp program)
-			   (string-match-p (rx "sh" eol) program)
+			   (string-suffix-p "sh" program)
 			   (length= args 2)
 			   (string-equal "-c" (car args))
 			   ;; Don't if there is a quoted string.
@@ -3081,7 +2974,7 @@ will be used."
 	     ;; We discard hops, if existing, that's why we cannot use
 	     ;; `file-remote-p'.
 	     (prompt (format "PS1=%s %s"
-			     (tramp-make-tramp-file-name v)
+			     (tramp-make-tramp-file-name v 'noloc)
 			     tramp-initial-end-of-output))
 	     ;; We use as environment the difference to toplevel
 	     ;; `process-environment'.
@@ -3107,6 +3000,11 @@ will be used."
 		      ,(concat "PS1=" (getenv-internal "PS1" env)))))
 	     (eenv (setenv-internal eenv "INSIDE_EMACS" nil nil))
 	     (eenv (setenv-internal eenv "PS1" nil nil))
+	     vars
+	     (eenv (dolist (item (reverse eenv) vars)
+		     (setq item (string-split item "="))
+		     (setcdr item (string-join (cdr item) "="))
+		     (push (format "%s %s" (car item) (cdr item)) vars)))
 	     (command
 	      (when (stringp program)
 		(format "cd %s && %s exec %s %s env %s %s"
@@ -3222,10 +3120,15 @@ will be used."
 			(delete-region mark (point-max))
 			(narrow-to-region (point-max) (point-max))
 			;; Send delayed environment.
-			(dolist (entry eenv)
+			(when eenv
 			  (tramp-send-command
-			   v (format
-			      "export %s" (tramp-shell-quote-argument entry))))
+			   v
+			   (format
+			    "while read var val; do export $var=\"$val\"; done <<'%s'\n%s\n%s"
+			    tramp-end-of-heredoc
+			    (string-join eenv "\n")
+			    tramp-end-of-heredoc)
+			   t))
 			;; Now do it.
 			(if command
 			    ;; Send the command.
@@ -3281,8 +3184,8 @@ will be used."
     (let ((default-directory (tramp-make-tramp-file-name vec 'noloc))
 	  process-file-return-signal-string signals res result)
       (setq signals
-	    (append
-	     '(0) (split-string (shell-command-to-string "kill -l") nil 'omit)))
+	    (cons
+	     0 (string-split (shell-command-to-string "kill -l") nil 'omit)))
       ;; Sanity check.  Sometimes, the first entry is "0", although we
       ;; don't expect it.  Remove it.
       (when (and (stringp (cadr signals)) (string-equal "0" (cadr signals)))
@@ -3350,6 +3253,8 @@ will be used."
 		   env "EMACSCLIENT_TRAMP"
 		   (tramp-make-tramp-file-name v 'noloc) 'keep)))
       (setq env (setenv-internal env "INSIDE_EMACS" (tramp-inside-emacs) 'keep))
+      ;; Remove looong environment variables, for example from tramp-tests.el.
+      (setq env (seq-remove (lambda (x) (length> x 256)) env))
       (when env
 	(setq command
 	      (format
@@ -3679,36 +3584,43 @@ will be used."
 		       "decoding command or an scp program")
 	       method)))))))))
 
-(defun tramp-bundle-read-file-names (vec files)
+(defun tramp-bundle-read-file-names (vec files &optional expand)
   "Read file attributes of FILES and with one command fill the cache.
 FILES must be the local names only.  The cache attributes to be filled
 are \"file-exists-p\", \"file-readable-p\", \"file-directory-p\" and
-\"file-executable-p\"."
+\"file-executable-p\".
+
+If EXPAND is non-nil, the file names are expanded first (tilde and
+environment variables).  This is restricted to file names with no other
+shell special characters but \"~\" and \"$\".
+
+Return the possibly modified list of FILES."
   (when files
     (tramp-maybe-send-script
      vec tramp-bundle-read-file-names "tramp_bundle_read_file_names")
 
-    (dolist
-	(elt
-	 (with-current-buffer (tramp-get-connection-buffer vec)
-	   ;; We cannot use `tramp-send-command-and-read', because
-	   ;; this does not cooperate well with heredoc documents.
-	   (unless (tramp-send-command-and-check
-		    vec
-		    (format
-		     "tramp_bundle_read_file_names <<'%s'\n%s\n%s\n"
-		     tramp-end-of-heredoc
-		     (mapconcat #'tramp-shell-quote-argument files "\n")
-		     tramp-end-of-heredoc))
-	     (tramp-error vec 'remote-file-error "%s" (tramp-get-buffer-string)))
-	   ;; Read the expression.
-	   (goto-char (point-min))
-	   (read (current-buffer))))
-
+    (mapcar
+     (lambda (elt)
       (tramp-set-file-property vec (car elt) "file-exists-p" (nth 1 elt))
       (tramp-set-file-property vec (car elt) "file-readable-p" (nth 2 elt))
       (tramp-set-file-property vec (car elt) "file-directory-p" (nth 3 elt))
-      (tramp-set-file-property vec (car elt) "file-executable-p" (nth 4 elt)))))
+      (tramp-set-file-property vec (car elt) "file-executable-p" (nth 4 elt))
+      (car elt))
+     (with-current-buffer (tramp-get-connection-buffer vec)
+       ;; We cannot use `tramp-send-command-and-read', because this
+       ;; does not cooperate well with heredoc documents.
+       (unless (tramp-send-command-and-check
+		vec
+		(format
+		 "tramp_bundle_read_file_names %s <<'%s'\n%s\n%s\n"
+		 (if expand "expand" "")
+		 tramp-end-of-heredoc
+		 (mapconcat #'tramp-shell-quote-argument files "\n")
+		 tramp-end-of-heredoc))
+	 (tramp-error vec 'remote-file-error "%s" (tramp-get-buffer-string)))
+       ;; Read the expression.
+       (goto-char (point-min))
+       (read (current-buffer))))))
 
 (defvar tramp-vc-registered-file-names nil
   "List used to collect file names, which are checked during `vc-registered'.")
@@ -3872,13 +3784,19 @@ Fall back to normal file name handler if no Tramp handler exists."
 			"delete,delete_self"))
 	       ((memq 'attribute-change flags) "attrib"))
               events (concat events ",ignored,unmount")
-	      ;; "-P" has been added to version 3.21, so we cannot assume it yet.
-	      sequence `(,command "-mq" "-e" ,events ,localname)
+	      ;; "-P" has been added to version 3.21.
+	      ;; "%c" is not documented as format specifier, but it
+	      ;; has been added to version 3.20 (likely), see
+	      ;; <https://github.com/inotify-tools/inotify-tools/issues/72>
+	      sequence
+	      `(,command
+		,(if (tramp-remote-inotifywait-with-P v) "-mqP"  "-mq")
+		"-e" ,events "--format=%c %e %f" ,localname)
 	      ;; Make events a list of symbols.
 	      events
 	      (mapcar
 	       (lambda (x) (intern-soft (string-replace "_" "-" x)))
-	       (split-string events "," 'omit))))
+	       (string-split events "," 'omit))))
        ;; "gio monitor".
        ((setq command (tramp-get-remote-gio-monitor v))
 	(setq filter #'tramp-sh-gio-monitor-process-filter
@@ -4014,10 +3932,10 @@ Fall back to normal file name handler if no Tramp handler exists."
   "Read output from \"inotifywait\" and add corresponding `file-notify' events."
   (let ((events (process-get proc 'tramp-events)))
     (tramp-message proc 6 "%S\n%s" proc string)
-    (dolist (line (split-string string (rx (+ (any "\r\n"))) 'omit))
+    (dolist (line (string-split string (rx (+ (any "\r\n"))) 'omit))
       ;; Check, whether there is a problem.
       (unless (string-match
-	       (rx bol (+ (not blank)) (+ blank) (group (+ (not blank)))
+	       (rx bol (group (+ (not blank))) (+ blank) (group (+ (not blank)))
 		   (? (+ blank) (group (+ (not (any "\r\n"))))))
 	       line)
 	(tramp-error proc 'file-notify-error line))
@@ -4027,10 +3945,13 @@ Fall back to normal file name handler if no Tramp handler exists."
 	      proc
 	      (mapcar
 	       (lambda (x) (intern-soft (string-replace "_" "-" (downcase x))))
-	       (split-string (match-string 1 line) "," 'omit))
-	      (or (match-string 2 line)
+	       (string-split (match-string 2 line) "," 'omit))
+	      (or (match-string 3 line)
 		  (file-name-nondirectory
-		   (process-get proc 'tramp-watch-name))))))
+		   (process-get proc 'tramp-watch-name)))
+	      ;; Older inotifywait versions print "%c" here.  This is
+	      ;; converted to "0".
+	      (string-to-number (match-string 1 line) 16))))
         ;; Add an Emacs event now.
 	;; `insert-special-event' exists since Emacs 31.
 	(when (member (caadr object) events)
@@ -4387,11 +4308,15 @@ file exists and nonzero exit status otherwise."
     ;; that all shells interpret -i as interactive shell.  Must be the
     ;; last argument, because (for example) bash expects long options
     ;; first.
+    ;; Since GNU coreutils 9.12, file names are quoted using the
+    ;; `shell-escape' style.  We override this via $QUOTING_STYLE.
+    ;; (Bug#82170)
     (tramp-send-command
      vec (format
 	  (concat
 	   "exec env TERM='%s' INSIDE_EMACS='%s' "
-	   "ENV=%s %s PROMPT_COMMAND='' PS1=%s PS2='' PS3='' %s %s -i")
+	   "ENV=%s %s PROMPT_COMMAND='' PS1=%s PS2='' PS3='' "
+	   "QUOTING_STYLE=literal %s %s -i")
           tramp-terminal-type (tramp-inside-emacs)
           (or (getenv-internal "ENV" tramp-remote-process-environment) "")
 	  (if (stringp tramp-histfile-override)
@@ -4423,16 +4348,20 @@ file exists and nonzero exit status otherwise."
     (tramp-wait-for-output (tramp-get-connection-process vec))
 
     ;; Check proper HISTFILE setting.  We give up when not working.
-    (when (and (stringp tramp-histfile-override)
-	       (file-name-directory tramp-histfile-override))
-      (tramp-barf-unless-okay
-       vec
-       (format
-	"(cd %s)"
-	(tramp-shell-quote-argument
-	 (file-name-directory tramp-histfile-override)))
-       "`tramp-histfile-override' uses invalid file `%s'"
-       tramp-histfile-override))
+    (when (stringp tramp-histfile-override)
+      (when (and (string-match-p "~" tramp-histfile-override)
+		 (not (tramp-send-command-and-check vec "(cd)")))
+	(tramp-user-error
+	 vec "No home directory, change `tramp-histfile-override'"))
+      (when (file-name-directory tramp-histfile-override)
+	(tramp-barf-unless-okay
+	 vec
+	 (format
+	  "(cd %s)"
+	  (tramp-shell-quote-argument
+	   (file-name-directory tramp-histfile-override)))
+	 "`tramp-histfile-override' uses invalid file `%s'"
+	 tramp-histfile-override)))
 
     (tramp-flush-connection-property
      (tramp-get-connection-process vec) "scripts")
@@ -4600,6 +4529,15 @@ process to set up.  VEC specifies the connection."
       ;; with the process.
       (let ((cs (or (and (memq 'utf-8-hfs (coding-system-list))
 			 (string-prefix-p "Darwin" uname)
+			 ;; Starting from macOS High Sierra the default
+			 ;; file system is APFS (see
+			 ;; https://developer.apple.com/documentation/foundation/about-apple-file-system),
+			 ;; and it is a non-normalizing file system.
+			 (let ((ver (string-trim
+				     (string-remove-prefix "Darwin" uname))))
+			   (condition-case nil
+			       (version< ver "17")
+                             (error t)))
 			 (cons 'utf-8-hfs 'utf-8-hfs))
 		    (and (memq 'utf-8 (coding-system-list))
 			 (string-match-p
@@ -4693,7 +4631,7 @@ process to set up.  VEC specifies the connection."
       (dolist (item (reverse
 		     (append `(,(tramp-get-remote-locale vec))
 			     (copy-sequence tramp-remote-process-environment))))
-	(setq item (split-string item "=" 'omit))
+	(setq item (string-split item "="))
 	(setcdr item (string-join (cdr item) "="))
 	(if (and (stringp (cdr item)) (not (string-empty-p (cdr item))))
 	    (push (format "%s %s" (car item) (cdr item)) vars)
@@ -4714,14 +4652,10 @@ process to set up.  VEC specifies the connection."
     ;; FIXME: This doesn't work with `tramp-test42-utf8' and "/ssh::tmp".
     ;; Set connection-local variable `command-line-max-length'.
     ;; `command-line-max-length' exists since Emacs 31.
-    ;; `connection-local-profile-name-for-criteria' exists since Emacs 29.1.
-    ;; We simulate it with `make-symbol'.
     ;; (when (boundp 'command-line-max-length)
     ;;   (let* ((arg-max (tramp-get-remote-arg-max vec))
     ;; 	     (criteria (tramp-get-connection-local-criteria vec))
-    ;; 	     (profile (if (fboundp 'connection-local-profile-name-for-criteria)
-    ;; 			  (connection-local-profile-name-for-criteria criteria)
-    ;; 			(make-symbol "generated-profile-name"))))
+    ;; 	     (profile (connection-local-profile-name-for-criteria criteria)))
     ;; 	(connection-local-set-profile-variables
     ;; 	 profile
     ;; 	 `((command-line-max-length . ,(if arg-max (floor arg-max 4) 4094))))
@@ -4989,10 +4923,10 @@ Goes through the list `tramp-inline-compress-commands'."
 	               ;; forward slashes as directory separators.
 	               (mapconcat
 			#'tramp-unquote-shell-quote-argument
-			(split-string compress) " ")
+			(string-split compress) " ")
 	               (mapconcat
 			#'tramp-unquote-shell-quote-argument
-			(split-string decompress) " "))
+			(string-split decompress) " "))
 	              nil t))
               (throw 'next nil))
 	    (goto-char (point-min))
@@ -5387,7 +5321,7 @@ connection if a previous connection has died for some reason."
 			 (tramp-get-connection-buffer vec)
 			 (append
 			  `(,tramp-encoding-shell)
-			  (and extra-args (split-string extra-args))
+			  (and extra-args (string-split extra-args))
 			  (and tramp-encoding-command-interactive
 			       `(,tramp-encoding-command-interactive))))))
 
@@ -5437,6 +5371,13 @@ connection if a previous connection has died for some reason."
 			  (with-tramp-connection-property
 			      (tramp-get-process vec) "temp-file"
 			    (tramp-compat-make-temp-name)))
+			 (quoted-user
+			  (unless (tramp-string-empty-or-nil-p l-user)
+			    (tramp-compat-funcall
+				(if (eq previous-hop tramp-null-hop)
+				    #'shell-quote-argument
+				  #'tramp-shell-quote-argument)
+			      l-user)))
 			 r-shell)
 
 		    ;; Check, whether there is a restricted shell.
@@ -5478,7 +5419,8 @@ connection if a previous connection has died for some reason."
 		       (when process-name async-args)
 		       (tramp-expand-args
 			hop 'tramp-login-args nil
-			?h (or l-host "") ?u (or l-user "") ?p (or l-port "")
+			?h (or l-host "") ?u (or quoted-user "")
+			?p (or l-port "")
 			?c (format-spec options (format-spec-make ?t tmpfile))
 			?n (concat
 			    "2>" (tramp-get-remote-null-device previous-hop))
@@ -5721,7 +5663,8 @@ raises an error."
     ;; This does not work for MS Windows scp, if there are characters
     ;; to be quoted.  OpenSSH 8 supports disabling of strict file name
     ;; checking in scp, we use it when available.
-    (unless (string-match-p (rx (| "dockercp" "podmancp" "ftp") eos) method)
+    (unless
+	(string-match-p (rx (| "dockercp" "podmancp" "ftp") eos) method)
       (setq localname (tramp-unquote-shell-quote-argument localname)))
     (string-join
      (apply #'tramp-expand-args vec
@@ -5810,7 +5753,7 @@ Nonexistent directories are removed from spec."
 	(when elt1
 	  (setcdr elt1
 		  (append
-                   (split-string (or default-remote-path "") ":" 'omit)
+                   (string-split (or default-remote-path "") ":" 'omit)
 		   (cdr elt1)))
 	  (setq remote-path (delq 'tramp-default-remote-path remote-path)))
 
@@ -5818,22 +5761,21 @@ Nonexistent directories are removed from spec."
 	(when elt2
 	  (setcdr elt2
 		  (append
-                   (split-string (or own-remote-path "") ":" 'omit)
+                   (string-split (or own-remote-path "") ":" 'omit)
 		   (cdr elt2)))
 	  (setq remote-path (delq 'tramp-own-remote-path remote-path)))
 
-	;; Remove double entries.
-	(setq remote-path
-	      (cl-remove-duplicates
-	       remote-path :test #'string-equal :from-end t))
-
-	;; Remove non-existing directories.
 	(let ((remote-file-name-inhibit-cache
 	       (tramp-suppress-remote-file-name-inhibit-cache)))
-	  (tramp-bundle-read-file-names vec remote-path)
-	  (cl-remove-if
-	   (lambda (x) (not (tramp-get-file-property vec x "file-directory-p")))
-	   remote-path))))))
+	  ;; Remove double entries.
+	  (seq-uniq
+	   ;; Remove non-existing directories.
+	   (seq-remove
+	    (lambda (x) (not (tramp-get-file-property vec x "file-directory-p")))
+	    ;; Remove trailing slashes.
+	    (mapcar
+	     #'directory-file-name
+	     (tramp-bundle-read-file-names vec remote-path 'expand)))))))))
 
 (defun tramp-get-remote-arg-max (vec)
   "Return ARG_MAX config from the remote side."
@@ -6023,14 +5965,13 @@ Nonexistent directories are removed from spec."
 	;; boundaries "`" and "'" and their localized variants,
 	;; therefore.  See Bug#23422 in coreutils.  Since GNU stat
 	;; 8.26, environment variable QUOTING_STYLE is supported.
+	;; We use "--format=" as indicator whether it is GNU stat.
 	(when result
-	  (setq result (concat "env QUOTING_STYLE=locale " result)
-		tmp (tramp-send-command-and-read
-		     vec (format "%s -c '(\"%%N\" %%s)' /" result) 'noerror))
+	  (setq tmp (tramp-send-command-and-read
+		     vec (format "%s --format='(\"%%N\" %%s)' /" result)
+		     'noerror))
 	  (unless (and (listp tmp) (stringp (car tmp))
-		       (string-match-p
-			(rx bol (any "\"`'‘„”«「") "/" (any "\"'’“”»」") eol)
-			(car tmp))
+		       (string-equal (car tmp) "/")
 		       (integerp (cadr tmp)))
 	    (setq result nil)))
 	result))))
@@ -6109,6 +6050,18 @@ Nonexistent directories are removed from spec."
   (with-tramp-connection-property vec "inotifywait"
     (tramp-message vec 5 "Finding a suitable `inotifywait' command")
     (tramp-find-executable vec "inotifywait" (tramp-get-remote-path vec) t t)))
+
+(defun tramp-remote-inotifywait-with-P (vec)
+  "Check, whether remote `inotifywait' option \"-P\" is applicable."
+  (with-tramp-connection-property vec "inotifywait-P"
+    (tramp-message vec 5 "Checking, whether `inotifywait -P' works")
+    (let ((result
+	   (tramp-send-command-and-read
+	    vec
+	    (format
+	     "echo \\\"`%s -P 2>&1`\\\"" (tramp-get-remote-inotifywait vec))
+	    'noerror)))
+      (string-prefix-p "No files specified to watch!" result))))
 
 (defun tramp-get-remote-id (vec)
   "Determine remote `id' command."
@@ -6266,15 +6219,15 @@ function cell is returned to be applied on a buffer."
 		       (coding-system-for-read 'binary))
 		   (apply
 		    #'tramp-call-process-region ',vec (point-min) (point-max)
-		    (car (split-string ,compress)) t t nil
-		    (cdr (split-string ,compress)))))
+		    (car (string-split ,compress)) t t nil
+		    (cdr (string-split ,compress)))))
 	    `(lambda (beg end)
 	       (let ((coding-system-for-write 'binary)
 		     (coding-system-for-read 'binary))
 		 (apply
 		  #'tramp-call-process-region ',vec beg end
-		  (car (split-string ,compress)) t t nil
-		  (cdr (split-string ,compress))))
+		  (car (string-split ,compress)) t t nil
+		  (cdr (string-split ,compress))))
 	       (,coding (point-min) (point-max)))))
 	 ((symbolp coding)
 	  coding)

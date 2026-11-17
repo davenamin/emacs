@@ -757,19 +757,22 @@ default_PATH (void)
     {
 #ifdef _CS_PATH
       char *buf = staticbuf;
-      size_t bufsize = sizeof staticbuf, s;
+      size_t bufsize = sizeof staticbuf;
 
-      /* If necessary call confstr a second time with a bigger buffer.  */
-      while (bufsize < (s = confstr (_CS_PATH, buf, bufsize)))
+      /* If necessary call confstr again with a bigger buffer.  */
+      for (size_t s;
+	   ! (s = confstr (_CS_PATH, buf, bufsize)) || bufsize < s; )
 	{
+	  if (buf != staticbuf)
+	    xfree (buf);
+	  if (!s)
+	    {
+	      staticbuf[0] = 1;
+	      buf = NULL;
+	      break;
+	    }
 	  buf = xmalloc (s);
 	  bufsize = s;
-	}
-
-      if (s == 0)
-	{
-	  staticbuf[0] = 1;
-	  buf = NULL;
 	}
 
       path = buf;
@@ -1252,47 +1255,40 @@ load_seccomp (const char *file)
       goto out;
     }
   struct sock_fprog program;
-  if (stat.st_size <= 0 || SIZE_MAX <= stat.st_size
-      || PTRDIFF_MAX <= stat.st_size
+  if (stat.st_size <= 0 || min (PTRDIFF_MAX, SIZE_MAX) <= stat.st_size
       || stat.st_size % sizeof *program.filter != 0)
     {
       fprintf (stderr, "seccomp filter %s has invalid size %ld\n",
-               file, (long) stat.st_size);
+               file, (long) {stat.st_size});
       goto out;
     }
-  size_t size = stat.st_size;
-  size_t count = size / sizeof *program.filter;
-  eassert (0 < count && count < SIZE_MAX);
-  if (USHRT_MAX < count)
+  if (ckd_add (&program.len, stat.st_size / sizeof *program.filter, 0))
     {
       fprintf (stderr, "seccomp filter %s is too big\n", file);
       goto out;
     }
   /* Try reading one more byte to detect file size changes.  */
+  ptrdiff_t size = stat.st_size;
   buffer = malloc (size + 1);
   if (buffer == NULL)
     {
       emacs_perror ("malloc");
       goto out;
     }
-  ptrdiff_t read = read_full (fd, buffer, size + 1);
-  if (read < 0)
+  ptrdiff_t nread = read_full (fd, buffer, size + 1);
+  if (nread != size)
     {
-      emacs_perror ("read");
-      goto out;
-    }
-  eassert (read <= SIZE_MAX);
-  if (read != size)
-    {
-      fprintf (stderr,
-               "seccomp filter %s changed size while reading\n",
-               file);
+      if (nread < 0)
+	emacs_perror ("read");
+      else
+	fprintf (stderr,
+		 "seccomp filter %s changed size while reading\n",
+		 file);
       goto out;
     }
   if (emacs_close (fd) != 0)
     emacs_perror ("close");  /* not a fatal error */
   fd = -1;
-  program.len = count;
   program.filter = buffer;
 
   /* See man page of `seccomp' why this is necessary.  Note that we
@@ -1657,15 +1653,14 @@ android_emacs_init (int argc, char **argv, char *dump_file)
 
   emacs_backtrace (-1);
 
-#if !defined SYSTEM_MALLOC
+#ifdef GMALLOC_REL_ALLOC
   /* Arrange to get warning messages as memory fills up.  */
   memory_warnings (0, malloc_warning);
 
   /* Call malloc at least once, to run malloc_initialize_hook.
      Also call realloc and free for consistency.  */
   free (realloc (malloc (4), 4));
-
-#endif	/* not SYSTEM_MALLOC */
+#endif
 
 #ifdef MSDOS
   set_binary_mode (STDIN_FILENO, O_BINARY);
@@ -1742,7 +1737,8 @@ android_emacs_init (int argc, char **argv, char *dump_file)
       /* Convert --script to -scriptload, un-skip it, and sort again
 	 so that it will be handled in proper sequence.  */
       /* FIXME broken for --script=FILE - is that supposed to work?  */
-      argv[skip_args - 1] = (char *) "-scriptload";
+      static char const scriptload_option[] = "-scriptload";
+      argv[skip_args - 1] = (char *) scriptload_option;
       skip_args -= 2;
       sort_args (argc, argv);
     }
@@ -1753,7 +1749,7 @@ android_emacs_init (int argc, char **argv, char *dump_file)
     {
       int i;
       printf ("Usage: %s [OPTION-OR-FILENAME]...\n", argv[0]);
-      for (i = 0; i < ARRAYELTS (usage_message); i++)
+      for (i = 0; i < countof (usage_message); i++)
 	fputs (usage_message[i], stdout);
       exit (0);
     }
@@ -1970,15 +1966,6 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 	daemon_name = xstrdup (dname_arg);
     }
 
-#if defined HAVE_PTHREAD && !defined SYSTEM_MALLOC \
-  && !defined DOUG_LEA_MALLOC
-  /* Do not make gmalloc thread-safe when creating bootstrap-emacs, as
-     that causes an infinite recursive loop with FreeBSD.  See
-     Bug#14569.  */
-  if (!noninteractive || !will_dump_p ())
-    malloc_enable_thread ();
-#endif
-
   init_signals ();
 
   noninteractive1 = noninteractive;
@@ -2147,7 +2134,8 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 	    argv[count_before + 2] = displayname;
 	    argc++;
 	  }
-	argv[count_before + 1] = (char *) "-d";
+	static char const d_option[] = "-d";
+	argv[count_before + 1] = (char *) d_option;
       }
 #endif	/* HAVE_X_WINDOWS */
 
@@ -2165,7 +2153,8 @@ Using an Emacs configured with --with-x-toolkit=lucid does not have this problem
 	noninteractive = 1;
 	no_site_lisp = 1;
 	/* This is picked up in startup.el.  */
-	argv[skip_args - 1] = (char *) "-scripteval";
+	static char const scripteval_option[] = "-scripteval";
+	argv[skip_args - 1] = (char *) scripteval_option;;
 	skip_args -= 1;
 	sort_args (argc, argv);
       }
@@ -2881,7 +2870,7 @@ sort_args (int argc, char **argv)
 	    }
 
 	  /* Look for a match with a known old-fashioned option.  */
-	  for (i = 0; i < ARRAYELTS (standard_args); i++)
+	  for (i = 0; i < countof (standard_args); i++)
 	    if (!strcmp (argv[from], standard_args[i].name))
 	      {
 		options[from] = standard_args[i].nargs;
@@ -2903,7 +2892,7 @@ sort_args (int argc, char **argv)
 
 	      match = -1;
 
-	      for (i = 0; i < ARRAYELTS (standard_args); i++)
+	      for (i = 0; i < countof (standard_args); i++)
 		if (standard_args[i].longname
 		    && !strncmp (argv[from], standard_args[i].longname,
 				 thislen))
@@ -3043,13 +3032,6 @@ killed.  */
     }
 #endif
 
-#ifdef HAVE_LIBSYSTEMD
-  /* Notify systemd we are shutting down, but only if we have notified
-     it about startup.  */
-  if (daemon_type == -1)
-    sd_notify(0, "STOPPING=1");
-#endif /* HAVE_LIBSYSTEMD */
-
   /* Fsignal calls emacs_abort () if it sees that waiting_for_input is
      set.  */
   waiting_for_input = 0;
@@ -3060,6 +3042,13 @@ killed.  */
       else
 	calln (Qrun_hook_query_error_with_timeout, Qkill_emacs_hook);
     }
+
+#ifdef HAVE_LIBSYSTEMD
+  /* Notify systemd we are shutting down, but only if we have notified
+     it about startup.  */
+  if (daemon_type == -1)
+    sd_notify (0, "STOPPING=1");
+#endif /* HAVE_LIBSYSTEMD */
 
 #ifdef HAVE_X_WINDOWS
   /* Transfer any clipboards we own to the clipboard manager.  */
@@ -3170,7 +3159,7 @@ shut_down_emacs (int sig, Lisp_Object stuff)
 			 + INT_STRLEN_BOUND (int) + 1),
 			min (PIPE_BUF, MAX_ALLOCA))];
 	  char const *sig_desc = safe_strsignal (sig);
-	  size_t sig_desclen = strlen (sig_desc);
+	  ptrdiff_t sig_desclen = strlen (sig_desc);
 	  int nlen = sprintf (buf, fmt, sig);
 	  if (nlen + sig_desclen < sizeof buf - 1)
 	    {

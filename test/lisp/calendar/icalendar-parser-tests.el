@@ -388,21 +388,21 @@ test."
 
 (ipt:parse/print-test
 "FREQ=MONTHLY;BYDAY=MO,TU,WE,TH,FR;BYSETPOS=-1"
-:type icalendar-recur
+:type icalendar-rrule-value
 :parser icalendar-parse-value-node
 :printer icalendar-print-value-node
 :source rfc5545-sec3.3.10/1)
 
 (ipt:parse/print-test
 "FREQ=YEARLY;INTERVAL=2;BYMONTH=1;BYDAY=SU;BYHOUR=8,9;BYMINUTE=30"
-:type icalendar-recur
+:type icalendar-rrule-value
 :parser icalendar-parse-value-node
 :printer icalendar-print-value-node
 :source rfc5545-sec3.3.10/2)
 
 (ipt:parse/print-test
 "FREQ=DAILY;COUNT=10;INTERVAL=2"
-:type icalendar-recur
+:type icalendar-rrule-value
 :parser icalendar-parse-value-node
 :printer icalendar-print-value-node
 :source rfc5545-sec3.3.10/3)
@@ -1962,7 +1962,7 @@ END:VCALENDAR
               (expected-dtstamp
                (ical:make-date-time :year 2023 :month 7 :day 30
                                     :hour 19 :minute 47 :second 0
-                                    :zone 0)))
+                                    :zone t)))
           (should (not (ical:errors-p)))
           (should (ical:ast-node-valid-p vcal t))
           (ical:with-component vcal
@@ -2021,8 +2021,120 @@ END:VCALENDAR
               (should (equal organizer expected-organizer))
               (ical:with-property organizer
                   ((ical:sentbyparam :value sent-by))
-                  (should (equal sent-by expected-sender))))))))))
+                (should (equal sent-by expected-sender))))))))))
 
+(ert-deftest ipt:bad-tzids ()
+  "Real example: bad TZIDs, fixed by `icalendar-fix-ms-tzids'."
+  ;; See Bug#81958.
+  (let ((bad "BEGIN:VCALENDAR
+PRODID:-//Kerio Technologies//Outlook Connector//EN
+METHOD:REQUEST
+VERSION:2.0
+X-VERSION-KMS:6.2.0
+BEGIN:VTIMEZONE
+TZID:Amsterdam, Belgrade, Berlin, Brussels, Budapest, Madrid,
+  Paris, Prague, Stockholm
+BEGIN:STANDARD
+DTSTART:19961027T030000
+TZOFFSETTO:+0100
+TZOFFSETFROM:+0200
+RRULE:FREQ=YEARLY;BYMONTH=10;BYDAY=-1SU
+END:STANDARD
+BEGIN:DAYLIGHT
+DTSTART:19810329T020000
+TZOFFSETTO:+0200
+TZOFFSETFROM:+0100
+RRULE:FREQ=YEARLY;BYMONTH=3;BYDAY=-1SU
+END:DAYLIGHT
+END:VTIMEZONE
+BEGIN:VEVENT
+DTSTAMP:20260929T130744Z
+UID:291960532774007431
+PRIORITY:5
+SUMMARY:Contains MS-Style TZIDs
+LOCATION:Sample Street 1\, 12345 City
+TRANSP:OPAQUE
+X-MICROSOFT-CDO-BUSYSTATUS:TENTATIVE
+X-MICROSOFT-CDO-INTENDEDSTATUS:BUSY
+CLASS:PUBLIC
+X-LABEL:0
+SEQUENCE:2
+ORGANIZER;CN=\"Hans Muster\":mailto:hm@example.com
+ATTENDEE;RSVP=TRUE;X-SENT=TRUE;CN=\"Karl Klammer\";CUTYPE=INDIVIDUAL:mailto:kk@example.com
+ATTENDEE;RSVP=TRUE;X-SENT=TRUE;CN=\"Hinz Dosenkohl (hd@example.com\";CUTYPE=INDIVIDUAL:mailto:hd@example.com
+ATTENDEE;CN=\"Hans Muster \";CUTYPE=INDIVIDUAL:mailto:hmuster@outlook.com
+X-ALARM-TRIGGER:-PT15M
+DTSTART;TZID=\"Amsterdam, Belgrade, Berlin, Brussels, Budapest, Madrid, Paris, Prague, Stockholm\":20261005T143000
+DTEND;TZID=\"Amsterdam, Belgrade, Berlin, Brussels, Budapest, Madrid, Paris, Prague, Stockholm\":20261005T163000
+END:VEVENT
+END:VCALENDAR
+"))
+    (let ((ical:pre-parsing-hook nil))
+      (with-temp-buffer
+        (ical:init-error-buffer)
+        (insert bad)
+        (goto-char (point-min))
+        (ical:parse)
+        ;; Parsing should produce errors as bad properties and params
+        ;; are skipped:
+        (should (ical:errors-p))))
+    ;; cleaning up the addresses before parsing should correct
+    ;; these problems:
+    (let ((ical:pre-parsing-hook '(ical:fix-ms-tzids)))
+      (with-temp-buffer
+        (ical:init-error-buffer)
+        (insert bad)
+        (goto-char (point-min))
+        (let ((vcal (ical:parse))
+              (expected-tzid "AmsterdamEtc"))
+          (should (not (ical:errors-p)))
+          (ical:with-component vcal
+              ((ical:vtimezone tz)
+               (ical:vevent vevent))
+            (ical:with-component tz
+                ((ical:tzid :value tzid))
+              (should (equal tzid expected-tzid)))
+            (ical:with-component vevent
+                ((ical:dtstart :first dtstart-node))
+              (ical:with-param-of dtstart-node 'ical:tzidparam
+                (should (equal value expected-tzid))))))))))
+
+
+;; Tests for bugfixes:
+(ert-deftest ipt:utc+0-is-not-utc ()
+  "Are UTC times parsed distinctly from times in other zones with 0 offset?"
+  ;; An explicit UTC time should parse with `t' in its zone field; this
+  ;; distinguishes it from times that merely have a 0 second offset from
+  ;; UTC, but might have a defined non-UTC time zone, e.g. in Europe/London
+  ;; or Europe/Dublin.  Bug discussion:
+  ;; https://https://lists.gnu.org/archive/html/emacs-devel/2026-07/msg00445.html
+  (let* ((s-utc "20260101T111111Z")
+         (s-non "20260101T111111")
+         (parsed-utc (ical:ast-node-value
+                      (ical:parse-from-string 'ical:date-time s-utc)))
+         (expected-utc (ical:make-date-time :year 2026 :month 1 :day 1
+                                            :hour 11 :minute 11 :second 11
+                                            :zone t))
+         (parsed-non (ical:ast-node-value
+                      (ical:parse-from-string 'ical:date-time s-non)))
+         (parsed-non-zoned (ical:date-time-variant parsed-non :zone 0))
+         (expected-non (ical:make-date-time :year 2026 :month 1 :day 1
+                                            :hour 11 :minute 11 :second 11
+                                            :zone nil))
+         (expected-non-zoned (ical:date-time-variant expected-non :zone 0)))
+    ;; Test that the two times are parsed distinctly:
+    (should (equal parsed-utc expected-utc))
+    (should (equal parsed-non expected-non))
+    (should-not (equal (decoded-time-zone parsed-utc)
+                       (decoded-time-zone parsed-non)))
+    ;; Test that `icalendar-date-time-is-utc-p' distinguishes the two cases:
+    (should (ical:date-time-is-utc-p parsed-utc))
+    (should-not (ical:date-time-is-utc-p parsed-non))
+    (should-not (ical:date-time-is-utc-p parsed-non-zoned))
+    ;; but also that `icalendar-date-time-simultaneous-p' does not:
+    (should (ical:date-time-simultaneous-p parsed-utc expected-utc))
+    (should (ical:date-time-simultaneous-p parsed-utc parsed-non-zoned))
+    (should (ical:date-time-simultaneous-p parsed-non-zoned expected-non-zoned))))
 
 
 

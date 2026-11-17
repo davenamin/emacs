@@ -641,6 +641,8 @@
 (defvar heex-ts--font-lock-settings)
 (defvar heex-ts--font-lock-feature-list)
 
+(defvar electric-pair-skip-whitespace-function)
+
 (defun elixir-ts--treesit-anchor-grand-parent-bol (_n parent &rest _)
   "Return the beginning of non-space characters for the parent node of PARENT."
   (save-excursion
@@ -698,7 +700,7 @@ Return nil if NODE is not a defun node or doesn't have a name."
       (pcase-exhaustive name
         ('quoted-text
          (put-text-property (1- (treesit-node-end node)) (treesit-node-end node)
-                            'syntax-table (string-to-syntax "$")))))))
+                            'syntax-table (string-to-syntax "|")))))))
 
 (defun elixir-ts--electric-pair-string-delimiter ()
   "Insert corresponding multi-line string for `electric-pair-mode'."
@@ -714,6 +716,14 @@ Return nil if NODE is not a defun node or doesn't have a name."
     (save-excursion
       (newline 1 t))))
 
+(defun elixir-ts--electric-pair-skip-whitespace ()
+  "Move forward over whitespace, but do not stop on a closing \"\"\".
+
+Otherwise typing \" in a heredoc would jump to the closing delimiter."
+  (let ((start (point)))
+    (funcall (default-value 'electric-pair-skip-whitespace-function))
+    (when (looking-at-p "\"\"\"") (goto-char start))))
+
 ;;;###autoload
 (define-derived-mode elixir-ts-mode prog-mode "Elixir"
   "Major mode for editing Elixir, powered by tree-sitter."
@@ -724,6 +734,7 @@ Return nil if NODE is not a defun node or doesn't have a name."
   (setq-local comment-start "# ")
   (setq-local comment-start-skip
               (rx "#" (* (syntax whitespace))))
+  (setq-local comment-start-line-regexp comment-start-skip)
 
   (setq-local comment-end "")
   (setq-local comment-end-skip
@@ -733,11 +744,23 @@ Return nil if NODE is not a defun node or doesn't have a name."
   ;; Compile.
   (setq-local compile-command "mix")
 
+  ;; Treat heredoc delimiter lines as paragraph separators so that
+  ;; filling stays inside the heredoc.
+  (setq-local paragraph-start
+              (concat "\f\\|[ \t]*$\\|[ \t]*\"\"\"\\|.*\"\"\"[ \t]*$"
+                      "\\|[ \t]*\\([-*+]\\|[0-9]+\\.\\)[ \t]"))
+  (setq-local paragraph-separate
+              "[ \t\f]*$\\|[ \t]*\"\"\"\\|.*\"\"\"[ \t]*$")
+
   ;; Electric pair.
   (add-hook 'post-self-insert-hook
             #'elixir-ts--electric-pair-string-delimiter 'append t)
 
-  (when (treesit-ensure-installed 'elixir)
+  (setq-local electric-pair-skip-whitespace-function #'elixir-ts--electric-pair-skip-whitespace)
+
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'elixir)
+             (treesit-ready-p 'elixir))
     (setq-local treesit-primary-parser
                 (treesit-parser-create 'elixir))
 
@@ -752,6 +775,7 @@ Return nil if NODE is not a defun node or doesn't have a name."
 
     ;; Indent.
     (setq-local treesit-simple-indent-rules elixir-ts--indent-rules)
+    (setq-local editorconfig-indent-size-vars '(elixir-ts-indent-offset))
 
     ;; Navigation.
     (setq-local treesit-thing-settings
@@ -762,7 +786,9 @@ Return nil if NODE is not a defun node or doesn't have a name."
     (setq-local treesit-defun-name-function #'elixir-ts--defun-name)
 
     ;; Embedded Heex.
-    (when (treesit-ensure-installed 'heex)
+    ;; `treesit-ready-p' also checks for buffer size.
+    (when (and (treesit-ensure-installed 'heex)
+               (treesit-ready-p 'heex))
       (require 'heex-ts-mode)
       (treesit-parser-create 'heex)
 

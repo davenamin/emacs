@@ -202,7 +202,8 @@ request.")
 	  (progn
 	    (url-http-debug "Cleaning up dead process: %s:%d %S"
 			    host port (car conns))
-	    (url-http-idle-sentinel (car conns) nil))
+	    (url-http-idle-sentinel (car conns)
+                                    (symbol-name (process-status (car conns)))))
 	(setq connection (car conns))
 	(url-http-debug
          "Found existing connection: %s:%d %S" host port connection))
@@ -826,9 +827,12 @@ should be shown to the user."
                 ;; Authorization header field.
                 (url-http-handle-authentication nil))
                ('payment-required              ; 402
-                ;; This code is reserved for future use
-                (url-mark-buffer-as-dead buffer)
-                (error "Somebody wants you to give them money"))
+                ;; This code is "reserved for future use", but in the
+                ;; mean time websites have been seen to use it, for
+                ;; instance anti-bot challenges requiring the "payment"
+                ;; of a click of a button to prove the visitor is human,
+                ;; so we no longer raise an `error' here.
+                t)
                ('forbidden			; 403
                 ;; The server understood the request, but is refusing to
                 ;; fulfill it.  Authorization will not help and the request
@@ -1022,8 +1026,10 @@ should be shown to the user."
 
 ;; These unfortunately cannot be macros... please ignore them!
 (defun url-http-idle-sentinel (proc why)
-  "Remove (now defunct) process PROC from the list of open connections."
-  (url-http-debug "url-http-idle-sentinel for process %S: %s" proc (string-trim why))
+  "Remove (now defunct per WHY) process PROC from the list of open connections.
+WHY is the reason the process was terminated."
+  (url-http-debug "url-http-idle-sentinel for process %S: %s"
+                  proc (string-trim (or why "dead")))
   (maphash (lambda (key val)
 		(if (memq proc val)
 		    (puthash key (delq proc val) url-http-open-connections)))

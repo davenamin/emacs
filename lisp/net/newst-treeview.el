@@ -282,7 +282,6 @@ their id stays constant."
                 ;; (message "%s" (newsticker--title item))
                 (let ((w3m-fill-column (if newsticker-use-full-width
                                            -1 fill-column)))
-                  (select-window (newsticker--treeview-item-window))
                   (save-excursion
                     (funcall newsticker-html-renderer start end)))
                 ;;(cond ((eq newsticker-html-renderer 'w3m-region)
@@ -343,6 +342,7 @@ If string SHOW-FEED is non-nil it is shown in the item string."
                                    'keymap map
                                    'help-echo (buffer-substring pos2
                                                                 (point-max)))))
+      (goto-char (point-max))
       (insert "\n"))))
 
 (defun newsticker--treeview-list-clear ()
@@ -1190,6 +1190,15 @@ Arguments are ignored."
         (browse-url url)
         (if newsticker-automatically-mark-visited-items-as-old
             (newsticker-treeview-mark-item-old))))))
+
+(defun newsticker-treeview-copy-url ()
+  "Copy the url for the current item."
+  (interactive)
+  (let ((url (url-encode-url
+              (newsticker--link
+               (newsticker--treeview-get-selected-item)))))
+    (kill-new url)
+    (message "Copied %s" url)))
 
 (defun newsticker--treeview-buffer-init ()
   "Initialize all treeview buffers."
@@ -2040,6 +2049,7 @@ Return t if groups have changed, nil otherwise."
   "s"          #'newsticker-treeview-save
   "u"          #'newsticker-treeview-update
   "v"          #'newsticker-treeview-browse-url
+  "w"          #'newsticker-treeview-copy-url
   ;;"C-j"      #'newsticker-treeview-scroll-item
   ;;"RET"      #'newsticker-treeview-scroll-item
   "M-m"        #'newsticker-group-move-feed

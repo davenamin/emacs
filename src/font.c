@@ -734,7 +734,7 @@ get_font_prop_index (Lisp_Object key)
 {
   int i;
 
-  for (i = 0; i < ARRAYELTS (font_property_table); i++)
+  for (i = 0; i < countof (font_property_table); i++)
     if (EQ (key, builtin_lisp_symbol (font_property_table[i].key)))
       return i;
   return -1;
@@ -2651,8 +2651,10 @@ font_clear_cache (struct frame *f, Lisp_Object cache,
 			     the font.  */
 			  composition_gstring_cache_clear_font (val);
 			  driver->close_font (font);
+			  ASET (val, FONT_TYPE_INDEX, Qnil);
 			}
 		    }
+		  ASET (entity, FONT_OBJLIST_INDEX, Qnil);
 		  if (driver->free_entity)
 		    driver->free_entity (entity);
 		}
@@ -4636,16 +4638,35 @@ GSTRING.  */)
   if (! font->driver->shape)
     return Qnil;
 
-  /* Try at most three times with larger gstring each time.  */
-  for (i = 0; i < 3; i++)
+  /* Try at most six times with larger gstring each time.  If the
+     backend (such as HarfBuzz) reports the required size as a negative
+     fixnum, resize directly to that size.  Otherwise, if the backend
+     (such as Uniscribe) returns nil without knowing the required size,
+     double the buffer on each retry.  Increasing the retry limit to six
+     provides enough headroom for complex fonts that expand a few
+     characters into dozens of glyphs (bug#82129).  */
+  for (i = 0; i < 6; i++)
     {
       n = font->driver->shape (gstring, direction);
       if (FIXNUMP (n))
-	break;
+	{
+	  ptrdiff_t n_glyphs = XFIXNUM (n);
+	  if (n_glyphs == 0)
+	    return Qnil;
+	  if (n_glyphs > 0)
+	    break;
+
+	  ptrdiff_t needed_size = - n_glyphs;
+	  ptrdiff_t incr = needed_size - LGSTRING_GLYPH_LEN (gstring);
+	  if (incr <= 0)
+	    return Qnil;
+	  gstring = larger_vector (gstring, incr, -1);
+	  continue;
+	}
       gstring = larger_vector (gstring,
 			       LGSTRING_GLYPH_LEN (gstring), -1);
     }
-  if (i == 3 || XFIXNUM (n) == 0)
+  if (i == 6)
     return Qnil;
   if (XFIXNUM (n) < LGSTRING_GLYPH_LEN (gstring))
     LGSTRING_SET_GLYPH (gstring, XFIXNUM (n), Qnil);
@@ -5700,7 +5721,7 @@ If the named font cannot be opened and loaded, return nil.  */)
 #endif
 
 
-#define BUILD_STYLE_TABLE(TBL) build_style_table (TBL, ARRAYELTS (TBL))
+#define BUILD_STYLE_TABLE(TBL) build_style_table (TBL, countof (TBL))
 
 static Lisp_Object
 build_style_table (const struct table_entry *entry, int nelement)

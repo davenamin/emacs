@@ -3911,6 +3911,18 @@ android_set_foreground (struct android_gc *gc, unsigned long foreground)
 }
 
 void
+android_set_line_attributes (struct android_gc *gc, unsigned int line_width,
+			     enum android_line_style line_style)
+{
+  struct android_gc_values gcv;
+
+  gcv.line_width = line_width;
+  gcv.line_style = line_style;
+  android_change_gc (gc, (ANDROID_GC_LINE_WIDTH
+			  | ANDROID_GC_LINE_STYLE), &gcv);
+}
+
+void
 android_fill_rectangle (android_drawable handle, struct android_gc *gc,
 			int x, int y, unsigned int width,
 			unsigned int height)
@@ -4943,12 +4955,10 @@ android_get_image (android_drawable handle,
 
   if (bitmap_info.format != ANDROID_BITMAP_FORMAT_A_8)
     {
-      if (ckd_mul (&byte_size,
-		   (size_t) bitmap_info.stride,
-		   (size_t) bitmap_info.height))
+      if (ckd_mul (&byte_size, bitmap_info.stride, bitmap_info.height))
 	{
 	  ANDROID_DELETE_LOCAL_REF (bitmap);
-	  memory_full (0);
+	  memory_full_up ();
 	}
     }
   else
@@ -6159,8 +6169,6 @@ android_build_jstring (const char *text)
    ensure the same of global_foo, and also that foo is released both
    if global_foo cannot be allocated, and after the global reference
    is created.  */
-
-#define likely(cond)	__builtin_expect (cond, 1)
 
 /* Check for JNI exceptions and call memory_full in that
    situation.  */

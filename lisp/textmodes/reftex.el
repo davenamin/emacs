@@ -954,7 +954,7 @@ This enforces rescanning the buffer on next use."
     (setq reftex-type-query-prompt
           (concat "Label type: ["
                   (mapconcat (lambda(x) (format "%s" (car x)))
-                             qh-list "")
+                             qh-list)
                   "]"))
     ;; In the help string, we need to wrap lines...
     (setq reftex-type-query-help
@@ -1034,7 +1034,7 @@ This enforces rescanning the buffer on next use."
     (setq reftex-query-index-macro-prompt
           (concat "Index macro: ["
                   (mapconcat (lambda (x) (char-to-string (car x)))
-                             reftex-key-to-index-macro-alist "")
+                             reftex-key-to-index-macro-alist)
                   "]"))
     (setq i 0
           reftex-query-index-macro-help
@@ -1044,7 +1044,7 @@ This enforces rescanning the buffer on next use."
             (lambda(x)
               (format "[%c] %-20.20s%s" (car x) (nth 1 x)
                       (if (= 0 (mod (incf i) 3)) "\n" "")))
-            reftex-key-to-index-macro-alist "")))
+            reftex-key-to-index-macro-alist)))
 
     ;; Make the full list of section levels
     (setq reftex-section-levels-all
@@ -1235,7 +1235,10 @@ For non-file buffers, persistence operations are skipped."
       (if (file-exists-p file)
           ;; load the file and return t for success
           (condition-case nil
-              (progn (load-file file) t)
+              (progn
+                (let ((warning-inhibit-types '((files missing-lexbind-cookie))))
+                  (load-file file))
+                t)
             (error (set reftex-docstruct-symbol nil)
                    (error "Error while loading file %s" file)))
         ;; Throw an exception if the file does not exist
@@ -1246,7 +1249,8 @@ For non-file buffers, persistence operations are skipped."
           ;; load the file and return t for success
           (condition-case nil
               (progn
-                (load-file file)
+                (let ((warning-inhibit-types '((files missing-lexbind-cookie))))
+                  (load-file file))
                 (reftex-check-parse-consistency)
                 t)
             (error (message "Error while restoring file %s" file)
@@ -1265,7 +1269,7 @@ For non-file buffers, persistence operations are skipped."
         (if (file-writable-p file)
             (with-temp-file file
               (message "Writing parse file %s" (abbreviate-file-name file))
-              (insert ";; RefTeX parse info file\n")
+              (insert ";; RefTeX parse info file        -*- lexical-binding: t; -*-\n")
               (insert (format ";; File: %s\n" master))
               (insert (format ";; User: %s (%s)\n\n"
                               (user-login-name) (user-full-name)))
@@ -2179,8 +2183,6 @@ fonts.  Currently it is only used for reftex-label-face."
 ;;; Menu
 
 ;; Define a menu for the menu bar if Emacs is running under X
-
-(defvar-local reftex-isearch-minor-mode nil)
 
 (easy-menu-define reftex-mode-menu reftex-mode-map
  "Menu used in RefTeX mode."

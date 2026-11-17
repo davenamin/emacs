@@ -119,7 +119,8 @@ enum no_color_bit
   NC_DIM		 = 1 << 4,
   NC_BOLD		 = 1 << 5,
   NC_STRIKE_THROUGH	 = 1 << 6,
-  NC_PROTECT		 = 1 << 7
+  NC_PROTECT		 = 1 << 7,
+  NC_OVERLINE		 = 1 << 8
 };
 
 /* internal state */
@@ -554,7 +555,7 @@ encode_terminal_code (struct glyph *src, int src_len,
      Vglyph_table contains a string or a composite glyph is
      encountered.  */
   if (ckd_mul (&required, src_len, MAX_MULTIBYTE_LENGTH))
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   if (encode_terminal_src_size < required)
     encode_terminal_src = xpalloc (encode_terminal_src,
 				   &encode_terminal_src_size,
@@ -567,7 +568,7 @@ encode_terminal_code (struct glyph *src, int src_len,
   nchars = 0;
   while (src < src_end)
     {
-      if (src->type == COMPOSITE_GLYPH)
+      if (src->type == COMPOSITE_GLYPH && ! CHAR_GLYPH_PADDING_P (*src))
 	{
 	  struct composition *cmp;
 	  Lisp_Object gstring UNINIT;
@@ -1245,7 +1246,7 @@ calculate_costs (struct frame *frame)
       max_frame_cols = max (max_frame_cols, FRAME_COLS (frame));
       if ((min (PTRDIFF_MAX, SIZE_MAX) / sizeof (int) - 1) / 2
 	  < max_frame_cols)
-	memory_full (SIZE_MAX);
+	memory_full_up ();
 
       char_ins_del_vector =
 	xrealloc (char_ins_del_vector,
@@ -1427,7 +1428,7 @@ term_get_fkeys_1 (void)
   if (!KEYMAPP (KVAR (kboard, Vinput_decode_map)))
     kset_input_decode_map (kboard, Fmake_sparse_keymap (Qnil));
 
-  for (i = 0; i < ARRAYELTS (keys); i++)
+  for (i = 0; i < countof (keys); i++)
     {
       char *sequence = tgetstr (keys[i].cap, address);
       if (sequence)
@@ -1528,7 +1529,7 @@ term_get_fkeys_1 (void)
    available from the initial frame as in batch mode.  */
 
 static void append_glyph (struct it *);
-static void append_composite_glyph (struct it *);
+static void append_composite_glyph (struct it *, int padding);
 static void produce_composite_glyph (struct it *);
 static void append_glyphless_glyph (struct it *, int, const char *);
 static void produce_glyphless_glyph (struct it *, Lisp_Object);
@@ -1775,9 +1776,10 @@ produce_glyphs (struct it *it)
    face.  */
 
 static void
-append_composite_glyph (struct it *it)
+append_composite_glyph (struct it *it, int padding)
 {
-  struct glyph *glyph;
+  struct glyph *glyph, *end;
+  int i, width = 1 + padding;
 
   eassert (it->glyph_row);
   glyph = it->glyph_row->glyphs[it->area] + it->glyph_row->used[it->area];
@@ -1789,74 +1791,131 @@ append_composite_glyph (struct it *it)
     && !it->glyph_row->full_width_p
     && !WINDOW_RIGHTMOST_P (it->w)
     && WINDOW_RIGHT_MARGIN_WIDTH (it->w) == 0;
-  if (glyph < it->glyph_row->glyphs[1 + it->area] - reserve_last)
+  end = it->glyph_row->glyphs[1 + it->area] - reserve_last;
+  if (glyph < end)
     {
       /* If the glyph row is reversed, we need to prepend the glyph
 	 rather than append it.  */
       if (it->glyph_row->reversed_p && it->area == TEXT_AREA)
 	{
 	  struct glyph *g;
+	  int move_by = width;
 
 	  /* Make room for the new glyph.  */
+	  if (move_by > end - glyph)
+	    move_by = end - glyph;
 	  for (g = glyph - 1; g >= it->glyph_row->glyphs[it->area]; g--)
-	    g[1] = *g;
+	    g[move_by] = *g;
 	  glyph = it->glyph_row->glyphs[it->area];
-	}
-      glyph->type = COMPOSITE_GLYPH;
-      eassert (it->pixel_width <= SHRT_MAX);
-      glyph->pixel_width = it->pixel_width;
-      glyph->u.cmp.id = it->cmp_it.id;
-      if (it->cmp_it.ch < 0)
-	{
-	  glyph->u.cmp.automatic = 0;
-	  glyph->u.cmp.id = it->cmp_it.id;
-	}
-      else
-	{
-	  glyph->u.cmp.automatic = 1;
-	  glyph->u.cmp.id = it->cmp_it.id;
-	  glyph->slice.cmp.from = it->cmp_it.from;
-	  glyph->slice.cmp.to = it->cmp_it.to - 1;
+	  end = glyph + move_by;
 	}
 
-      glyph->avoid_cursor_p = it->avoid_cursor_p;
-      glyph->multibyte_p = it->multibyte_p;
-      glyph->frame = it->f;
-      glyph->face_id = it->face_id;
-      glyph->padding_p = false;
-      glyph->charpos = CHARPOS (it->position);
-      glyph->object = it->object;
-      if (it->bidi_p)
+      eassert(it->pixel_width <= SHRT_MAX);
+      for (i = 0;
+	   i < width && glyph < end;
+	   ++i)
 	{
-	  glyph->resolved_level = it->bidi_it.resolved_level;
-	  eassert ((it->bidi_it.type & 7) == it->bidi_it.type);
-	  glyph->bidi_type = it->bidi_it.type;
-	}
-      else
-	{
-	  glyph->resolved_level = 0;
-	  glyph->bidi_type = UNKNOWN_BT;
-	}
+	  glyph->type = COMPOSITE_GLYPH;
+	  glyph->pixel_width = it->pixel_width - padding;
+	  glyph->u.cmp.id = it->cmp_it.id;
+	  if (it->cmp_it.ch < 0)
+	    {
+	      glyph->u.cmp.automatic = 0;
+	      glyph->u.cmp.id = it->cmp_it.id;
+	    }
+	  else
+	    {
+	      glyph->u.cmp.automatic = 1;
+	      glyph->u.cmp.id = it->cmp_it.id;
+	      glyph->slice.cmp.from = it->cmp_it.from;
+	      glyph->slice.cmp.to = it->cmp_it.to - 1;
+	    }
+	  glyph->avoid_cursor_p = it->avoid_cursor_p;
+	  glyph->multibyte_p = it->multibyte_p;
+	  glyph->frame = it->f;
+	  glyph->face_id = it->face_id;
+	  glyph->padding_p = i > 0;
+	  glyph->charpos = CHARPOS (it->position);
+	  glyph->object = it->object;
+	  if (it->bidi_p)
+	    {
+	      glyph->resolved_level = it->bidi_it.resolved_level;
+	      eassert ((it->bidi_it.type & 7) == it->bidi_it.type);
+	      glyph->bidi_type = it->bidi_it.type;
+	    }
+	  else
+	    {
+	      glyph->resolved_level = 0;
+	      glyph->bidi_type = UNKNOWN_BT;
+	    }
 
-      ++it->glyph_row->used[it->area];
-      ++glyph;
+	  ++it->glyph_row->used[it->area];
+	  ++glyph;
+	}
     }
+}
+
+
+/* For some emoji sequences, the first character width might be 1.
+   Possibly render them as wide glyphs if it's requested.  */
+
+static bool
+composite_glyph_is_emoji_sequence (struct it *it)
+{
+  Lisp_Object gstring;
+  ptrdiff_t len;
+  int first, second, third;
+
+  /* Skip static compositions.  */
+  if (it->cmp_it.ch < 0)
+    return false;
+
+  gstring = composition_gstring_from_id (it->cmp_it.id);
+  len = LGSTRING_CHAR_LEN (gstring);
+  first = XFIXNUM (LGSTRING_CHAR (gstring, 0));
+  second = len < 2 ? 0 : XFIXNUM (LGSTRING_CHAR (gstring, 1));
+
+  /* Regional Indicators ("Flags" in emoji_zwj.awk).  */
+  if (0x1F1E6 <= first && first <= 0x1F1FF
+      && 0x1F1E6 <= second && second <= 0x1F1FF)
+    return true;
+
+  /* The rest two cases both require Base.  */
+  if (NILP (Fmemq (make_fixnum (first),
+		   Vauto_composition_emoji_tty_eligible_codepoints)))
+    return false;
+
+  /* Base + VS16/Modifier.  */
+  if (second == 0xFE0F || (0x1F3FB <= second && second <= 0x1F3FF))
+    return true;
+
+  /* Unqualified RGI sequences: Base + ZWJ + TailInitial ...  */
+  third = len < 3 ? 0 : XFIXNUM (LGSTRING_CHAR (gstring, 2));
+  return second == 0x200D
+    && ! NILP (Fmemq (make_fixnum (third),
+		      Vauto_composition_emoji_unqualified_tail_initials));
 }
 
 
 /* Produce a composite glyph for iterator IT.  IT->cmp_id is the ID of
    the composition.  We simply produces components of the composition
    assuming that the terminal has a capability to layout/render it
-   correctly.  */
+   correctly.  A padding glyph is added if both the composition and the
+   first character has width >= 2.  As a special case, if the composite
+   glyph is determined to be an emoji sequence, it may also add a
+   padding glyph.  */
 
 static void
 produce_composite_glyph (struct it *it)
 {
+  int padding, first_char;
+
   if (it->cmp_it.ch < 0)
     {
       struct composition *cmp = composition_table[it->cmp_it.id];
 
       it->pixel_width = cmp->width;
+      first_char = it->c;
     }
   else
     {
@@ -1864,10 +1923,16 @@ produce_composite_glyph (struct it *it)
 
       it->pixel_width = composition_gstring_width (gstring, it->cmp_it.from,
 						   it->cmp_it.to, NULL);
+      first_char = LGLYPH_CHAR (LGSTRING_GLYPH (gstring,
+						it->cmp_it.from));
     }
-  it->nglyphs = 1;
+
+  padding = (it->pixel_width >= 2 && CHARACTER_WIDTH (first_char) >= 2)
+    || (tty_display_emoji_force_wide
+	&& composite_glyph_is_emoji_sequence (it));
+  it->nglyphs = 1 + padding;
   if (it->glyph_row)
-    append_composite_glyph (it);
+    append_composite_glyph (it, padding);
 }
 
 
@@ -2090,6 +2155,10 @@ turn_on_face (struct frame *f, struct face *face)
       && MAY_USE_WITH_COLORS_P (tty, NC_STRIKE_THROUGH))
     OUTPUT1_IF (tty, tty->TS_enter_strike_through_mode);
 
+  if (face->tty_overline_p
+      && MAY_USE_WITH_COLORS_P (tty, NC_OVERLINE))
+    OUTPUT1_IF (tty, tty->TS_enter_overline_mode);
+
   if (tty->TN_max_colors > 0)
     {
       const char *ts;
@@ -2138,13 +2207,14 @@ turn_off_face (struct frame *f, struct face *face)
   if (tty->TS_exit_attribute_mode)
     {
       /* Capability "me" will turn off appearance modes double-bright,
-	 half-bright, reverse-video, standout, underline.  It may or
-	 may not turn off alt-char-mode.  */
+	 half-bright, reverse-video, standout, underline, overline,
+	 strike-through.  It may or may not turn off alt-char-mode.  */
       if (face->tty_bold_p
 	  || face->tty_italic_p
 	  || face->tty_reverse_p
 	  || face->underline
-	  || face->tty_strike_through_p)
+	  || face->tty_strike_through_p
+	  || face->tty_overline_p)
 	{
 	  OUTPUT1_IF (tty, tty->TS_exit_attribute_mode);
 	  if (strcmp (tty->TS_exit_attribute_mode, tty->TS_end_standout_mode) == 0)
@@ -2198,6 +2268,9 @@ tty_capable_p (struct tty_display_info *tty, unsigned int caps)
   TTY_CAPABLE_P_TRY (tty,
 		     TTY_CAP_STRIKE_THROUGH, tty->TS_enter_strike_through_mode,
 		     NC_STRIKE_THROUGH);
+  TTY_CAPABLE_P_TRY (tty,
+		     TTY_CAP_OVERLINE,    tty->TS_enter_overline_mode,
+		     NC_OVERLINE);
 
   /* We can do it!  */
   return 1;
@@ -2420,6 +2493,27 @@ TERMINAL does not refer to a text terminal.  */)
   return Qnil;
 }
 
+DEFUN ("tty-enable-overline", Ftty_enable_overline, Stty_enable_overline, 1, 2, 0,
+       doc: /* Enable or disable overline support in TERMINAL.
+This is used to override terminfo data for terminals that do not
+accurately state the Smol (overline) string capability.
+
+When FLAG is non-nil enable overline support, when FLAG is nil disable
+overline support.  When this function enables overline support, Emacs
+will always use the SGR 53 escape sequence regardless of what is in the
+terminfo database.  This function has no effect if used on a non-tty
+terminal.  */)
+  (Lisp_Object flag, Lisp_Object terminal)
+{
+  struct terminal *t = decode_live_terminal (terminal);
+  if (t->type == output_termcap)
+    {
+      t->display_info.tty->TS_enter_overline_mode =
+	(NILP (flag) ? NULL : "\e[53m");
+    }
+  return Qnil;
+}
+
 DEFUN ("tty-top-frame", Ftty_top_frame, Stty_top_frame, 0, 1, 0,
        doc: /* Return the topmost terminal frame on TERMINAL.
 TERMINAL can be a terminal object, a frame or nil (meaning the
@@ -2613,7 +2707,7 @@ This function temporarily suspends and resumes the terminal
 device.  */)
   (Lisp_Object size, Lisp_Object tty)
 {
-  if (!TYPE_RANGED_FIXNUMP (size_t, size))
+  if (!RANGED_FIXNUMP (0, size, min (PTRDIFF_MAX, SIZE_MAX)))
     error ("Invalid output buffer size");
   Fsuspend_tty (tty);
   struct terminal *terminal = decode_tty_terminal (tty);
@@ -3200,9 +3294,10 @@ mouse_get_xy (int *x, int *y)
 {
   Lisp_Object mouse = mouse_position (tty_menu_calls_mouse_position_function);
 
-  struct frame *f = XFRAME (XCAR (mouse));
+  /* The car of MOUSE could be nil, e.g. if X/Y are outside the TTY frame.  */
+  struct frame *f = FRAMEP (XCAR (mouse)) ? XFRAME (XCAR (mouse)) : NULL;
   struct frame *sf = SELECTED_FRAME ();
-  if (f == sf || frame_ancestor_p (sf, f))
+  if (f && (f == sf || frame_ancestor_p (sf, f)))
     {
       Lisp_Object lmx = XCAR (XCDR (mouse)), lmy = XCDR (XCDR (mouse));
       if (FIXNUMP (lmx) && FIXNUMP (lmy))
@@ -3444,6 +3539,14 @@ typedef enum {
   MI_SCROLL_BACK    = 5
 } mi_result;
 
+static Lisp_Object
+read_menu_error (Lisp_Object error_val)
+{
+  add_to_log ("Error in reading TTY menu commands: %s",
+	      Ferror_message_string (error_val));
+  return Qnil;
+}
+
 /* Read user input and return X and Y coordinates where that input
    puts us.  We only consider mouse movement and click events, and
    keyboard movement commands; the rest are ignored.  */
@@ -3470,7 +3573,12 @@ read_menu_input (struct frame *sf, int *x, int *y, int min_y, int max_y,
       /* We want mouse movements be reported by read_menu_command.  */
       track_mouse = Qt;
       do {
-	cmd = read_menu_command ();
+	/* This function and our callers set all kinds of flags, like
+	   Vinhibit_redisplay and tty->showing_menu, so we cannot allow
+	   non-local exits from read_menu_command (which could happen if
+	   read_key_sequence runs Lisp that signals an error), because
+	   we will then fail to restore these flags.  */
+	cmd = internal_condition_case (read_menu_command, Qt, read_menu_error);
       } while (NILP (cmd));
       tty->showing_menu = 0;
       track_mouse = old_track_mouse;
@@ -3537,7 +3645,6 @@ tty_menu_activate (tty_menu *menu, int *pane, int *selidx,
   Lisp_Object selectface;
   int first_item = 0;
   int col, row;
-  Lisp_Object prev_inhibit_redisplay = Vinhibit_redisplay;
   USE_SAFE_ALLOCA;
 
   /* Don't allow non-positive x0 and y0, lest the menu will wrap
@@ -3583,7 +3690,8 @@ tty_menu_activate (tty_menu *menu, int *pane, int *selidx,
   /* Inhibit redisplay for as long as the menu is active, to avoid
      messing the screen if some timer calls sit-for or a similar
      function.  */
-  Vinhibit_redisplay = Qt;
+  specpdl_ref count = SPECPDL_INDEX ();
+  specbind (Qinhibit_redisplay, Qt);
 
   /* Force update of the current frame, so that the desired and the
      current matrices are identical.  */
@@ -3631,6 +3739,15 @@ tty_menu_activate (tty_menu *menu, int *pane, int *selidx,
       int max_y = min (min_y + state[0].menu->count, FRAME_TOTAL_LINES (sf) - 1) - 1;
 
       input_status = read_menu_input (sf, &x, &y, min_y, max_y, &first_time);
+      /* If the menu's frame is no longer alive, we must terminate the
+         menu at once, because the frame's glyph matrices are no longer
+         valid.  This can happen if someone forcefully closes or deletes
+         the frame's terminal while we were waiting for menu input.  */
+      if (!FRAME_LIVE_P (sf))
+	{
+          result = TTYM_NO_SELECT;
+          goto immediate_exit;
+	}
       if (input_status)
 	{
 	  leave = 1;
@@ -3761,12 +3878,15 @@ tty_menu_activate (tty_menu *menu, int *pane, int *selidx,
 
   sf->mouse_moved = 0;
   screen_update (sf, state[0].screen_behind);
-  while (statecount--)
-    free_saved_screen (state[statecount].screen_behind);
   tty_show_cursor (tty);	/* Turn cursor back on.  */
   fflush (tty->output);
 
-/* Clean up any mouse events that are waiting inside Emacs event queue.
+ immediate_exit:
+
+  while (statecount--)
+    free_saved_screen (state[statecount].screen_behind);
+
+  /* Clean up any mouse events that are waiting inside Emacs event queue.
      These events are likely to be generated before the menu was even
      displayed, probably because the user pressed and released the button
      (which invoked the menu) too quickly.  If we don't remove these events,
@@ -3774,8 +3894,8 @@ tty_menu_activate (tty_menu *menu, int *pane, int *selidx,
   discard_mouse_events ();
   if (!kbd_buffer_events_waiting ())
     clear_input_pending ();
+  unbind_to (count, Qnil);
   SAFE_FREE ();
-  Vinhibit_redisplay = prev_inhibit_redisplay;
   return result;
 }
 
@@ -4585,12 +4705,16 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
   tty->TS_exit_attribute_mode = tgetstr ("me", address);
 #ifdef TERMINFO
   tty->TS_enter_strike_through_mode = tigetstr ("smxx");
-  if (tty->TS_enter_strike_through_mode == (char *) (intptr_t) -1)
+  if (tty->TS_enter_strike_through_mode == (char *) (intptr_t) {-1})
     tty->TS_enter_strike_through_mode = NULL;
+  tty->TS_enter_overline_mode = tigetstr ("Smol");
+  if (tty->TS_enter_overline_mode == (char *) (intptr_t) {-1})
+    tty->TS_enter_overline_mode = NULL;
 #else
   /* FIXME: Is calling tgetstr here for non-terminfo case correct,
      even though "smxx" is more than 2 characters?  */
   tty->TS_enter_strike_through_mode = tgetstr ("smxx", address);
+  tty->TS_enter_overline_mode = tgetstr ("Smol", address);
 #endif
 
   MultiUp (tty) = tgetstr ("UP", address);
@@ -4621,8 +4745,8 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
 	const char *bg;
 	/* Our own non-standard support for 24-bit colors. */
 	if ((fg = tigetstr ("setf24")) && (bg = tigetstr ("setb24"))
-	    && fg != (char *) (intptr_t) -1
-	    && bg != (char *) (intptr_t) -1)
+	    && fg != (char *) (intptr_t) {-1}
+	    && bg != (char *) (intptr_t) {-1})
 	  {
 	    tty->TS_set_foreground = fg;
 	    tty->TS_set_background = bg;
@@ -4630,8 +4754,8 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
 	  }
 	/* Other non-standard support for 24-bit colors. */
 	else if ((fg = tigetstr ("setrgbf")) && (bg = tigetstr ("setrgbb"))
-	    && fg != (char *) (intptr_t) -1
-	    && bg != (char *) (intptr_t) -1)
+	    && fg != (char *) (intptr_t) {-1}
+	    && bg != (char *) (intptr_t) {-1})
 	  {
 	    tty->TS_set_foreground = fg;
 	    tty->TS_set_background = bg;
@@ -4652,7 +4776,7 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
 	       setaf and setab treat them as the first eight indexed
 	       ANSI colors. */
 	  }
-	/* Fall back to direct colour by RGB value (semicolon version)
+	/* Fall back to direct color by RGB value (semicolon version)
 	   if Tc is set (de-facto standard introduced by tmux) or if
 	   requested by the COLORTERM environment variable.  */
 	else if ((tigetflag ("Tc") > 0)
@@ -4692,7 +4816,7 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
      common default escape sequence and is not recommended.  */
 #ifdef TERMINFO
   tty->TF_set_underline_style = tigetstr ("Smulx");
-  if (tty->TF_set_underline_style == (char *) (intptr_t) -1)
+  if (tty->TF_set_underline_style == (char *) (intptr_t) {-1})
     tty->TF_set_underline_style = NULL;
 #else
   tty->TF_set_underline_style = tgetstr ("Smulx", address);
@@ -4728,6 +4852,9 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
     tty->TS_enter_italic_mode = "\x1b[3m";
     tty->TS_enter_strike_through_mode = "\x1b[9m";
     tty->TS_enter_underline_mode = "\x1b[4m";
+    tty->TF_set_underline_style = "\x1b[4:%um";
+    tty->TF_set_underline_color = "\x1b[58:2::%lu:%lu:%lum";
+    tty->TS_enter_overline_mode = "\x1b[53m";
     tty->TS_enter_reverse_mode = "\x1b[7m";
     tty->TS_exit_attribute_mode = "\x1b[0m";
 
@@ -4751,6 +4878,7 @@ use the Bourne shell command 'TERM=...; export TERM' (C-shell:\n\
     FrameCols (tty) = width;
     FrameRows (tty) = height;
     tty->char_ins_del_ok = 0;
+    tty->TN_max_colors = 16;  /* Must be non-zero for tty-display-color-p.  */
     init_baud_rate (fileno (tty->input));
   }
 #endif	/* MSDOS */
@@ -5263,12 +5391,62 @@ On TTY frames, as a display optimization, Emacs may move to a position
 by "overshooting" with TAB characters and one BACKSPACE character, when
 this is more efficient.  This combination can interfere with the
 functioning of some software, such as screen readers.  Set this to
-non-nil to enable this optimization.  */);
+non-nil to enable this optimization.
+If `tty-cursor-movement-use-TAB' is nil, this variable has no effect,
+as Emacs will never use TABs for cursor movement.  */);
   tty_cursor_movement_use_TAB_BS = 0;
+
+  DEFVAR_BOOL ("tty-cursor-movement-use-TAB", tty_cursor_movement_use_TAB,
+    doc: /* Whether TTY frames may use TAB for cursor motion.
+On TTY frames, as a display optimization, Emacs may move cursor to a
+position with TAB characters, when this is more efficient.  This might
+produce wrong results if the hardware tabs of the terminal were set to
+be of different width than Emacs expects.  Set this to nil to disable
+using TABs for cursor motion.  */);
+  tty_cursor_movement_use_TAB = 1;
+
+  DEFVAR_LISP ("auto-composition-emoji-tty-eligible-codepoints", Vauto_composition_emoji_tty_eligible_codepoints,
+    doc: /* List of characters displayed as Emoji on TTY frames when followed by VS-16.
+
+These are codepoints which have Emoji_Presentation = No, and thus by
+default are not displayed as Emoji.  When followed by U+FE0F (VS-16),
+they may be considered as the beginning of an Emoji sequence instead.
+
+Some initial code points may have character width 1, and non-compliant
+terminals may render them narrow.  In that case, set
+`tty-display-emoji-force-wide' to nil.
+
+This list is auto-generated, you should not need to modify it.  */);
+  Vauto_composition_emoji_tty_eligible_codepoints = Qnil;
+
+  DEFVAR_LISP ("auto-composition-emoji-unqualified-tail-initials", Vauto_composition_emoji_unqualified_tail_initials,
+    doc: /* List of characters that may begin the tail of an unqualified RGI sequence.
+
+An unqualified RGI sequence begins with a codepoint in
+`auto-composition-emoji-tty-eligible-codepoints', followed by a
+Zero-Width Joiner.  The first character after the first ZWJ must be in
+this list to be recognized as an Emoji sequence.
+
+This list is auto-generated, you should not need to modify it.  */);
+  Vauto_composition_emoji_unqualified_tail_initials = Qnil;
+
+  DEFVAR_BOOL ("tty-display-emoji-force-wide", tty_display_emoji_force_wide,
+    doc: /* Whether Emoji sequences on TTY frames should always be considered wide.
+
+On TTY frames, an Emoji sequence considered for composition may begin
+with any code point in `auto-composition-emoji-tty-eligible-codepoints',
+which does not necessarily has width 2.  A compliant terminal emulator
+typically render an Emoji sequence as a wide glyph.
+
+When nil, an Emoji sequence whose first character's width is 1 may be
+considered as a narrow glyph to be compatible with some non-compliant
+terminal emulators.  */);
+  tty_display_emoji_force_wide = true;
 
   defsubr (&Stty_display_color_p);
   defsubr (&Stty_display_color_cells);
   defsubr (&Stty_no_underline);
+  defsubr (&Stty_enable_overline);
   defsubr (&Stty_type);
   defsubr (&Scontrolling_tty_p);
   defsubr (&Stty_top_frame);
@@ -5325,4 +5503,5 @@ non-nil to enable this optimization.  */);
   DEFSYM (Qresume_tty_functions, "resume-tty-functions");
   DEFSYM (Qtty_menu_disabled_face, "tty-menu-disabled-face");
   DEFSYM (Qtty_menu_enabled_face, "tty-menu-enabled-face");
+  DEFSYM (Qtty_kitty_kbd_proto, "tty-kitty-kbd-proto");
 }

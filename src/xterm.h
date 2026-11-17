@@ -1842,7 +1842,7 @@ extern Atom x_intern_cached_atom (struct x_display_info *, const char *,
 				  bool);
 extern void x_intern_atoms (struct x_display_info *, char **, int, Atom *);
 extern char *x_get_atom_name (struct x_display_info *, Atom, bool *)
-  ATTRIBUTE_MALLOC ATTRIBUTE_DEALLOC_FREE;
+  ATTRIBUTE_MALLOC ATTRIBUTE_DEALLOC (xfree, 1);
 
 #ifdef HAVE_GTK3
 extern void x_scroll_bar_configure (GdkEvent *);
@@ -1858,7 +1858,7 @@ extern void x_handle_pending_selection_requests (void);
 extern bool x_detect_pending_selection_requests (void);
 extern Lisp_Object x_dnd_begin_drag_and_drop (struct frame *, Time, Atom,
 					      Lisp_Object, Atom *, const char **,
-					      size_t, bool, Atom *, int,
+					      int, bool, Atom *, int,
 					      Lisp_Object, bool);
 extern int x_display_pixel_height (struct x_display_info *);
 extern int x_display_pixel_width (struct x_display_info *);

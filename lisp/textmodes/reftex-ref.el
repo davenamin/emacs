@@ -106,7 +106,9 @@ If optional BOUND is an integer, limit backward searches to that point."
          (typekey (cdr (assoc prefix reftex-prefix-to-typekey-alist)))
          (file (or file (reftex--get-buffer-identifier)))
          (trust reftex-trust-label-prefix)
-         (in-comment (reftex-in-comment)))
+         (in-comment (and (reftex-in-comment)
+                          (not (or (derived-mode-p '(doctex-mode docTeX-mode))
+                                   (string-suffix-p ".dtx" file))))))
     (if (and typekey
              (cond ((eq trust t) t)
                    ((null trust) nil)
@@ -134,7 +136,7 @@ With prefix arg, force to rescan document first.
 When you are prompted to enter or confirm a label, and you reply with
 just the prefix or an empty string, no label at all will be inserted.
 A new label is also recorded into the label list.
-This function is controlled by the settings of reftex-insert-label-flags."
+This function is controlled by the settings of `reftex-insert-label-flags'."
 
   (interactive)
 
@@ -304,7 +306,7 @@ also applies `reftex-translate-to-ascii-function' to the string."
              ((and (> c 2175) (< c 2304))               ; Mule Latin-1
               (char-to-string (aref tab (- c 2176))))
              (t (char-to-string c))))
-     string "")))
+     string)))
 
 (defun reftex-replace-prefix-escapes (prefix)
   ;; Replace %escapes in a label prefix

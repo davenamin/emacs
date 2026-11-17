@@ -47,6 +47,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
 #include "lisp.h"
 #include "w32term.h"
+#include "w32font.h"
 #include "frame.h"
 #include "window.h"
 #include "buffer.h"
@@ -200,6 +201,9 @@ typedef BOOL (WINAPI * ImmSetCompositionWindow_Proc) (IN HIMC context,
 typedef BOOL (WINAPI * ImmGetOpenStatus_Proc) (IN HIMC);
 typedef BOOL (WINAPI * ImmSetOpenStatus_Proc) (IN HIMC, IN BOOL);
 
+/* Set IME font.  */
+typedef BOOL (WINAPI * ImmSetCompositionFont_Proc) (IN HIMC, LPLOGFONTW lplf);
+
 typedef HMONITOR (WINAPI * MonitorFromPoint_Proc) (IN POINT pt, IN DWORD flags);
 typedef BOOL (WINAPI * GetMonitorInfo_Proc)
   (IN HMONITOR monitor, OUT struct MONITOR_INFO* info);
@@ -247,6 +251,7 @@ static ImmGetCompositionString_Proc get_composition_string_fn = NULL;
 static ImmGetContext_Proc get_ime_context_fn = NULL;
 static ImmGetOpenStatus_Proc get_ime_open_status_fn = NULL;
 static ImmSetOpenStatus_Proc set_ime_open_status_fn = NULL;
+static ImmSetCompositionFont_Proc set_ime_composition_font_fn = NULL;
 static ImmReleaseContext_Proc release_ime_context_fn = NULL;
 static ImmSetCompositionWindow_Proc set_ime_composition_window_fn = NULL;
 static MonitorFromPoint_Proc monitor_from_point_fn = NULL;
@@ -838,7 +843,7 @@ w32_default_color_map (void)
 
   cmap = Qnil;
 
-  for (i = 0; i < ARRAYELTS (w32_color_map); pc++, i++)
+  for (i = 0; i < countof (w32_color_map); pc++, i++)
     cmap = Fcons (Fcons (build_string (pc->name),
 			 make_fixnum (pc->colorref)),
 		  cmap);
@@ -2376,7 +2381,7 @@ HCURSOR
 w32_load_cursor (LPCTSTR name)
 {
   /* Try first to load cursor from application resource.  */
-  HCURSOR cursor = LoadImage ((HINSTANCE) GetModuleHandle (NULL),
+  HCURSOR cursor = LoadImage (GetModuleHandle (NULL),
                               name, IMAGE_CURSOR, 0, 0,
                               LR_DEFAULTCOLOR | LR_DEFAULTSIZE | LR_SHARED);
   if (!cursor)
@@ -2392,7 +2397,7 @@ static LRESULT CALLBACK w32_wnd_proc (HWND, UINT, WPARAM, LPARAM);
 
 #define INIT_WINDOW_CLASS(WC)			  \
   (WC).style = CS_HREDRAW | CS_VREDRAW;		  \
-  (WC).lpfnWndProc = (WNDPROC) w32_wnd_proc;      \
+  (WC).lpfnWndProc = w32_wnd_proc;      	  \
   (WC).cbClsExtra = 0;                            \
   (WC).cbWndExtra = WND_EXTRA_BYTES;              \
   (WC).hInstance = hinst;                         \
@@ -2536,7 +2541,7 @@ Lisp_Object
 w32_process_dnd_data (int format, void *hGlobal)
 {
   Lisp_Object result = Qnil;
-  HGLOBAL hg = (HGLOBAL) hGlobal;
+  HGLOBAL hg = hGlobal;
 
   switch (format)
     {
@@ -2834,7 +2839,7 @@ w32_createwindow (struct frame *f, int *coords)
 	}
 
       /* Reset F's touch point array.  */
-      for (i = 0; i < ARRAYELTS (f->output_data.w32->touch_ids); ++i)
+      for (i = 0; i < countof (f->output_data.w32->touch_ids); ++i)
 	f->output_data.w32->touch_ids[i] = -1;
 
       /* Assign an offset for touch points reported to F.  */
@@ -3803,19 +3808,23 @@ w32_msg_pump (deferred_msg * msg_buf)
 
 		set_ime_open_status_fn (context, msg.wParam != 0);
 		release_ime_context_fn (focus_window, context);
-		break;
+
+		goto dispatch;
 	      }
 
+	    default:
 #ifdef MSG_DEBUG
 	      /* Broadcast messages make it here, so you need to be looking
 		 for something in particular for this to be useful.  */
-	    default:
 	      DebPrint (("msg %x not expected by w32_msg_pump\n", msg.message));
 #endif
+	      /* Handle extra events for compatibility, preventing not dispatch.  */
+	      goto dispatch;
 	    }
 	}
       else
 	{
+	dispatch:
 	  if (w32_unicode_gui)
 	    DispatchMessageW (&msg);
 	  else
@@ -4173,7 +4182,7 @@ deliver_wm_chars (int do_translate, HWND hwnd, UINT msg, UINT wParam,
       windows_msg.time = GetMessageTime ();
       TranslateMessage (&windows_msg);
     }
-  count = get_wm_chars (hwnd, buf, ARRAYELTS (buf), 1,
+  count = get_wm_chars (hwnd, buf, countof (buf), 1,
 			/* The message may have been synthesized by
 			   who knows what; be conservative.  */
 			modifier_set (VK_LCONTROL)
@@ -5032,6 +5041,7 @@ w32_wnd_proc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
       else
 	{
 	  COMPOSITIONFORM form;
+	  LOGFONTW lf;
 	  HIMC context;
 	  struct window *w;
 
@@ -5077,6 +5087,8 @@ w32_wnd_proc (HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 	  if (!context)
 	    goto dflt;
 
+	  GetObjectW (FONT_HANDLE (w32_system_remap_font), sizeof (lf), &lf);
+	  set_ime_composition_font_fn (context, &lf);
 	  set_ime_composition_window_fn (context, &form);
 	  release_ime_context_fn (hwnd, context);
 	}
@@ -8413,7 +8425,7 @@ DEFUN ("x-file-dialog", Fx_file_dialog, Sx_file_dialog, 2, 5, 0,
 	  file_details_w->lStructSize = sizeof (*file_details_w);
 	/* Set up the inout parameter for the selected file name.  */
 	file_details_w->lpstrFile = filename_buf_w;
-	file_details_w->nMaxFile = ARRAYELTS (filename_buf_w);
+	file_details_w->nMaxFile = countof (filename_buf_w);
 	file_details_w->hwndOwner = FRAME_W32_WINDOW (f);
 	/* Undocumented Bug in Common File Dialog:
 	   If a filter is not specified, shell links are not resolved.  */
@@ -8446,7 +8458,7 @@ DEFUN ("x-file-dialog", Fx_file_dialog, Sx_file_dialog, 2, 5, 0,
 	else
 	  file_details_a->lStructSize = sizeof (*file_details_a);
 	file_details_a->lpstrFile = filename_buf_a;
-	file_details_a->nMaxFile = ARRAYELTS (filename_buf_a);
+	file_details_a->nMaxFile = countof (filename_buf_a);
 	file_details_a->hwndOwner = FRAME_W32_WINDOW (f);
 	file_details_a->lpstrFilter = filter_a;
 	file_details_a->lpstrInitialDir = dir_a;
@@ -10774,7 +10786,14 @@ DEFUN ("w32-get-ime-open-status",
        doc: /* Return non-nil if IME is active, otherwise return nil.
 
 IME, the MS-Windows Input Method Editor, can be active or inactive.
-This function returns non-nil if the IME is active, otherwise nil.  */)
+This function returns non-nil if the IME is active, otherwise nil.
+
+Caveat: on Windows 11 and later, this function might return non-nil
+even when IME is not active, or nil when it's active.  This is due to
+"new" TSF-based IME which have known compatibility issues with
+IME-related APIs which Emacs uses.  A workaround is to switch to the
+legacy IME mode, a.k.a. the "previous version of Microsoft IME", in
+the IME Compatibility settings.  */)
   (void)
 {
   struct frame *sf =
@@ -11561,6 +11580,19 @@ frame_parm_handler w32_frame_parm_handlers[] =
   gui_set_alpha_background,
   gui_set_borders_respect_alpha_background,
   0, /* x_set_use_frame_synchronization */
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
 };
 
 void
@@ -12116,9 +12148,9 @@ typedef USHORT (WINAPI * CaptureStackBackTrace_proc) (ULONG, ULONG, PVOID *,
    -Wl,-image-base switch we use in LD_SWITCH_SYSTEM_TEMACS, see
    configure.ac.  */
 #if defined MINGW_W64 && EMACS_INT_MAX > LONG_MAX
-# define DEFAULT_IMAGE_BASE (ptrdiff_t)0x400000000
+# define DEFAULT_IMAGE_BASE 0x400000000
 #elif !defined CYGWIN	/* 32-bit MinGW build */
-# define DEFAULT_IMAGE_BASE (ptrdiff_t)0x01000000
+# define DEFAULT_IMAGE_BASE 0x01000000
 #endif
 
 static int
@@ -12332,6 +12364,9 @@ globals_of_w32fns (void)
       get_proc_addr (imm32_lib, "ImmGetOpenStatus");
     set_ime_open_status_fn = (ImmSetOpenStatus_Proc)
       get_proc_addr (imm32_lib, "ImmSetOpenStatus");
+
+    set_ime_composition_font_fn = (ImmSetCompositionFont_Proc)
+      get_proc_addr (imm32_lib, "ImmSetCompositionFontW");
   }
 
   HMODULE hm_kernel32 = GetModuleHandle ("kernel32.dll");

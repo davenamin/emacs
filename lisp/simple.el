@@ -510,10 +510,11 @@ select the source buffer."
 (defvar next-error-follow-last-line nil)
 
 (define-minor-mode next-error-follow-minor-mode
-  "Minor mode for compilation, occur and diff modes.
+  "Minor mode for Compilation, Grep, Occur and Diff modes.
 
-When turned on, cursor motion in the compilation, grep, occur or diff
-buffer causes automatic display of the corresponding source code location."
+When turned on, cursor motion in Compilation, Grep, Occur and Diff mode
+buffers causes automatic display of the corresponding source code
+location."
   :group 'next-error :init-value nil :lighter " Fol"
   (if (not next-error-follow-minor-mode)
       (remove-hook 'post-command-hook 'next-error-follow-mode-post-command-hook t)
@@ -748,6 +749,8 @@ When called from Lisp code, ARG may be a prefix string to copy."
      :height 0.1 :background "#505050")
     (((type graphic) (background light))
      :height 0.1 :background "#a0a0a0")
+    (((supports :strike-through t))
+     :foreground "ForestGreen" :strike-through t)
     (t
      :foreground "ForestGreen" :underline t))
   "Face for separator lines."
@@ -760,12 +763,14 @@ This uses the `separator-line' face.
 
 If LENGTH is nil, use the window width."
   (if (or (display-graphic-p)
+          (display-supports-face-attributes-p '(:strike-through t))
           (display-supports-face-attributes-p '(:underline t)))
       (if length
           (concat (propertize (make-string length ?\s) 'face 'separator-line)
                   "\n")
         (propertize "\n" 'face '(:inherit separator-line :extend t)))
-    ;; In terminals (that don't support underline), use a line of dashes.
+    ;; In terminals that don't support underline or strike-through, use
+    ;; a line of dashes.
     (concat (propertize (make-string (or length (1- (window-width))) ?-)
                         'face 'separator-line)
             "\n")))
@@ -1700,7 +1705,7 @@ rather than line counts."
 The line number is relative to the accessible portion of the narrowed
 buffer.  The arguments BUFFER and INTERACTIVE are the same as in the
 function `goto-line'."
-  (interactive (append (goto-line-read-args t) t))
+  (interactive (append (goto-line-read-args t) '(t)))
   (goto-line line buffer t interactive))
 
 (defun count-words-region (start end &optional arg)
@@ -3703,23 +3708,39 @@ Return what remains of the list."
            (delete-region beg end))
           ;; Element (apply FUN . ARGS) means call FUN to undo.
           (`(apply . ,fun-args)
-           (let ((currbuff (current-buffer)))
-             (if (integerp (car fun-args))
-                 ;; Long format: (apply DELTA START END FUN . ARGS).
-                 (pcase-let* ((`(,delta ,start ,end ,fun . ,args) fun-args)
-                              (start-mark (copy-marker start nil))
-                              (end-mark (copy-marker end t)))
-                   (when (or (> (point-min) start) (< (point-max) end))
-                     (error "Changes to be undone are outside visible portion of buffer"))
-                   (apply fun args) ;; Use `save-current-buffer'?
-                   ;; Check that the function did what the entry
-                   ;; said it would do.
-                   (unless (and (= start start-mark)
-                                (= (+ delta end) end-mark))
-                     (error "Changes undone by function are different from the announced ones"))
-                   (set-marker start-mark nil)
-                   (set-marker end-mark nil))
-               (apply fun-args))
+           (pcase-let* ((`(,delta ,start ,end ,fun . ,args)
+                         (pcase-exhaustive fun-args
+                           ((and `(,delta (,start . ,end) ,fun . ,args)
+                                 (guard (and (integerp delta)
+                                             (natnump start)
+                                             (natnump end)
+                                             (symbolp fun))
+                                        (guard (symbolp fun))))
+                            (cl-list* delta start end fun start end args))
+                           ((and `(,delta ,start ,end ,fun . ,_args)
+                                 (guard (and (integerp delta)
+                                             (natnump start)
+                                             (natnump end)
+                                             (symbolp fun))))
+                            fun-args)
+                           ((and `(,fun . ,args)
+                                 (guard (symbolp fun)))
+                            (cl-list* nil 1 (buffer-size) fun args))))
+                        (currbuff (current-buffer))
+                        (start-mark (copy-marker start nil))
+                        (end-mark (copy-marker end t)))
+             (when (and delta
+                        (or (< start (point-min)) (< (point-max) end)))
+               (error "Changes to be undone are outside visible\
+ portion of buffer"))
+             (apply fun args)
+             (when (and delta
+                        (or (/= start start-mark)
+                            (/= (+ delta end) end-mark)))
+               (error "Changes undone by function are different\
+ from the announced ones"))
+             (set-marker start-mark nil)
+             (set-marker end-mark nil)
              (unless (eq currbuff (current-buffer))
                (error "Undo function switched buffer"))
              (setq did-apply t)))
@@ -3940,7 +3961,16 @@ marker adjustment's corresponding (TEXT . POS) element."
 	((integerp (car undo-elt))
 	 ;; (BEGIN . END)
 	 (and (>= (car undo-elt) start)
-	      (<= (cdr undo-elt) end)))))
+	      (<= (cdr undo-elt) end)))
+        ((and (eq (nth 0 undo-elt) 'apply)
+              (integerp (nth 1 undo-elt))
+              (consp (nth 2 undo-elt))
+              (natnump (car (nth 2 undo-elt)))
+              (natnump (cdr (nth 2 undo-elt)))
+              (symbolp (nth 3 undo-elt)))
+         ;; (apply DELTA (BEG . END) FUN . ARGS)
+         (and (>= (car (nth 2 undo-elt)) start)
+	      (<= (cdr (nth 2 undo-elt)) end)))))
 
 (defun undo-elt-crosses-region (undo-elt start end)
   "Test whether UNDO-ELT crosses one edge of that region START ... END.
@@ -3974,7 +4004,13 @@ is not *inside* the region START...END."
     ;; (nil PROPERTY VALUE BEG . END)
     (`(nil . ,(or `(,prop ,val ,beg . ,end) pcase--dontcare))
      `(nil ,prop ,val . ,(undo-adjust-beg-end beg end deltas)))
-    ;; (apply DELTA START END FUN . ARGS)
+    ((and `(apply ,delta (,beg  . ,end) ,fun-name . ,args)
+          (guard (and (integerp delta) (natnump beg) (natnump end)
+                      (symbolp fun-name))))
+     (let* ((r2 (undo-adjust-beg-end beg end deltas))
+            (beg2 (car r2))
+            (end2 (cdr r2)))
+       `(apply ,delta (,beg2 . ,end2) ,fun-name . ,args)))
     ;; FIXME
     ;; All others return same elt
     (_ elt)))
@@ -4034,8 +4070,16 @@ with < or <= based on USE-<."
 	     ;; (BEGIN . END)
 	     (cons (car undo-elt) (- (car undo-elt) (cdr undo-elt))))
 	    ;; (apply DELTA BEG END FUNC . ARGS)
-	    ((and (eq (car undo-elt) 'apply) (integerp (nth 1 undo-elt)))
+	    ((and (eq (car undo-elt) 'apply)
+                  (integerp (nth 1 undo-elt))
+                  (natnump (nth 2 undo-elt)))
 	     (cons (nth 2 undo-elt) (nth 1 undo-elt)))
+	    ;; (apply DELTA (BEG . END) FUNC . ARGS)
+	    ((and (eq (car undo-elt) 'apply)
+                  (integerp (nth 1 undo-elt))
+                  (consp (nth 2 undo-elt))
+                  (natnump (car (nth 2 undo-elt))))
+	     (cons (car (nth 2 undo-elt)) (nth 1 undo-elt)))
 	    (t
 	     '(0 . 0)))
     '(0 . 0)))
@@ -4926,8 +4970,8 @@ and are used only if a pop-up buffer is displayed."
   (when (memq (process-status process) '(exit signal))
     (shell-command-set-point-after-cmd (process-buffer process))
     (message "%s: %s."
-             (car (cdr (cdr (or (process-get process 'remote-command)
-                                (process-command process)))))
+             (car (last (or (process-get process 'remote-command)
+                            (process-command process))))
              (substring signal 0 -1))))
 
 (defun shell-command-on-region (start end command
@@ -5579,12 +5623,14 @@ These commands include \\[set-mark-command] and \\[start-kbd-macro]."
   "Function to perform the filtering in `filter-buffer-substring'.
 The function is called with the same 3 arguments (BEG END DELETE)
 that `filter-buffer-substring' received.  It should return the
-buffer substring between BEG and END, after filtering.  If DELETE is
-non-nil, it should delete the text between BEG and END from the buffer.")
+buffer substring between BEG and END, regardless of the order of
+BEG and END, after filtering.  If DELETE is non-nil, it should
+delete the text between BEG and END from the buffer.")
 
 (defun filter-buffer-substring (beg end &optional delete)
   "Return the buffer substring between BEG and END, after filtering.
 If DELETE is non-nil, delete the text between BEG and END from the buffer.
+The order of BEG and END does not matter.
 
 This calls the function that `filter-buffer-substring-function' specifies
 \(passing the same three arguments that it received) to do the work,
@@ -6682,8 +6728,10 @@ and KILLP is t if a prefix arg was specified."
 
 (defun char-uppercase-p (char)
   "Return non-nil if CHAR is an upper-case character.
+A character is considered upper-case if there's a corresponding
+lower-case character.
 If the Unicode tables are not yet available, e.g. during bootstrap,
-then gives correct answers only for ASCII characters."
+this function gives correct return values only for ASCII characters."
   (cond ((unicode-property-table-internal 'lowercase)
          (characterp (get-char-code-property char 'lowercase)))
         ((<= ?A char ?Z))))
@@ -9249,9 +9297,10 @@ for `auto-fill-function' when turning Auto Fill mode on."
 (custom-add-option 'text-mode-hook 'turn-on-auto-fill)
 
 (defun set-fill-column (arg)
-  "Set `fill-column' to specified argument.
-Use \\[universal-argument] followed by a number to specify a column.
-Just \\[universal-argument] as argument means to use the current column."
+  "Set `fill-column' to specified argument ARG, which should be an integer number.
+Interactively, use \\[universal-argument] followed by a number to specify a column.
+Just \\[universal-argument] in interactive invocation means to use the current column
+as the `fill-column'."
   (interactive
    (list (or current-prefix-arg
              ;; We used to use current-column silently, but C-x f is too easily
@@ -9641,10 +9690,12 @@ The function should return non-nil if the two tokens do not match.")
          (propertize "Matches " 'face 'shadow)
          (blink-paren-open-paren-line-string blinkpos)))))))
 
-(defun blink-paren-open-paren-line-string (pos)
+(defun blink-paren-open-paren-line-string (pos &optional len)
   "Return the line string that contains the openparen at POS.
+LEN is the length of the multi-character paren, by default 1.
 Remove the line string's properties but give the openparen a distinct
 face if `blink-matching-paren-highlight-offscreen' is non-nil."
+  (unless len (setq len 1))
   (save-excursion
     (goto-char pos)
     ;; Capture the regions in terms of (beg . end) conses whose
@@ -9656,11 +9707,11 @@ face if `blink-matching-paren-highlight-offscreen' is non-nil."
        ;; Show what precedes the open in its line, if anything.
        ((save-excursion (skip-chars-backward " \t") (not (bolp)))
         (let ((bol (line-beginning-position)))
-          (setq regions (list (cons bol (1+ pos)))
+          (setq regions (list (cons bol (+ pos len)))
                 openparen-idx (- pos bol))))
        ;; Show what follows the open in its line, if anything.
        ((save-excursion
-          (forward-char 1)
+          (forward-char len)
           (skip-chars-forward " \t")
           (not (eolp)))
         (setq regions (list (cons pos (line-end-position)))
@@ -9683,9 +9734,9 @@ face if `blink-matching-paren-highlight-offscreen' is non-nil."
                                                       ;; (length "...")
                                                       3))
                                eol))
-                            (cons pos (1+ pos)))))
+                            (cons pos (+ pos len)))))
        ;; There is nothing to show except the char itself.
-       (t (setq regions (list (cons pos (1+ pos)))
+       (t (setq regions (list (cons pos (+ pos len)))
                 openparen-idx 0)))
       ;; Ensure we've font-locked the context region.
       (font-lock-ensure (caar regions) (cdar (last regions)))
@@ -9696,7 +9747,7 @@ face if `blink-matching-paren-highlight-offscreen' is non-nil."
               regions
               "...")))
         (when blink-matching-paren-highlight-offscreen
-          (add-face-text-property openparen-idx (1+ openparen-idx)
+          (add-face-text-property openparen-idx (+ openparen-idx len)
                                   'blink-matching-paren-offscreen
                                   nil line-string))
         line-string))))
@@ -10025,10 +10076,12 @@ makes it easier to edit it."
                      (call-interactively `(lambda (arg)
                                             (interactive ,prop)
                                             arg))
-                   (read-from-minibuffer prompt nil
-                                         read-expression-map t
-                                         'set-variable-value-history
-                                         (format "%S" (symbol-value var)))))))
+                   (read-from-minibuffer
+                    prompt nil
+                    read-expression-map t
+                    'set-variable-value-history
+                    (when (boundp var)
+                      (format "%S" (symbol-value var))))))))
      (list var val current-prefix-arg)))
 
   (and (custom-variable-p variable)
@@ -10172,8 +10225,11 @@ the completions is popped up and down."
           (last-col (progn
                       (first-completion)
                       (goto-char (pos-eol))
-                      (goto-char (previous-single-property-change
-                                  (point) 'mouse-face))
+                      ;; Go to the beginning of the candidate.  We loop
+                      ;; to move past any completion annotations.
+                      (while (not (get-text-property (point) 'mouse-face))
+                        (goto-char
+                         (previous-single-property-change (point) 'mouse-face)))
                       (current-column))))
       (if (zerop last-col)
           ;; If there is only one column of completions, the last
@@ -10265,7 +10321,9 @@ Also see the `completion-auto-wrap' variable."
                          (not (eq completions-format 'vertical))))
             (if (and (eq completion-auto-select t) tabcommand
                      (minibufferp completion-reference-buffer))
-                (throw 'bound nil)
+                (progn
+                  (completions--clear-selection)
+                  (throw 'bound nil))
               (first-completion))))
         (when (and (eq completions-format 'vertical)
                    (or last
@@ -10317,8 +10375,8 @@ Also see the `completion-auto-wrap' variable."
                    (completion--move-to-candidate-start))
                   ((and (eq completion-auto-select t) tabcommand
                         (minibufferp completion-reference-buffer))
-                   (progn
-                     (throw 'bound nil)))
+                   (completions--clear-selection)
+                   (throw 'bound nil))
                   (t
                    (last-completion)))))
         (setq n (1+ n))))
@@ -10348,29 +10406,31 @@ of completions.
 
 Also see the `completion-auto-wrap' variable."
   (interactive "p")
-  (let (line column pos found last first)
-    (when (and (bobp)
-               (> n 0)
-               (get-text-property (point) 'mouse-face)
-               (not (get-text-property (point) 'first-completion)))
-      (let ((inhibit-read-only t))
-        (add-text-properties (point) (1+ (point)) '(first-completion t)))
-      (setq n (1- n)))
+  (let ((tabcommand (member (this-command-keys) '("\t" [backtab])))
+        line column pos found last first)
+    (catch 'bound
+      (when (and (bobp)
+                 (> n 0)
+                 (get-text-property (point) 'mouse-face)
+                 (not (get-text-property (point) 'first-completion)))
+        (let ((inhibit-read-only t))
+          (add-text-properties (point) (1+ (point)) '(first-completion t)))
+        (setq n (1- n)))
 
-    (if (get-text-property (point) 'mouse-face)
-        ;; If in a completion, move to the start of it.
-        (completion--move-to-candidate-start)
-      ;; Try to move to the previous completion.
-      (setq pos (previous-single-property-change (point) 'mouse-face))
-      (if pos
-          ;; Move to the start of the previous completion.
-          (progn
-            (goto-char pos)
-            (unless (get-text-property (point) 'mouse-face)
-              (goto-char (previous-single-property-change
-                          (point) 'mouse-face nil (point-min)))))
-        (cond ((> n 0) (setq n (1- n)) (first-completion))
-              ((< n 0) (first-completion)))))
+      (if (get-text-property (point) 'mouse-face)
+          ;; If in a completion, move to the start of it.
+          (completion--move-to-candidate-start)
+        ;; Try to move to the previous completion.
+        (setq pos (previous-single-property-change (point) 'mouse-face))
+        (if pos
+            ;; Move to the start of the previous completion.
+            (progn
+              (goto-char pos)
+              (unless (get-text-property (point) 'mouse-face)
+                (goto-char (previous-single-property-change
+                            (point) 'mouse-face nil (point-min)))))
+          (cond ((> n 0) (setq n (1- n)) (first-completion))
+                ((< n 0) (first-completion)))))
 
     (while (> n 0)
       (setq found nil pos (point) column (current-column)
@@ -10378,7 +10438,12 @@ Also see the `completion-auto-wrap' variable."
             last (= (point) (save-excursion (last-completion) (point))))
       (if (and (eq completions-format 'vertical)
                completion-auto-wrap last)
-          (first-completion)            ; Wrap from last to first item.
+          (if (and (eq completion-auto-select t) tabcommand
+                   (minibufferp completion-reference-buffer))
+              (progn
+                (completions--clear-selection)
+                (throw 'bound nil))     ; Skip to minibuffer.
+            (first-completion))         ; Wrap from last to first item.
         (completion--move-to-candidate-end)
         (while (and (not found)
                     (eq (forward-line 1) 0)
@@ -10415,7 +10480,12 @@ Also see the `completion-auto-wrap' variable."
             first (= (point) (save-excursion (first-completion) (point))))
       (if (and (eq completions-format 'vertical)
                completion-auto-wrap first)
-          (last-completion)             ; Wrap from first to last item.
+          (if (and (eq completion-auto-select t) tabcommand
+                   (minibufferp completion-reference-buffer))
+              (progn
+                (completions--clear-selection)
+                (throw 'bound nil))     ; Skip to minibuffer.
+            (last-completion))          ; Wrap from first to last item.
         (completion--move-to-candidate-start)
         (while (and (not found)
                     (eq (forward-line -1) 0)
@@ -10452,7 +10522,10 @@ Also see the `completion-auto-wrap' variable."
                 (setq pos (point))
                 (forward-line))
               (goto-char pos)))))
-      (setq n (1+ n)))))
+      (setq n (1+ n))))
+
+    (when (/= 0 n)
+      (switch-to-minibuffer))))
 
 (defun next-completion (&optional n)
   "Move according to `completions-format' to next completion item.
@@ -11062,18 +11135,19 @@ backward.
 
 If set to nil, both Delete and Backspace keys delete backward.
 
-If set to `maybe' (which is the default), Emacs automatically
-selects a behavior.  On window systems, the behavior depends on
-the keyboard used.  If the keyboard has both a Backspace key and
-a Delete key, and both are mapped to their usual meanings, the
-option's default value is set to t, so that Backspace can be used
-to delete backward, and Delete can be used to delete forward.
+If set to `maybe' (which is the default), Emacs automatically selects a
+behavior.
+On displays that support symbol keys (see `display-symbol-keys-p'), the
+behavior depends on the keyboard used.  If the keyboard has both a
+Backspace key and a Delete key, and both are mapped to their usual
+meanings, the option's default value is set to t, so that Backspace can
+be used to delete backward, and Delete can be used to delete forward.
 
-If not running under a window system, customizing this option
-accomplishes a similar effect by mapping \\`C-h', which is usually
-generated by the Backspace key, to \\`DEL', and by mapping \\`DEL' to
-\\`C-d' via `keyboard-translate'.  The former functionality of \\`C-h'
-is available on the F1 key.  You should probably not use this
+If not running on a display that supports symbol keys, customizing this
+option accomplishes a similar effect by mapping \\`C-h', which is
+usually generated by the Backspace key, to \\`DEL', and by mapping
+\\`DEL' to \\`C-d' via `keyboard-translate'.  The former functionality
+of \\`C-h' is available on the F1 key.  You should probably not use this
 setting if you don't have both Backspace, Delete and F1 keys.
 
 Setting this variable with setq doesn't take effect.  Programmatically,
@@ -11100,6 +11174,7 @@ call `normal-erase-is-backspace-mode' (which see) instead."
                (and (not noninteractive)
                     (or (memq system-type '(ms-dos windows-nt))
 			(memq window-system '(w32 ns pgtk haiku android))
+                        (terminal-parameter nil 'tty-kitty-kbd-proto)
                         (and (eq window-system 'x)
                              (fboundp 'x-backspace-delete-keys-p)
                              (x-backspace-delete-keys-p))
@@ -11116,29 +11191,30 @@ call `normal-erase-is-backspace-mode' (which see) instead."
 (define-minor-mode normal-erase-is-backspace-mode
   "Toggle the Erase and Delete mode of the Backspace and Delete keys.
 
-On window systems, when this mode is on, Delete is mapped to \\`C-d'
-and Backspace is mapped to \\`DEL'; when this mode is off, both
-Delete and Backspace are mapped to \\`DEL'.  (The remapping goes via
-`local-function-key-map', so binding Delete or Backspace in the
-global or local keymap will override that.)
+On displays that support symbol keys (see `display-symbol-keys-p'), when
+this mode is on, Delete is mapped to \\`C-d' and Backspace is mapped to
+\\`DEL'; when this mode is off, both Delete and Backspace are mapped to
+\\`DEL'.  (The remapping goes via `local-function-key-map', so binding
+Delete or Backspace in the global or local keymap will override that.)
 
-In addition, on window systems, the bindings of C-Delete, M-Delete,
-C-M-Delete, C-Backspace, M-Backspace, and C-M-Backspace are changed in
-the global keymap in accordance with the functionality of Delete and
-Backspace.  For example, if Delete is remapped to \\`C-d', which deletes
-forward, C-Delete is bound to `kill-word', but if Delete is remapped
-to \\`DEL', which deletes backward, C-Delete is bound to
-`backward-kill-word'.
+In addition, on displays that support symbol keys, the bindings of
+C-Delete, M-Delete, C-M-Delete, C-Backspace, M-Backspace, and
+C-M-Backspace are changed in the global keymap in accordance with the
+functionality of Delete and Backspace.  For example, if Delete is
+remapped to \\`C-d', which deletes forward, C-Delete is bound to
+`kill-word', but if Delete is remapped to \\`DEL', which deletes
+backward, C-Delete is bound to `backward-kill-word'.
 
-If not running on a window system, a similar effect is accomplished by
-remapping \\`C-h' (normally produced by the Backspace key) and \\`DEL'
-via `keyboard-translate': if this mode is on, \\`C-h' is mapped to
-\\`DEL' and \\`DEL' to \\`C-d'; if it's off, the keys are not remapped.
+If running on a display that doesn't support symbol keys, a similar
+effect is accomplished by remapping \\`C-h' (normally produced by the
+Backspace key) and \\`DEL' via `keyboard-translate': if this mode is on,
+\\`C-h' is mapped to \\`DEL' and \\`DEL' to \\`C-d'; if it's off, the
+keys are not remapped.
 
-When not running on a window system, and this mode is turned on, the
-former functionality of \\`C-h' is available on the F1 key.  You should
-probably not turn on this mode on a text-only terminal if you don't
-have both Backspace, Delete and F1 keys.
+When running on a display that doesn't support symbol keys, and this
+mode is turned on, the former functionality of \\`C-h' is available on
+the F1 key.  You should probably not turn on this mode on a text-only
+terminal if you don't have both Backspace, Delete and F1 keys.
 
 See also `normal-erase-is-backspace'."
   :variable ((eq (terminal-parameter nil 'normal-erase-is-backspace) 1)

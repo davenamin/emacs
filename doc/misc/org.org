@@ -10013,8 +10013,8 @@ entries with a =NEXT= TODO keyword.
          ((org-agenda-max-entries 5)))))
 #+end_src
 
-Once you mark one of these five entry as DONE, rebuilding the agenda
-will again the next five entries again, including the first entry that
+Once you mark one of these five entries as DONE, rebuilding the agenda
+will show the next five entries again, including the first entry that
 was excluded so far.
 
 You can also dynamically set temporary limits, which are lost when
@@ -10269,7 +10269,7 @@ the other commands, point needs to be in the desired line.
   Toggle Archives mode.  In Archives mode, trees that are archived
   (see [[*Internal archiving]]) are also scanned when producing the
   agenda.  To exit archives mode, press {{{kbd(v a)}}} again.  The
-  initial setting for this mode in new agenda buffers can set with the
+  initial setting for this mode in new agenda buffers can be set with the
   variable ~org-agenda-start-with-archives-mode~, which can be set
   with the same values as ~org-agenda-archives-mode~.
 
@@ -14552,11 +14552,13 @@ include:
   #+vindex: org-latex-tables-booktabs
   #+vindex: org-latex-tables-centered
   All three commands are toggles.  =:booktabs= brings in modern
-  typesetting enhancements to regular tables.  The booktabs package
-  has to be loaded through ~org-latex-packages-alist~.  =:center= is
-  for centering the table.  =:rmlines= removes all but the very first
-  horizontal line made of ASCII characters from "table.el" tables
-  only.
+  typesetting enhancements to regular tables.  The =booktabs= package
+  needs to be loaded through ~org-latex-packages-alist~, unless it is
+  already included by your document class[fn:: For example,
+  [[https://authors.acm.org/proceedings/production-information/preparing-your-article-with-latex][the
+  ACM article template]].].  =:center= is for centering the table.
+  =:rmlines= removes all but the very first horizontal line made of
+  ASCII characters from "table.el" tables only.
 
 - =:math-prefix=, =:math-suffix=, =:math-arguments= ::
 
@@ -14592,6 +14594,24 @@ Set the caption with the LaTeX command
 | ... | ... |
 | ... | ... |
 #+end_example
+
+#+vindex: org-latex-table-scientific-notation
+#+vindex: org-latex-packages-alist
+If your table has numbers in scientific notation, you can control how
+they are shown with the variable
+~org-latex-table-scientific-notation~. For example:
+
+#+begin_src emacs-lisp
+(setq org-latex-table-scientific-notation "\\num{%se%s}")
+#+end_src
+
+#+texinfo: @noindent
+will print your numbers as \(m x 10^{exp}\) instead of using the
+engineering format =m.mmmEnn=. The first string placeholder(=%s=) in
+~org-latex-table-scientific-notation~ will be replaced by the mantissa
+and the second by the exponent. *Note* that to use the example above, you
+will need to add the ~siunitx~ package to your
+~org-latex-packages-alist~.
 
 *** Images in LaTeX export
 :PROPERTIES:
@@ -14988,7 +15008,7 @@ set it to =toc=:
 #+cindex: LaTeX ToC export a la ~org~
 #+cindex: @samp{org-latex-toc-include-unnumbered}
 If you want the LaTeX exporter to behave like other exporters,
-customise the variable ~org-latex-toc-include-unnumbered~ and
+customize the variable ~org-latex-toc-include-unnumbered~ and
 set it to ~t~:
 
 #+begin_example

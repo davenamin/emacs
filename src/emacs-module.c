@@ -394,7 +394,7 @@ struct module_global_reference {
 
   /* Reference count, always positive.  */
   ptrdiff_t refcount;
-};
+} GCALIGNED_STRUCT;
 
 static struct module_global_reference *
 XMODULE_GLOBAL_REFERENCE (Lisp_Object o)
@@ -962,6 +962,20 @@ module_vec_size (emacs_env *env, emacs_value vector)
   return ASIZE (lisp);
 }
 
+static uint32_t *
+module_canvas_data (emacs_env *env, emacs_value canvas)
+{
+  uint32_t *data = 0;
+  MODULE_FUNCTION_BEGIN (NULL);
+#ifdef HAVE_WINDOW_SYSTEM
+  data = canvas_data (value_to_lisp (canvas));
+#else
+  error ("Canvas: No window system");
+#endif
+  MODULE_INTERNAL_CLEANUP ();
+  return data;
+}
+
 /* This function should return true if and only if maybe_quit would
    quit.  */
 static bool
@@ -1120,7 +1134,7 @@ module_extract_big_integer (emacs_env *env, emacs_value arg, int *sign,
         u = -(EMACS_UINT) x;
       static_assert (required * bits < PTRDIFF_MAX);
       for (ptrdiff_t i = 0; i < required; ++i)
-        magnitude[i] = (emacs_limb_t) (u >> (i * bits));
+        magnitude[i] = u >> (i * bits);
       MODULE_INTERNAL_CLEANUP ();
       return true;
     }
@@ -1612,6 +1626,7 @@ initialize_environment (emacs_env *env, struct emacs_env_private *priv)
   env->open_channel = module_open_channel;
   env->make_interactive = module_make_interactive;
   env->make_unibyte_string = module_make_unibyte_string;
+  env->canvas_data = module_canvas_data;
   return env;
 }
 

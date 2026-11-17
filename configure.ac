@@ -967,7 +967,7 @@ a valid path to android.jar.  See config.log for more details.])
   fi
 
   AC_CACHE_CHECK([whether android.jar is new enough],
-    [emacs_cv_android_w_or_later],
+    [emacs_cv_android_x_or_later],
     AS_IF([rm -f conftest.class
 cat << EOF > conftest.java
 
@@ -975,7 +975,7 @@ import android.os.Build;
 
 class conftest
 {
-  private static int test = Build.VERSION_CODES.BAKLAVA;
+  private static int test = Build.VERSION_CODES.CINNAMON_BUN;
 }
 
 EOF
@@ -986,7 +986,7 @@ EOF
 
   if test "$emacs_cv_android_w_or_later" = "no"; then
     AC_MSG_ERROR([Emacs must be built with an android.jar file produced for \
-Android 16 (BAKLAVA) or later.])
+Android 17 (CINNAMON_BUN) or later.])
   fi
 
   dnl See if the Java compiler supports the `--release' option which
@@ -1899,6 +1899,10 @@ AC_DEFUN([gt_TYPE_WINT_T],
 AC_DEFUN([gl_TYPE_OFF64_T],
   [HAVE_OFF64_T=1
    AC_SUBST([HAVE_OFF64_T])])
+# Emacs does not want Gnulib's fixes for glibc bug 20381 or for
+# Unicode-compatible case matching, as that brings in too many Gnulib files.
+AC_DEFINE([_REGEX_AVOID_UCHAR_H], [1],
+  [Define to 1 so that the Gnulib regex module does not use Gnulib uchar-h.])
 
 # Initialize gnulib right after choosing the compiler.
 dnl Amongst other things, this sets AR and ARFLAGS.
@@ -2089,7 +2093,6 @@ AS_IF([test $gl_gcc_warnings = no],
   nw="$nw -Wduplicated-branches"    # Too many false alarms
   nw="$nw -Wformat-overflow=2"      # False alarms due to GCC bug 110333
   nw="$nw -Woverlength-strings"     # Not a problem these days
-  nw="$nw -Wvla"                    # Emacs uses <vla.h>.
   nw="$nw -Winline"                 # OK to ignore 'inline'
   nw="$nw -Wstrict-overflow"        # OK to optimize assuming that
                                     # signed overflow has undefined behavior
@@ -2387,44 +2390,7 @@ if test $opsys = darwin; then
   AC_PATH_PROG([HAVE_MACPORTS], [port])
 fi
 
-## Require makeinfo >= 4.13 (last of the 4.x series) to build the manuals.
-: ${MAKEINFO:=makeinfo}
-case `($MAKEINFO --version) 2>/dev/null` in
-  *' (GNU texinfo) '4.1[[3-9]]* | \
-  *' (GNU texinfo) '[[5-9]]* | \
-  *' (GNU texinfo) '[[1-9][0-9]]* ) ;;
-  *) MAKEINFO=no;;
-esac
-
-## Makeinfo is unusual.  For a released Emacs, the manuals are
-## pre-built, and not deleted by the normal clean rules.  makeinfo is
-## therefore in the category of "special tools" not normally required, which
-## configure does not have to check for (eg autoconf itself).
-## In a repository checkout on the other hand, the manuals are not included.
-## So makeinfo is a requirement to build from the repository, and configure
-## should test for it as it does for any other build requirement.
-## We use the presence of $srcdir/info/emacs to distinguish a release,
-## with pre-built manuals, from a repository checkout.
-if test "$MAKEINFO" = "no"; then
-  MAKEINFO=makeinfo
-  if test ! -e "$srcdir/info/emacs" && test ! -e "$srcdir/info/emacs.info"; then
-    AC_MSG_ERROR( [You do not seem to have makeinfo >= 4.13, and your
-source tree does not seem to have pre-built manuals in the 'info' directory.
-Please install a suitable version of makeinfo.] )
-  else
-    AC_MSG_WARN( [You do not seem to have makeinfo >= 4.13.
-You will not be able to rebuild the manuals if you delete them or change
-their sources.] )
-  fi
-fi
-AC_SUBST([MAKEINFO])
-
-if test $opsys = mingw32; then
-   DOCMISC_W32=efaq-w32
-else
-   DOCMISC_W32=
-fi
-AC_SUBST([DOCMISC_W32])
+gl_TEXINFO
 
 dnl Add our options to ac_link now, after it is set up.
 
@@ -2435,21 +2401,6 @@ else
   test "x$NON_GCC_LINK_TEST_OPTIONS" != x && \
     ac_link="$ac_link $NON_GCC_LINK_TEST_OPTIONS"
 fi
-
-AC_CACHE_CHECK([whether addresses are sanitized],
-  [emacs_cv_sanitize_address],
-  [AC_COMPILE_IFELSE(
-     [AC_LANG_PROGRAM(
-	[[#ifndef __has_feature
-	  #define __has_feature(f) 0
-	  #endif
-	  #if defined __SANITIZE_ADDRESS__ || __has_feature (address_sanitizer)
-	  #else
-	   error "Addresses are not sanitized.";
-	  #endif
-	]])],
-     [emacs_cv_sanitize_address=yes],
-     [emacs_cv_sanitize_address=no])])
 
 LD_SWITCH_SYSTEM=
 case "$opsys" in
@@ -3604,26 +3555,6 @@ to configure.])
    fi
 fi
 
-# Does the opsystem file prohibit the use of the GNU malloc?
-# Assume not, until told otherwise.
-GNU_MALLOC=yes
-
-AC_CACHE_CHECK(
-  [whether malloc is Doug Lea style],
-  [emacs_cv_var_doug_lea_malloc],
-  [emacs_cv_var_doug_lea_malloc=no
-   dnl Hooks do not work with address sanitization.
-   if test "$emacs_cv_sanitize_address" != yes; then
-     AC_LINK_IFELSE(
-       [AC_LANG_PROGRAM(
-	  [[#include <malloc.h>
-	    static void hook (void) {}]],
-          [[__after_morecore_hook = hook;
-	    __malloc_initialize_hook = hook;]])],
-       [emacs_cv_var_doug_lea_malloc=yes])
-   fi])
-doug_lea_malloc=$emacs_cv_var_doug_lea_malloc
-
 AC_CHECK_ALIGNOF([EMACS_INT],
   [[#include <limits.h>
     #include <stddef.h>
@@ -3663,98 +3594,6 @@ m4_divert_push([KILL])
 m4_ifdef([gl_STDALIGN_H], [], [m4_include([m4/stdalign.m4])])
 m4_divert_pop([KILL])
 
-dnl Check for alignas now rather than waiting for gl_INIT to do it,
-dnl as the system_malloc=no test below needs $gl_cv_header_working_stdalign_h.
-dnl Do not simply call gl_INIT here, as the ac_cv_func_pthread_sigmask=yes
-dnl assignment below affects how gl_INIT works.
-dnl Instead, call gl_ALIGNASOF, the only part of gl_INIT needed here.
-dnl Then make gl_ALIGNASOF a no-op so gl_INIT does not duplicate its code.
-gl_ALIGNASOF
-AC_DEFUN([gl_ALIGNASOF])
-
-system_malloc=yes
-
-# If it appears as if the system malloc can't be trusted to return
-# adequately positioned memory, enable the GNU malloc, which more
-# consistently provides allocations at low addresses, as is required for
-# the pdumper to load dump files at a representable location.
-AS_CASE([$emacs_cv_struct_alignment%$gl_cv_header_working_stdalign_h%$with_wide_int%$ac_cv_alignof_EMACS_INT%$with_pdumper],
-  [*%*%*%*%*%*],
-    [AC_MSG_ERROR([configuration values cannot contain '%'])],
-
-  dnl There is no problem in most situations, i.e.:
-  [dnl if emacs_cv_struct_alignment
-   yes%* \
-   dnl or if gl_cv_header_working_stdalign_h
-   | *%yes*%*%*%* \
-   dnl or if with_wide_int (as in practice tag bits are high-order)
-   | *%*%yes%*%* \
-   dnl or if EMACS_INT's alignment is at least 8.
-   | *%*%*%8%* | *%*%*%[1-9]?*%*],
-    [],
-
-  dnl Otherwise, if using the portable dumper, enable GNU malloc.
-  [*%yes],
-    [system_malloc=no
-     AC_MSG_WARN([The GNU memory manager will be enabled as your system
-       does not guarantee that the portable dumper can allocate memory
-       at a suitably low address.])])
-
-dnl This must be before the test of $ac_cv_func_sbrk below.
-AC_CHECK_FUNCS_ONCE([sbrk])
-
-GMALLOC_OBJ=
-if test "${system_malloc}" = "yes"; then
-  AC_DEFINE([SYSTEM_MALLOC], [1],
-    [Define to 1 to use the system memory allocator, even if it is not
-     Doug Lea style.])
-  GNU_MALLOC=no
-  GNU_MALLOC_reason="
-    (The GNU allocators don't work with this system configuration.)"
-  VMLIMIT_OBJ=
-else
-  test "$doug_lea_malloc" != "yes" && GMALLOC_OBJ=gmalloc.o
-  VMLIMIT_OBJ=vm-limit.o
-
-  AC_CHECK_HEADERS([sys/vlimit.h])
-  AC_CACHE_CHECK([for data_start], [emacs_cv_data_start],
-    [AC_LINK_IFELSE(
-       [AC_LANG_PROGRAM(
-	 [[extern char data_start[]; char ch;]],
-	 [[return data_start < &ch;]])],
-       [emacs_cv_data_start=yes],
-       [emacs_cv_data_start=no])])
-  if test $emacs_cv_data_start = yes; then
-    AC_DEFINE([HAVE_DATA_START], [1],
-      [Define to 1 if data_start is the address of the start
-       of the main data segment.])
-  fi
-fi
-AC_SUBST([GMALLOC_OBJ])
-AC_SUBST([VMLIMIT_OBJ])
-
-if test "$doug_lea_malloc" = "yes"; then
-  if test "$GNU_MALLOC" = yes ; then
-    GNU_MALLOC_reason="
-      (Using Doug Lea's new malloc from the GNU C Library.)"
-  fi
-  AC_DEFINE([DOUG_LEA_MALLOC], [1],
-    [Define to 1 if the system memory allocator is Doug Lea style,
-     with malloc hooks.])
-
-  ## Use mmap directly for allocating larger buffers.
-  ## FIXME this comes from src/s/{gnu,gnu-linux}.h:
-  ## #ifdef DOUG_LEA_MALLOC; #undef REL_ALLOC; #endif
-  ## Does the AC_FUNC_MMAP test below make this check unnecessary?
-  case "$opsys" in
-    mingw32|gnu*) REL_ALLOC=no ;;
-  esac
-fi
-
-if test x"${REL_ALLOC}" = x; then
-  REL_ALLOC=${GNU_MALLOC}
-fi
-
 use_mmap_for_buffers=no
 case "$opsys" in
   mingw32) use_mmap_for_buffers=yes ;;
@@ -3764,7 +3603,6 @@ AC_FUNC_MMAP
 if test $use_mmap_for_buffers = yes; then
   AC_DEFINE([USE_MMAP_FOR_BUFFERS], [1],
     [Define to use mmap to allocate buffer text.])
-  REL_ALLOC=no
 fi
 
 LIBS="$LIBS_SYSTEM $LIBS"
@@ -3795,11 +3633,6 @@ if test "$ac_cv_header_pthread_h" && test "$opsys" != "mingw32"; then
 	      status += pthread_create (&th, 0, 0, 0);
 	      status += pthread_sigmask (SIG_BLOCK, &new_mask, &old_mask);
 	      status += pthread_kill (th, 0);
-	      #if ! (defined SYSTEM_MALLOC || defined DOUG_LEA_MALLOC)
-	      /* Test for pthread_atfork only if gmalloc uses it,
-		 as older-style hosts like MirBSD 10 lack it.  */
-	      status += pthread_atfork (noop, noop, noop);
-	      #endif
 	      return status;]])],
 	 [emacs_cv_pthread_lib=$emacs_pthread_lib])
        LIBS=$OLD_LIBS
@@ -5544,19 +5377,6 @@ You can find the instructions on how to compile and install libgccjit from
 source on this site:
 <https://gcc.gnu.org/wiki/JIT>.])])
 
-HAVE_NATIVE_COMP=no
-LIBGCCJIT_LIBS=
-LIBGCCJIT_CFLAGS=
-if test "$canonical" = i686-pc-cygwin; then
-  if test "${with_cygwin32_native_compilation}" = yes; then
-    with_native_compilation=yes
-  elif test "${with_native_compilation}" != no; then
-    AC_MSG_ERROR([Native compilation is not supported on 32-bit Cygwin.
-If you really want to try it anyway, use the configure option
-'--with-cygwin32-native-compilation'.])
-  fi
-fi
-
 AC_DEFUN([libgccjit_not_found], [
   AC_MSG_WARN([Elisp native compiler can't be enabled as libgccjit was not
 found.
@@ -5590,30 +5410,25 @@ source on this site:
 
   with_native_compilation=no])
 
+HAVE_NATIVE_COMP=no
+LIBGCCJIT_LIBS=
+LIBGCCJIT_CFLAGS=
+if test "$canonical" = i686-pc-cygwin; then
+  if test "${with_cygwin32_native_compilation}" = yes; then
+    with_native_compilation=yes
+  elif test "${with_native_compilation}" != no; then
+    AC_MSG_ERROR([Native compilation is not supported on 32-bit Cygwin.
+If you really want to try it anyway, use the configure option
+'--with-cygwin32-native-compilation'.])
+  fi
+fi
+
 if test "$with_features" = "no" \
    && test "${with_native_compilation}" = "default"; then
   with_native_compilation=no
 fi
 
-if test "${with_native_compilation}" = "default"; then
-    # Check if libgccjit is available.
-    AC_CHECK_LIB([gccjit], [gcc_jit_context_acquire],
-      [], [libgccjit_not_found])
-    AC_CHECK_HEADERS([libgccjit.h], [], [libgccjit_dev_not_found])
-    if test "${with_native_compilation}" != "no"; then
-      # Check if libgccjit really works.
-      AC_RUN_IFELSE([libgccjit_smoke_test], [], [libgccjit_broken])
-    fi
-fi
-
 if test "${with_native_compilation}" != "no"; then
-    if test "${HAVE_ZLIB}" = no; then
-       AC_MSG_ERROR(['--with-native-compilation' requires zlib])
-    fi
-
-    SAVE_CFLAGS=$CFLAGS
-    SAVE_LIBS=$LIBS
-
     if test "${opsys}" = "darwin"; then
       # Ensure libgccjit installed by Homebrew or macports can be found.
       if test -n "$BREW"; then
@@ -5650,15 +5465,38 @@ if test "${with_native_compilation}" != "no"; then
       fi
     fi
 
-    # In the default case we already checked
-    if test "${with_native_compilation}" != "default"; then
-      # Check if libgccjit is available.
-      AC_CHECK_LIB([gccjit], [gcc_jit_context_acquire],
-        [], [libgccjit_not_found_err])
-      AC_CHECK_HEADERS([libgccjit.h], [], [libgccjit_dev_not_found_err])
+    # Check if libgccjit is available.
+    native_compilation_requested=${with_native_compilation}
+    AC_CHECK_LIB([gccjit], [gcc_jit_context_acquire], [],
+        [if test "${native_compilation_requested}" = "default"; then
+	   libgccjit_not_found
+	 else
+	   libgccjit_not_found_err
+	 fi])
+    AC_CHECK_HEADERS([libgccjit.h], [],
+        [if test "${native_compilation_requested}" = "default"; then
+	   libgccjit_dev_not_found
+	 else
+	   libgccjit_dev_not_found_err
+	 fi])
+    if test "${with_native_compilation}" != "no"; then
       # Check if libgccjit really works.
-      AC_RUN_IFELSE([libgccjit_smoke_test], [], [libgccjit_broken_err])
+      AC_RUN_IFELSE([libgccjit_smoke_test], [],
+        [if test "${native_compilation_requested}" = "default"; then
+           libgccjit_broken
+	 else
+           libgccjit_broken_err
+         fi])
     fi
+fi
+
+if test "${with_native_compilation}" != "no"; then
+    if test "${HAVE_ZLIB}" = no; then
+       AC_MSG_ERROR(['--with-native-compilation' requires zlib])
+    fi
+
+    SAVE_CFLAGS=$CFLAGS
+    SAVE_LIBS=$LIBS
     HAVE_NATIVE_COMP=yes
     case "${opsys}" in
       # mingw32 loads the library dynamically.
@@ -6417,7 +6255,6 @@ fi
 
 dnl No need to check for posix_memalign if aligned_alloc works.
 AC_CHECK_FUNCS([aligned_alloc posix_memalign], [break])
-AC_CHECK_DECLS([aligned_alloc], [], [], [[#include <stdlib.h>]])
 
 # Dump loading.  Android lacks posix_madvise.
 AC_CHECK_FUNCS([posix_madvise madvise])
@@ -6959,31 +6796,6 @@ case $opsys in
   dnl SIGIO exists, but the feature doesn't work in the way Emacs needs.
   hpux* | nacl | solaris | unixware )
     emacs_broken_SIGIO=yes
-    ;;
-
-  aix4-2)
-    dnl On AIX Emacs uses the gmalloc.c malloc implementation.  But given
-    dnl the way this system works, libc functions that return malloced
-    dnl memory use the libc malloc implementation. Calling xfree or
-    dnl xrealloc on the results of such functions results in a crash.
-    dnl
-    dnl One solution for this could be to define SYSTEM_MALLOC in configure,
-    dnl but that does not currently work on this system.
-    dnl
-    dnl It is possible to completely override the malloc implementation on
-    dnl AIX, but that involves putting the malloc functions in a shared
-    dnl library and setting the MALLOCTYPE environment variable to point to
-    dnl that shared library.
-    dnl
-    dnl Emacs currently calls xrealloc on the results of get_current_dir name,
-    dnl to avoid a crash just use the Emacs implementation for that function.
-    dnl
-    dnl FIXME We could change the AC_CHECK_FUNCS call near the start
-    dnl of this file, so that we do not check for get_current_dir_name
-    dnl on AIX.  But that might be fragile if something else ends
-    dnl up testing for get_current_dir_name as a dependency.
-    AC_DEFINE([BROKEN_GET_CURRENT_DIR_NAME], [1], [Define if
-      get_current_dir_name should not be used.])
     ;;
 
   freebsd)
@@ -7746,6 +7558,8 @@ AC_SUBST([LIBXT_OTHER])
 if test "${HAVE_X11}" = "yes" ; then
   AC_DEFINE([HAVE_X11], [1],
 	    [Define to 1 if you want to use version 11 of X windows.])
+  AC_DEFINE([_CONST_X_STRING], [1],
+    [Define to 1 for X11 headers to use the 'const' keyword of C89 or later.])
   LIBX_OTHER="\$(LIBXT) \$(LIBX_EXTRA)"
 else
   LIBX_OTHER=
@@ -7778,21 +7592,6 @@ if test "$emacs_cv_statement_expressions" = yes; then
   AC_DEFINE([HAVE_STATEMENT_EXPRESSIONS], [1],
     [Define to 1 if statement expressions work.])
 fi
-
-if test "${GNU_MALLOC}" = "yes" ; then
-  AC_DEFINE([GNU_MALLOC], [1],
-	    [Define to 1 if you want to use the GNU memory allocator.])
-fi
-
-RALLOC_OBJ=
-if test "${REL_ALLOC}" = "yes" ; then
-  AC_DEFINE([REL_ALLOC], [1],
-	    [Define REL_ALLOC if you want to use the relocating allocator for
-	     buffer space.])
-
-  test "$system_malloc" != "yes" && RALLOC_OBJ=ralloc.o
-fi
-AC_SUBST([RALLOC_OBJ])
 
 if test "$opsys" = "cygwin"; then
   CYGWIN_OBJ="cygw32.o"
@@ -8015,17 +7814,12 @@ GNU General Public License for more details.
 You should have received a copy of the GNU General Public License
 along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 
-
-/* No code in Emacs #includes config.h twice, but some bits of code
-   intended to work with other packages as well (like gmalloc.c)
-   think they can include it as many times as they like.  */
-#ifndef EMACS_CONFIG_H
+/* This is for nt/inc/sys/socket.h, which behaves one way when 'configure'
+   is running tests and another way when Emacs is being built.  */
 #define EMACS_CONFIG_H
 ])dnl
 
 AH_BOTTOM([#include <conf_post.h>
-
-#endif /* EMACS_CONFIG_H */
 
 /*
 Local Variables:
@@ -8062,8 +7856,6 @@ Configured for '${canonical}'.
 
   Where should the build process find the source code?    ${srcdir}
   What compiler should emacs be built with?               ${CC} ${CFLAGS}
-  Should Emacs use the GNU version of malloc?             ${GNU_MALLOC}${GNU_MALLOC_reason}
-  Should Emacs use a relocating allocator for buffers?    ${REL_ALLOC}
   Should Emacs use mmap(2) for buffer allocation?         $use_mmap_for_buffers
   What window system should Emacs use?                    ${window_system}
   What toolkit should Emacs use?                          ${USE_X_TOOLKIT}
@@ -8352,12 +8144,12 @@ if test "$XCONFIGURE" != "android"; then
   AS_MKDIR_P([cross/etc])
 
   AS_IF([test "x$with_android" != "xno" || test "$with_ios" = "yes"], [
-    dnl Link gnulib files to cross/lib as well.  af_alg.h and
-    dnl lib/save-cwd.h are copied manually from gnulib, and as such
-    dnl aren't specified in gl_FILE_LIST.  Same set of files for
-    dnl Android and iOS -- both cross-targets consume the same gnulib
-    dnl gnulib.mk, which lists the same .o files.
-    emacs_files='gl_FILE_LIST lib/af_alg.h lib/save-cwd.h'
+    dnl Link gnulib files to cross/lib as well.
+    dnl lib/save-cwd.h is copied manually from gnulib,
+    dnl and as such isn't specified in gl_FILE_LIST.  The same set of
+    dnl files serves Android and iOS: both cross-targets consume the
+    dnl same gnulib.mk, which lists the same .o files.
+    emacs_files='gl_FILE_LIST lib/save-cwd.h'
     dnl These files are specific to Emacs.
     emacs_files="$emacs_files lib/fingerprint.c lib/fingerprint.h \
 		   lib/save-cwd.c lib/openat-die.c lib/save-cwd.c \

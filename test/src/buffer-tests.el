@@ -1477,7 +1477,20 @@ Test both rear-advance and non-rear-advance overlays."
         (when (buffer-live-p indirect)
           (kill-buffer indirect))))))
 
-
+(ert-deftest test-make-indirect-buffer-clone-hook ()
+  (let ((base-buf (generate-new-buffer "base")))
+    (unwind-protect
+        (save-current-buffer
+          (set-buffer base-buf)
+          (insert "sample text")
+          (let ((clone-indirect-buffer-hook
+                 (list (lambda ()
+                         (error "clone hook error")))))
+            (should-error (make-indirect-buffer base-buf "indirect" t)))
+          (should (eq (current-buffer) base-buf)))
+      (ignore-errors (kill-buffer "indirect"))
+      (when (buffer-live-p base-buf)
+        (kill-buffer base-buf)))))
 
 ;; +==========================================================================+
 ;; | buffer-swap-text
@@ -8655,6 +8668,19 @@ Finally, kill the buffer and its temporary file."
       (should (= (point-max) 250))))
     (should (= (point-min) 1))
     (should (= (point-max) 5001))))
+
+(ert-deftest test-insertion-at-restriction-end ()
+  "Test insertion at the end of a restriction."
+  (with-temp-buffer
+    (let ((start (point-min)))
+      (insert (propertize "foo" 'face 'bold))
+      (with-restriction (1+ start) (point-max) :label 'test
+        (goto-char (point-max))
+        (insert "b")
+        (without-restriction :label 'test
+          (should (= (point) (point-max) (1+ (buffer-size))))
+          (should (= (current-column) 4)))
+        (should (= (point) (point-max) (+ start 4)))))))
 
 (ert-deftest test-line-spacing ()
   "Test `line-spacing' impact on text size"

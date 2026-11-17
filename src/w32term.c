@@ -180,6 +180,8 @@ static GetTouchInputInfo_proc pfnGetTouchInputInfo;
 #define SM_CYVIRTUALSCREEN 79
 #endif
 
+struct font *w32_system_remap_font;
+
 /* The handle of the frame that currently owns the system caret.  */
 HWND w32_system_caret_hwnd;
 int w32_system_caret_height;
@@ -276,7 +278,7 @@ int event_record_index;
 
 record_event (char *locus, int type)
 {
-  if (event_record_index == ARRAYELTS (event_record))
+  if (event_record_index == countof (event_record))
     event_record_index = 0;
 
   event_record[event_record_index].locus = locus;
@@ -446,14 +448,14 @@ w32_get_scale_factor(struct w32_display_info *dpyinfo, int *scale_x, int *scale_
 */
 
 static void
-w32_draw_underwave (struct glyph_string *s, COLORREF color)
+w32_draw_underwave (struct glyph_string *s, COLORREF color, int thickness)
 {
   struct w32_display_info *dpyinfo = FRAME_DISPLAY_INFO (s->f);
 
   int scale_x, scale_y;
   w32_get_scale_factor (dpyinfo, &scale_x, &scale_y);
 
-  int wave_height = 3 * scale_y, wave_length = 2 * scale_x, thickness = scale_y;
+  int wave_height = 2 * scale_y * thickness, wave_length = 3 * scale_x * thickness;
   int dx, dy, x0, y0, width, x1, y1, x2, y2, odd, xmax;
   Emacs_Rectangle wave_clip, string_clip, final_clip;
   RECT w32_final_clip, w32_string_clip;
@@ -1563,7 +1565,7 @@ w32_draw_glyphless_glyph_string_foreground (struct glyph_string *s)
 	}
       else if (glyph->u.glyphless.method == GLYPHLESS_DISPLAY_HEX_CODE)
 	{
-	  sprintf ((char *) buf, "%0*X",
+	  sprintf (buf, "%0*X",
 		   glyph->u.glyphless.ch < 0x10000 ? 4 : 6,
 		   (unsigned int) glyph->u.glyphless.ch & 0xffffff);
 	  str = buf;
@@ -2810,6 +2812,15 @@ w32_draw_glyph_string (struct glyph_string *s)
 
   if (!s->for_overlaps)
     {
+      struct font *font = font_for_underline_metrics (s);
+      unsigned long scaled_thickness;
+
+      /* Get the underline thickness.  Default is 1 pixel.  */
+      if (font && font->underline_thickness > 0)
+	scaled_thickness = font->underline_thickness;
+      else
+	scaled_thickness = 1;
+
       /* Draw relief if not yet drawn.  */
       if (!relief_drawn_p && s->face->box != FACE_NO_BOX)
         w32_draw_glyph_string_box (s);
@@ -2817,6 +2828,8 @@ w32_draw_glyph_string (struct glyph_string *s)
       /* Draw underline.  */
       if (s->face->underline)
         {
+	  unsigned long thickness = (underline_line_scaling_flag
+				     ? scaled_thickness : 1);
           if (s->face->underline == FACE_UNDERLINE_WAVE)
             {
               COLORREF color;
@@ -2826,11 +2839,11 @@ w32_draw_glyph_string (struct glyph_string *s)
               else
                 color = s->face->underline_color;
 
-              w32_draw_underwave (s, color);
+              w32_draw_underwave (s, color, thickness);
             }
           else if (s->face->underline >= FACE_UNDERLINE_SINGLE)
             {
-              unsigned long thickness, position;
+              unsigned long position;
 	      COLORREF foreground;
 
               if (s->prev
@@ -2847,7 +2860,6 @@ w32_draw_glyph_string (struct glyph_string *s)
                 }
               else
                 {
-		  struct font *font = font_for_underline_metrics (s);
 		  unsigned long minimum_offset;
 		  BOOL underline_at_descent_line;
 		  BOOL use_underline_position_properties;
@@ -2870,11 +2882,6 @@ w32_draw_glyph_string (struct glyph_string *s)
 		  use_underline_position_properties
 		    = !(NILP (val) || BASE_EQ (val, Qunbound));
 
-                  /* Get the underline thickness.  Default is 1 pixel.  */
-                  if (font && font->underline_thickness > 0)
-                    thickness = font->underline_thickness;
-                  else
-                    thickness = 1;
                   if (underline_at_descent_line
                       || !font)
 		    position = ((s->height - thickness)
@@ -2936,7 +2943,7 @@ w32_draw_glyph_string (struct glyph_string *s)
       /* Draw overline.  */
       if (s->face->overline_p)
         {
-          unsigned long dy = 0, h = 1;
+          unsigned long dy = 0, h = overline_line_scaling_flag ? scaled_thickness : 1;
 
           if (s->face->overline_color_defaulted_p)
             {
@@ -2963,7 +2970,7 @@ w32_draw_glyph_string (struct glyph_string *s)
 	  int glyph_height = s->first_glyph->ascent + s->first_glyph->descent;
 	  /* Strike-through width and offset from the glyph string's
 	     top edge.  */
-          unsigned long h = 1;
+          unsigned long h = strike_through_line_scaling_flag ? scaled_thickness : 1;
           unsigned long dy = (glyph_height - h) / 2;
 
           if (s->face->strike_through_color_defaulted_p)
@@ -3159,6 +3166,16 @@ w32_scroll_run (struct window *w, struct run *run)
 	height = bottom_y - from_y;
       else
 	height = run->height;
+
+      /* Don't draw over the display parts above if destination is off
+         the top of the current window.  */
+      if (to_y < y)
+	{
+	  int d = y - to_y;
+	  height -= d;
+	  to_y += d;
+	  from_y += d;
+	}
 
       if (w32_disable_double_buffering)
 	expect_dirty = CreateRectRgn (x, y + height, x + width, bottom_y);
@@ -5259,7 +5276,7 @@ w32_read_socket (struct terminal *terminal,
 		  hlinfo->mouse_face_hidden = true;
 		}
 
-	      if (temp_index == ARRAYELTS (temp_buffer))
+	      if (temp_index == countof (temp_buffer))
 		temp_index = 0;
 	      temp_buffer[temp_index++] = msg.msg.wParam;
 	      inev.kind = NON_ASCII_KEYSTROKE_EVENT;
@@ -5285,7 +5302,7 @@ w32_read_socket (struct terminal *terminal,
 		  hlinfo->mouse_face_hidden = true;
 		}
 
-	      if (temp_index == ARRAYELTS (temp_buffer))
+	      if (temp_index == countof (temp_buffer))
 		temp_index = 0;
 	      temp_buffer[temp_index++] = msg.msg.wParam;
 
@@ -5400,7 +5417,7 @@ w32_read_socket (struct terminal *terminal,
 		  hlinfo->mouse_face_hidden = true;
 		}
 
-	      if (temp_index == ARRAYELTS (temp_buffer))
+	      if (temp_index == countof (temp_buffer))
 		temp_index = 0;
 	      temp_buffer[temp_index++] = msg.msg.wParam;
 	      inev.kind = MULTIMEDIA_KEY_EVENT;
@@ -6670,6 +6687,8 @@ w32_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
       if (active_p)
 	{
 	  struct frame *f = XFRAME (WINDOW_FRAME (w));
+	  int face_id = lookup_basic_face (w, f, DEFAULT_FACE_ID);
+	  struct face *face = FACE_FROM_ID_OR_NULL (f, face_id);
 	  HWND hwnd = FRAME_W32_WINDOW (f);
 
 	  w32_system_caret_x
@@ -6681,6 +6700,9 @@ w32_draw_window_cursor (struct window *w, struct glyph_row *glyph_row,
 	  w32_system_caret_hdr_height = WINDOW_TAB_LINE_HEIGHT (w)
 	    + WINDOW_HEADER_LINE_HEIGHT (w);
 	  w32_system_caret_mode_height = WINDOW_MODE_LINE_HEIGHT (w);
+
+	  w32_system_remap_font =
+	    (face && face->font) ? face->font : FRAME_FONT (f);
 
 	  PostMessage (hwnd, WM_IME_STARTCOMPOSITION, 0, 0);
 
@@ -7820,7 +7842,7 @@ w32_initialize_display_info (Lisp_Object display_name)
       static char const at[] = " at ";
       ptrdiff_t nbytes = sizeof (title) + sizeof (at);
       if (ckd_add (&nbytes, nbytes, SCHARS (Vsystem_name)))
-	memory_full (SIZE_MAX);
+	memory_full_up ();
       dpyinfo->w32_id_name = xmalloc (nbytes);
       sprintf (dpyinfo->w32_id_name, "%s%s%s", title, at, SDATA (Vsystem_name));
     }

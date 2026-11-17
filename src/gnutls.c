@@ -715,8 +715,8 @@ emacs_gnutls_handshake (struct Lisp_Process *proc)
 	 in.  For an Emacs process socket, infd and outfd are the
 	 same but we use this two-argument version for clarity.  */
       gnutls_transport_set_ptr2 (state,
-				 (void *) (intptr_t) proc->infd,
-				 (void *) (intptr_t) proc->outfd);
+				 (void *) (intptr_t) {proc->infd},
+				 (void *) (intptr_t) {proc->outfd});
       if (proc->is_non_blocking_client)
 	gnutls_transport_set_errno_function (state,
 					     emacs_gnutls_nonblock_errno);
@@ -2424,7 +2424,7 @@ gnutls_symmetric_aead (bool encrypting, gnutls_cipher_algorithm_t gca,
   ptrdiff_t tagged_size;
   if (ckd_add (&tagged_size, isize, cipher_tag_size)
       || SIZE_MAX < tagged_size)
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   size_t storage_length = tagged_size;
   USE_SAFE_ALLOCA;
   char *storage = SAFE_ALLOCA (storage_length);

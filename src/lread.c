@@ -1539,7 +1539,7 @@ Return t if the file exists and loads successfully.  */)
   if (!NILP (Ffboundp (Qdo_after_load_evaluation)))
     calln (Qdo_after_load_evaluation, hist_file_name);
 
-  for (int i = 0; i < ARRAYELTS (saved_strings); i++)
+  for (int i = 0; i < countof (saved_strings); i++)
     {
       xfree (saved_strings[i].string);
       saved_strings[i].string = NULL;
@@ -1950,8 +1950,16 @@ openp (Lisp_Object path, Lisp_Object str, Lisp_Object suffixes,
 			if (platform_fd.asset
 			    && platform_fd.asset != (void *) -1)
 			  {
-			    *storeptr = string;
-			    goto handle_platform_fd;
+			    /* Here, openp found a platform specific
+			       file descriptor.  It can't be a directory
+			       under Android, so return it in *PLATFORM
+			       and then indicate this by returning -3
+			       for the file descriptor.  */
+			    if (storeptr)
+			      *storeptr = string;
+			    *platform = platform_fd.asset;
+			    SAFE_FREE ();
+			    return -3;
 			  }
 
 			if (platform_fd.asset == (void *) -1)
@@ -2030,16 +2038,6 @@ openp (Lisp_Object path, Lisp_Object str, Lisp_Object suffixes,
   SAFE_FREE ();
   errno = last_errno;
   return -1;
-
-#ifdef USE_ANDROID_ASSETS
- handle_platform_fd:
-
-  /* Here, openp found a platform specific file descriptor.  It can't
-     be a directory under Android, so return it in *PLATFORM and then
-     -3 as the file descriptor.  */
-  *platform = platform_fd.asset;
-  return -3;
-#endif
 }
 
 
@@ -3449,7 +3447,7 @@ skip_lazy_string (source_t *source)
 	 and record where in the file it comes from.  */
 
       /* First exchange the two saved_strings.  */
-      static_assert (ARRAYELTS (saved_strings) == 2);
+      static_assert (countof (saved_strings) == 2);
       struct saved_string t = saved_strings[0];
       saved_strings[0] = saved_strings[1];
       saved_strings[1] = t;
@@ -3507,7 +3505,7 @@ get_lazy_string (Lisp_Object val)
      compatibility.  */
   EMACS_INT pos = eabs (XFIXNUM (XCDR (val)));
   struct saved_string *ss = &saved_strings[0];
-  struct saved_string *ssend = ss + ARRAYELTS (saved_strings);
+  struct saved_string *ssend = ss + countof (saved_strings);
   while (ss < ssend
 	 && !(pos >= ss->position && pos < ss->position + ss->length))
     ss++;
@@ -4782,27 +4780,10 @@ it defaults to the value of `obarray'.  */)
   obarray = check_obarray (NILP (obarray) ? Vobarray : obarray);
   CHECK_STRING (string);
 
-
-  char* longhand = NULL;
-  ptrdiff_t longhand_chars = 0;
-  ptrdiff_t longhand_bytes = 0;
-  tem = oblookup_considering_shorthand (obarray, SSDATA (string),
-					SCHARS (string), SBYTES (string),
-					&longhand, &longhand_chars,
-					&longhand_bytes);
+  tem = oblookup (obarray, SSDATA (string), SCHARS (string), SBYTES (string));
 
   if (!BARE_SYMBOL_P (tem))
-    {
-      if (longhand)
-	{
-	  tem = intern_driver (make_multibyte_string (longhand, longhand_chars,
-						      longhand_bytes),
-			       obarray, tem);
-	  xfree (longhand);
-	}
-      else
-	tem = intern_driver (string, obarray, tem);
-    }
+    tem = intern_driver (string, obarray, tem);
   return tem;
 }
 
@@ -4821,24 +4802,13 @@ it defaults to the value of `obarray'.  */)
 
   if (!SYMBOLP (name))
     {
-      char *longhand = NULL;
-      ptrdiff_t longhand_chars = 0;
-      ptrdiff_t longhand_bytes = 0;
-
       CHECK_STRING (name);
       string = name;
-      tem = oblookup_considering_shorthand (obarray, SSDATA (string),
-					    SCHARS (string), SBYTES (string),
-					    &longhand, &longhand_chars,
-					    &longhand_bytes);
-      if (longhand)
-	xfree (longhand);
+      tem = oblookup (obarray, SSDATA (string), SCHARS (string), SBYTES (string));
       return FIXNUMP (tem) ? Qnil : tem;
     }
   else
     {
-      /* If already a symbol, we don't do shorthand-longhand translation,
-	 as promised in the docstring.  */
       Lisp_Object sym = maybe_remove_pos_from_symbol (name);
       string = XSYMBOL (name)->u.s.name;
       tem
@@ -4872,14 +4842,7 @@ OBARRAY, if nil, defaults to the value of the variable `obarray'.  */)
   else
     {
       CHECK_STRING (name);
-      char *longhand = NULL;
-      ptrdiff_t longhand_chars = 0;
-      ptrdiff_t longhand_bytes = 0;
-      sym = oblookup_considering_shorthand (obarray, SSDATA (name),
-					    SCHARS (name), SBYTES (name),
-					    &longhand, &longhand_chars,
-					    &longhand_bytes);
-      xfree(longhand);
+      sym = oblookup (obarray, SSDATA (name), SCHARS (name), SBYTES (name));
       if (FIXNUMP (sym))
 	return Qnil;
     }
@@ -5029,7 +4992,7 @@ make_obarray (unsigned bits)
   struct Lisp_Obarray *o = allocate_obarray ();
   o->count = 0;
   o->size_bits = bits;
-  ptrdiff_t size = (ptrdiff_t)1 << bits;
+  ptrdiff_t size = (ptrdiff_t) {1} << bits;
   o->buckets = hash_table_alloc_bytes (size * sizeof *o->buckets);
   for (ptrdiff_t i = 0; i < size; i++)
     o->buckets[i] = make_fixnum (0);
@@ -5038,10 +5001,17 @@ make_obarray (unsigned bits)
 
 enum {
   obarray_default_bits = 3,
-  word_size_log2 = word_size < 8 ? 5 : 6,  /* good enough */
+
+  /* The ceiling of the log base 2 of the word size, good through 192
+     and checked in the static_assert below.  */
+  word_size_log2 = ((EMACS_INT_WIDTH <= 32 ? 5 : 6)
+		    + (EMACS_INT_WIDTH - 1) / 64),
+
   obarray_max_bits = min (8 * sizeof (int),
-			  8 * sizeof (ptrdiff_t) - word_size_log2) - 1,
+			  8 * sizeof (ptrdiff_t) - word_size_log2) - 2,
 };
+static_assert (1 << (word_size_log2 - 1) < EMACS_INT_WIDTH
+	       && EMACS_INT_WIDTH <= 1 << word_size_log2);
 
 static void
 grow_obarray (struct Lisp_Obarray *o)
@@ -5050,10 +5020,10 @@ grow_obarray (struct Lisp_Obarray *o)
   eassert (o->count > old_size);
   Lisp_Object *old_buckets = o->buckets;
 
-  int new_bits = o->size_bits + 1;
-  if (new_bits > obarray_max_bits)
+  if (obarray_max_bits <= o->size_bits)
     error ("Obarray too big");
-  ptrdiff_t new_size = (ptrdiff_t)1 << new_bits;
+  int new_bits = o->size_bits + 1;
+  ptrdiff_t new_size = (ptrdiff_t) {1} << new_bits;
   o->buckets = hash_table_alloc_bytes (new_size * sizeof *o->buckets);
   for (ptrdiff_t i = 0; i < new_size; i++)
     o->buckets[i] = make_fixnum (0);
@@ -5099,7 +5069,7 @@ given, is only a hint for the expected number.  */)
     {
       CHECK_FIXNAT (size);
       EMACS_UINT n = XFIXNUM (size);
-      bits = elogb (n) + 1;
+      bits = n ? stdc_bit_width (n - 1) : 0;
       if (bits > obarray_max_bits)
 	xsignal (Qargs_out_of_range, size);
     }
@@ -5123,7 +5093,7 @@ DEFUN ("obarray-clear", Fobarray_clear, Sobarray_clear, 1, 1, 0,
   /* This function does not bother setting the status of its contained symbols
      to uninterned.  It doesn't matter very much.  */
   int new_bits = obarray_default_bits;
-  int new_size = (ptrdiff_t)1 << new_bits;
+  int new_size = (ptrdiff_t) {1} << new_bits;
   Lisp_Object *new_buckets
     = hash_table_alloc_bytes (new_size * sizeof *new_buckets);
   for (ptrdiff_t i = 0; i < new_size; i++)
@@ -5199,7 +5169,7 @@ init_obarray_once (void)
   initial_obarray = Vobarray;
   staticpro (&initial_obarray);
 
-  for (int i = 0; i < ARRAYELTS (lispsym); i++)
+  for (int i = 0; i < countof (lispsym); i++)
     define_symbol (builtin_lisp_symbol (i), defsym_name[i]);
 
   DEFSYM (Qunbound, "unbound");

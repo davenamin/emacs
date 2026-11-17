@@ -1390,7 +1390,7 @@ can always override the use of `c-default-style' by making calls to
        (arglist-intro         . +)
        ;; Anchor pos: At the containing statement(*).
        ;; 2nd pos: At the open paren.
-       (arglist-cont          . (c-lineup-gcc-asm-reg 0))
+       (arglist-cont          . (c-lineup-gcc-asm-reg c-lineup-arglist-cont))
        ;; Anchor pos: At the first token after the open paren.
        (arglist-cont-nonempty . (c-lineup-gcc-asm-reg c-lineup-arglist))
        ;; Anchor pos: At the containing statement(*).
@@ -1737,7 +1737,9 @@ If you change this variable's value, call the function
 `c-make-noise-macro-regexps' to set the necessary internal variables (or do
 this implicitly by reinitializing C/C++/Objc Mode on any buffer)."
   :version "26.1"
-  :type '(repeat :tag "List of names" string)
+  :type '(choice
+	  (repeat :tag "List of names (possibly empty)" string)
+	  (regexp :tag "Names regexp"))
   :group 'c)
 (put 'c-noise-macro-names 'safe-local-variable #'c-string-list-p)
 (make-variable-buffer-local 'c-noise-macro-names)
@@ -1754,7 +1756,9 @@ If you change this variable's value, call the function
 `c-make-noise-macro-regexps' to set the necessary internal variables (or do
 this implicitly by reinitializing C/C++/Objc Mode on any buffer)."
   :version "26.1"
-  :type '(repeat :tag "List of names (possibly empty)" string)
+  :type '(choice
+	  (repeat :tag "List of names (possibly empty)" string)
+	  (regexp :tag "Names regexp"))
   :group 'c)
 (put 'c-noise-macro-with-parens-names 'safe-local-variable #'c-string-list-p)
 (make-variable-buffer-local 'c-noise-macro-with-parens-names)

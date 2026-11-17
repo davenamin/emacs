@@ -246,7 +246,7 @@ struct utmpx32
 #endif
 
 /* Definition of WTMP_FILE.
-   On glibc systems, UTMP_FILE is "/var/log/wtmp".  */
+   On glibc systems, WTMP_FILE is "/var/log/wtmp".  */
 #if !defined WTMP_FILE && defined _PATH_WTMP
 # define WTMP_FILE _PATH_WTMP
 #endif
@@ -256,6 +256,12 @@ struct utmpx32
 #endif
 #ifndef WTMP_FILE
 # define WTMP_FILE "/etc/wtmp"
+#endif
+
+/* Definition of WTMPDB_FILE.
+   On Debian and Devuan systems, WTMPDB_FILE is "/var/log/wtmp.db".  */
+#ifndef WTMPDB_FILE
+# define WTMPDB_FILE "/var/log/wtmp.db"
 #endif
 
 /* In early versions of Android, <utmp.h> did not define BOOT_TIME or
@@ -330,7 +336,7 @@ char *extract_trimmed_name (const STRUCT_UTMP *ut)
    If OPTIONS & READ_UTMP_NO_BOOT_TIME is nonzero, omit the boot time
    entries.
 
-   This function is not multithread-safe, since on many platforms it
+   This function is not thread-safe, since on many platforms it
    invokes the functions setutxent, getutxent, endutxent.  These
    functions are needed because they may lock FILE (so that we don't
    read garbage when a concurrent process writes to FILE), but their

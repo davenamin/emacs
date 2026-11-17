@@ -208,8 +208,6 @@ called via `package-activate-all'.  To change which packages are
 loaded and/or activated, customize `package-load-list'.")
 (put 'package-alist 'risky-local-variable t)
 
-;;;; Public interfaces for accessing built-in package info
-
 ;;;###autoload
 (defvar package-activated-list nil
   ;; FIXME: This should implicitly include all builtin packages.
@@ -339,7 +337,10 @@ PKG-DESC is a `package-desc' object."
     ;; FIXME: not the friendliest, but simple.
     (defvar Info-default-directory-list)
     (add-to-list
-     (if (boundp 'Info-directory-list)
+     ;; Extend `Info-directory-list' if it has been initialized by
+     ;; `info-initialize'.
+     ;; Otherwise, extend `Info-default-directory-list' (bug#81985).
+     (if (bound-and-true-p Info-directory-list)
          'Info-directory-list
        'Info-default-directory-list)
      pkg-dir)))
@@ -388,16 +389,21 @@ The following files have already been loaded: %S")))
 
 (defun package--get-activatable-pkg (pkg-name)
   ;; Is "activatable" a word?
-  (let ((pkg-descs (cdr (assq pkg-name package-alist))))
-    ;; Check if PACKAGE is available in `package-alist'.
-    (while
-        (when pkg-descs
-          (let ((available-version (package-desc-version (car pkg-descs))))
-            (or (package-disabled-p pkg-name available-version)
-                ;; Prefer a builtin package.
-                (package-built-in-p pkg-name available-version))))
-      (setq pkg-descs (cdr pkg-descs)))
-    (car pkg-descs)))
+  (catch 'activate
+    (let ((pkg-descs (cdr (assq pkg-name package-alist))))
+      ;; Prefer VC packages
+      (dolist (desc pkg-descs)
+        (when (package-vc-p desc)
+          (throw 'activate desc)))
+      ;; Check if PACKAGE is available in `package-alist'.
+      (dolist (desc pkg-descs)
+        (let ((available-version (package-desc-version desc)))
+          (unless (or (package-disabled-p pkg-name available-version)
+                      ;; Prefer a builtin package: If the build-in
+                      ;; version of the package is newer than DESC, we
+                      ;; skip considering to activate it.
+                      (package-built-in-p pkg-name available-version))
+            (throw 'activate desc)))))))
 
 ;; This function activates a newer version of a package if an older
 ;; one was already activated.  It also loads a features of this
@@ -535,7 +541,7 @@ the `Version:' header."
 
 ;;;; Package suggestions system
 
-;; Note that only the definitions necessary to recognise package
+;; Note that only the definitions necessary to recognize package
 ;; suggestions are defined here.  The user interface to select and act
 ;; on package suggestions is to be found in package.el.
 

@@ -180,8 +180,11 @@ src/gl-stamp
 *.core
 *.elc
 *.eln
+*.i
 *.o
 *.res
+*.s
+!/exec/*.s
 *.so
 *.dylib
 core
@@ -323,12 +326,20 @@ gnustmp*
 /info/
 
 # Version control and locks.
+*.bdl
+*.bundle
+*.diff
 *.orig
+*.patch
+*.rej
 *.swp
 *~
 \#*\#
 ChangeLog
 [0-9]*.txt
+/*.tar.gz
+/*.tgz
+/*.zip
 /vc-dwim-log-*
 
 # Built by 'make install'.

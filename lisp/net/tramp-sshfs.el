@@ -57,7 +57,8 @@
 		(tramp-mount-args            (("-C") ("-p" "%p")
 					      ("-o" "dir_cache=no")
 					      ("-o" "transform_symlinks")
-					      ("-o" "idmap=user,reconnect")))
+					      ("-o" "idmap=user,reconnect")
+					      ("-o" "ConnectTimeout=%t")))
 		;; These are for remote processes.
                 (tramp-login-program        "ssh")
                 (tramp-login-args           (("-q") ("-l" "%u") ("-p" "%p")
@@ -68,7 +69,8 @@
                 (tramp-direct-async         t)
                 (tramp-remote-shell         ,tramp-default-remote-shell)
                 (tramp-remote-shell-login   ("-l"))
-                (tramp-remote-shell-args    ("-c"))))
+                (tramp-remote-shell-args    ("-c"))
+		(tramp-connection-timeout   10)))
 
  (tramp-set-completion-function
   tramp-sshfs-method tramp-completion-function-alist-ssh))
@@ -90,7 +92,6 @@
     (directory-files . tramp-fuse-handle-directory-files)
     (directory-files-and-attributes
      . tramp-handle-directory-files-and-attributes)
-    (dired-compress-file . ignore)
     (dired-uncache . tramp-handle-dired-uncache)
     (exec-path . tramp-sshfs-handle-exec-path)
     (expand-file-name . tramp-handle-expand-file-name)
@@ -136,7 +137,6 @@
     (lock-file . tramp-handle-lock-file)
     (make-auto-save-file-name . tramp-handle-make-auto-save-file-name)
     (make-directory . tramp-fuse-handle-make-directory)
-    (make-directory-internal . ignore)
     (make-lock-file-name . tramp-handle-make-lock-file-name)
     (make-nearby-temp-file . tramp-handle-make-nearby-temp-file)
     (make-process . tramp-handle-make-process)
@@ -221,7 +221,7 @@ arguments to pass to the OPERATION."
        (with-temp-buffer
          (let (process-file-side-effects)
 	   (process-file "getconf" nil t nil "PATH"))
-	 (split-string
+	 (string-split
 	  (progn
 	    ;; Read the expression.
 	    (goto-char (point-min))
@@ -357,7 +357,9 @@ connection if a previous connection has died for some reason."
 		(tramp-fuse-mount-point vec)
 		(tramp-expand-args
 		 vec 'tramp-mount-args nil
-		 ?p (or (tramp-file-name-port vec) ""))))))
+		 ?p (or (tramp-file-name-port vec) "")
+		 ?t (tramp-get-method-parameter
+		     vec 'tramp-connection-timeout tramp-connection-timeout))))))
       (tramp-error
        vec 'remote-file-error "Error mounting %s" (tramp-fuse-mount-spec vec)))
 

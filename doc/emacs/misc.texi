@@ -1303,6 +1303,12 @@ resubmit them or copy them to the end.  Or you can use a
 Fetch the next earlier old shell command
 (@code{comint-previous-input}).
 
+@findex comint-complete-input-ring
+@kindex C-x @key{UP} @r{(Shell mode)}
+@item C-x @key{UP}
+Complete the current input using shell command history
+(@code{comint-complete-input-ring}).
+
 @kindex M-n @r{(Shell mode)}
 @findex comint-next-input
 @item M-n
@@ -1349,6 +1355,12 @@ potential shell input.  @kbd{M-n} does likewise except that it finds
 successively more recent shell commands from the buffer.
 @kbd{C-@key{UP}} works like @kbd{M-p}, and @kbd{C-@key{DOWN}} like
 @kbd{M-n}.
+
+  @kbd{C-x @key{UP}} tries to complete (@pxref{Completion}) your current
+input against the history of old shell commands.  So, for example, you
+could type the first few words of a long and complex shell command you
+executed earlier, then invoke this command to have Emacs fill in the
+rest of it.
 
   The history search command @kbd{M-r} begins an incremental regular
 expression search of previous shell commands.  After typing @kbd{M-r},
@@ -2285,7 +2297,7 @@ machines (@pxref{Remote Files}) using TRAMP (@pxref{Top, The Tramp
 Manual,, tramp, The Tramp Manual}).  This is mostly useful in
 combination with using the Emacs server from a remote host.  By
 ssh-forwarding the listening socket, or ssh-forwarding the listening
-port @pxref{TCP Emacs server} and making the
+port (@pxref{TCP Emacs server}) and making the
 @var{server-file} available on a remote machine, programs on the
 remote machine can use @command{emacsclient} as the value for the
 @env{EDITOR} and similar environment variables, but instead of talking

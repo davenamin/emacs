@@ -1238,8 +1238,11 @@ Type \\[describe-mode] after entering Dired for more info.
 If DIRNAME is already in a Dired buffer, that buffer is used without refresh."
   ;; Cannot use (interactive "D") because of wildcards.
   (interactive (dired-read-dir-and-switches ""))
-  (prog1 (pop-to-buffer-same-window (dired-noselect dirname switches))
-    (dired--display-ls-error)))
+  (let ((buf (dired-noselect dirname switches)))
+    (prog1 (if buf
+               (pop-to-buffer-same-window buf)
+             (current-buffer))
+    (dired--display-ls-error))))
 
 ;; This lets clicks on the menu bar invoke Dired even if some feature
 ;; remaps the Dired command to another command that does not handle this
@@ -1258,24 +1261,33 @@ If this command needs to split the current window, it by default obeys
 the user options `split-height-threshold' and `split-width-threshold',
 when it decides whether to split the window horizontally or vertically."
   (interactive (dired-read-dir-and-switches "in other window "))
-  (prog1 (switch-to-buffer-other-window (dired-noselect dirname switches))
-    (dired--display-ls-error)))
+  (let ((buf (dired-noselect dirname switches)))
+    (prog1 (if buf
+               (switch-to-buffer-other-window buf)
+             (current-buffer))
+      (dired--display-ls-error))))
 
 ;;;###autoload (keymap-set ctl-x-5-map "d" #'dired-other-frame)
 ;;;###autoload
 (defun dired-other-frame (dirname &optional switches)
   "\"Edit\" directory DIRNAME.  Like `dired' but make a new frame."
   (interactive (dired-read-dir-and-switches "in other frame "))
-  (prog1 (switch-to-buffer-other-frame (dired-noselect dirname switches))
-    (dired--display-ls-error)))
+  (let ((buf (dired-noselect dirname switches)))
+    (prog1 (if buf
+               (switch-to-buffer-other-frame buf)
+             (current-buffer))
+      (dired--display-ls-error))))
 
 ;;;###autoload (keymap-set tab-prefix-map "d" #'dired-other-tab)
 ;;;###autoload
 (defun dired-other-tab (dirname &optional switches)
   "\"Edit\" directory DIRNAME.  Like `dired' but make a new tab."
   (interactive (dired-read-dir-and-switches "in other tab "))
-  (prog1 (switch-to-buffer-other-tab (dired-noselect dirname switches))
-    (dired--display-ls-error)))
+  (let ((buf (dired-noselect dirname switches)))
+    (prog1 (if buf
+               (switch-to-buffer-other-tab buf)
+             (current-buffer))
+        (dired--display-ls-error))))
 
 ;;;###autoload
 (defun dired-noselect (dir-or-list &optional switches)
@@ -1459,10 +1471,20 @@ The return value is the target column for the file names."
       ;; (buffer-local), so we can call dired-readin:
       (let ((failed t))
 	(unwind-protect
-	    (progn (dired-readin)
-                   (unless (and dired--ls-error-buffer
-                                (get-buffer "*ls error*"))
-		     (setq failed nil)))
+            (progn
+              ;; `dired--ls-error-buffer' should only be set in
+              ;; `insert-directory', and if `ls' errors and the buffer
+              ;; displaying the error message pops ups,
+              ;; `dired--ls-error-buffer' is then unset.  But if for
+              ;; some reason it gets set before the next Dired
+              ;; buffer-display command is invoked, this can raise an
+              ;; error, so ensure the variable is unset before reading
+              ;; the directory contents into a Dired buffer.
+              (setq dired--ls-error-buffer nil)
+              (dired-readin)
+              (unless (and dired--ls-error-buffer
+                           (get-buffer "*ls error*"))
+                (setq failed nil)))
 	  ;; If either `dired-readin' failed (e.g. if parent directories
 	  ;; are inaccessible) or `ls' errored, don't leave the Dired
 	  ;; buffer around.
@@ -1477,12 +1499,17 @@ The return value is the target column for the file names."
     ;; and `ls' can take the `b' switch.  We do this here in order to
     ;; get the warning not only when interactively invoking `dired' on a
     ;; directory, but also e.g. when passing the directory name as a
-    ;; command line argument when starting Emacs from the shell.
+    ;; command line argument when starting Emacs from the shell (but
+    ;; inserting subdirs does not call `dired-internal-noselect' so we
+    ;; also have to run this test in `dired-insert-subdir').
     (unless (or dired-auto-toggle-b-switch
                 (dired-switches-escape-p dired-listing-switches)
                 (dired-switches-escape-p dired-actual-switches))
       (when (and (dired--filename-with-newline-p)
-                 (dired--ls-accept-b-switch-p))
+                 ;; Can't use `dired-use-ls-dired' because users could
+                 ;; set it to `t' even though their `ls' does not
+                 ;; support "--dired".
+                 (dired--check-use-ls-dired))
         (dired--display-filename-with-newline-warning buffer)))
     (set-buffer old-buf)
     buffer))
@@ -1772,6 +1799,10 @@ BEG..END is the line where the file info is located."
   "Return non-nil if the string SWITCHES contains -R or --recursive."
   (dired-check-switches switches "R" "recursive"))
 
+(defun dired--check-use-ls-dired ()
+  "Return non-nil if `ls' supports the \"--dired\" switch."
+  (eq 0 (call-process insert-directory-program nil nil nil "--dired" "-N")))
+
 (defun dired-insert-directory (dir switches &optional file-list wildcard hdr)
   "Insert a directory listing of DIR, Dired style.
 Use SWITCHES to make the listings.
@@ -1791,11 +1822,7 @@ If HDR is non-nil, insert a header line with the directory name."
          (not (bound-and-true-p eshell-ls-use-in-dired))
 	 (or remotep
              (if (eq dired-use-ls-dired 'unspecified)
-		 ;; Check whether "ls --dired" gives exit code 0, and
-		 ;; save the answer in `dired-use-ls-dired'.
-		 (or (setq dired-use-ls-dired
-			   (eq 0 (call-process insert-directory-program
-                                               nil nil nil "--dired" "-N")))
+		 (or (setq dired-use-ls-dired (dired--check-use-ls-dired))
 		     (progn
 		       (message "ls does not support --dired -N; \
 see `dired-use-ls-dired' for more details.")
@@ -4050,15 +4077,18 @@ Considers buffers closer to the car of `buffer-list' to be more recent."
        (not (memq buffer1 (memq buffer2 (buffer-list))))))
 
 (defun dired--filename-with-newline-p ()
-  "Check whether a file name in this directory has a newline.
-Return non-nil if at least one file name in this directory contains a
-newline character (regardless of whether Dired displays the character as
-a literal newline or as \"\\n\")."
-  (directory-files default-directory nil "\n"))
-
-(defun dired--ls-accept-b-switch-p ()
-  "Return non-nil if the `ls' used by Dired accepts the `b' switch."
-  (eq 0 (call-process insert-directory-program nil nil nil "-b")))
+  "Check whether a file name in this Dired buffer has a newline.
+Return non-nil if at least one file name in this Dired buffer (including
+any Dired subdirectories in the buffer) contains a newline character
+(regardless of whether Dired displays the character as a literal newline
+or as \"\\n\")."
+  (if (length> dired-subdir-alist 1)
+      (let (res)
+        (catch 'found
+          (dolist (subdir dired-subdir-alist res)
+            (setq res (directory-files (car subdir) nil "\n"))
+            (and res (throw 'found res)))))
+    (directory-files default-directory nil "\n")))
 
 (defun dired--remove-b-switch ()
   "Remove all variants of the `b' switch from `dired-actual-switches'.
@@ -4094,7 +4124,10 @@ otherwise remove the `b' switch unless it is in
 (defun dired--set-auto-toggle-b-switch (symbol value)
   "The :set function for user option `dired-auto-toggle-b-switch'."
   (custom-set-default symbol value)
-  (when (dired--ls-accept-b-switch-p)
+  (when
+      ;; Can't use `dired-use-ls-dired' because users could set it to
+      ;; `t' even though their `ls' does not support "--dired".
+      (dired--check-use-ls-dired)
     (if value
         (add-hook 'post-command-hook #'dired--toggle-b-switch nil t)
       (remove-hook 'post-command-hook #'dired--toggle-b-switch t))
@@ -4604,6 +4637,7 @@ no ARGth marked file is found before this line."
       (while (and (< (point) end) (dired-between-files))
 	(forward-line 1))
       (if (and (not (looking-at-p dired-re-dot))
+               (not (dired--hidden-p))
 	       (dired-get-filename nil t))
 	  (progn
 	    (delete-char 1)
@@ -4648,6 +4682,7 @@ this subdir."
        (prefix-numeric-value arg)
        (lambda ()
          (when (or (not (looking-at-p dired-re-dot))
+                   (not (dired--hidden-p))
                    ;; Don't skip symlinks to ".", "..", etc.
                    (save-excursion
                      (re-search-forward
@@ -4756,6 +4791,7 @@ object files--just `.o' will mark more than you might think."
     (dired-mark-if
      (and (not (looking-at-p dired-re-dot))
 	  (not (eolp))			; empty line
+	  (not (dired--hidden-p))
 	  (let ((fn (dired-get-filename t t)))
 	    (and fn (string-match-p regexp fn))))
      "matching file")))
@@ -4807,6 +4843,7 @@ since it was last visited."
     (dired-mark-if
      (and (not (looking-at-p dired-re-dot))
 	  (not (eolp))			; empty line
+	  (not (dired--hidden-p))
 	  (let ((fn (dired-get-filename nil t)))
 	    (when (and fn (file-readable-p fn)
 		       (not (file-directory-p fn)))
@@ -5483,10 +5520,12 @@ when it decides whether to split the window horizontally or vertically."
 	      (read-file-name "Jump to Dired file: "))))
   (dired-jump t file-name))
 
-(defvar-keymap dired-jump-map
+(define-obsolete-variable-alias
+  'dired-jump-map
+  'dired-jump-repeat-map "32.1")
+(defvar-keymap dired-jump-repeat-map
   :doc "Keymap to repeat `dired-jump'.  Used in `repeat-mode'."
   :repeat t
-  "j"   #'dired-jump
   "C-j" #'dired-jump)
 
 

@@ -115,7 +115,6 @@ xstrcasecmp (char const *a, char const *b)
 typedef struct x_display_info Display_Info;
 #ifndef USE_CAIRO
 typedef XImage *Emacs_Pix_Container;
-typedef XImage *Emacs_Pix_Context;
 #endif	/* !USE_CAIRO */
 #define NativeRectangle XRectangle
 #endif
@@ -130,7 +129,6 @@ typedef struct
   int bits_per_pixel;		/* bits per pixel (ZPixmap) */
 } *Emacs_Pix_Container;
 typedef Emacs_Pix_Container Emacs_Pixmap;
-typedef Emacs_Pix_Container Emacs_Pix_Context;
 #endif
 
 #ifdef HAVE_NTGUI
@@ -138,6 +136,7 @@ typedef Emacs_Pix_Container Emacs_Pix_Context;
 typedef struct w32_display_info Display_Info;
 typedef XImage *Emacs_Pix_Container;
 typedef HDC Emacs_Pix_Context;
+# define PIX_CONTAINER_TO_CONTEXT(c) ((Emacs_Pix_Context) (c))
 #endif
 
 #ifdef HAVE_NS
@@ -145,7 +144,6 @@ typedef HDC Emacs_Pix_Context;
 /* Following typedef needed to accommodate the MSDOS port, believe it or not.  */
 typedef struct ns_display_info Display_Info;
 typedef Emacs_Pixmap Emacs_Pix_Container;
-typedef Emacs_Pixmap Emacs_Pix_Context;
 #endif
 
 #ifdef HAVE_PGTK
@@ -160,28 +158,27 @@ typedef XImagePtr XImagePtr_or_DC;
 #include "haikugui.h"
 typedef struct haiku_display_info Display_Info;
 typedef Emacs_Pixmap Emacs_Pix_Container;
-typedef Emacs_Pixmap Emacs_Pix_Context;
 #endif
 
 #ifdef HAVE_ANDROID
 #include "androidgui.h"
 typedef struct android_display_info Display_Info;
 typedef struct android_image *Emacs_Pix_Container;
-typedef struct android_image *Emacs_Pix_Context;
 #endif
 
 #ifdef HAVE_IOS
-/* No iosgui.h yet -- the typedefs needed by dispextern.h /
-   termhooks.h / frame.h live inline here, and the full UIKit-backed
-   definitions of struct ios_display_info / ios_output are in
-   iosterm.h (included via TERM_HEADER from translation units that
-   want them).  Emacs_Pixmap / Emacs_Pix_Container / Emacs_Pix_Context
-   are opaque (void *) for now -- the iOS image code is a stub.  */
+/* The typedefs dispextern.h, termhooks.h and frame.h need live inline
+   here; the full UIKit-backed definitions of struct ios_display_info
+   and ios_output are in iosterm.h (included via TERM_HEADER from
+   translation units that want them).  Pixmaps are CGImageRefs, opaque
+   to the generic code, as are the window handles.  */
 typedef struct ios_display_info Display_Info;
 typedef void *Emacs_Pixmap;
 typedef void *Emacs_Pix_Container;
-typedef void *Emacs_Pix_Context;
 typedef void *Emacs_Cursor;
+/* Window handles are pointers, which the integer default below does
+   not accept.  */
+#define WINDOW_HANDLE_UINTPTR(h) ((uintptr_t) (h))
 /* Define NativeRectangle here, not in iosterm.h, so that function
    prototypes in dispextern.h that mention NativeRectangle resolve
    consistently with the implementations in xdisp.c.  iosterm.h is
@@ -204,6 +201,22 @@ typedef void *Emacs_Cursor;
 #endif
 
 #ifdef HAVE_WINDOW_SYSTEM
+
+/* Convert a window handle to uintptr_t.  This default uses a compound literal,
+   which is good for platforms where handles are integers, as it checks
+   types better than a cast would.  Platforms where handles are pointers
+   should override the default with a more-powerful cast.  */
+# ifndef WINDOW_HANDLE_UINTPTR
+#  define WINDOW_HANDLE_UINTPTR(h) ((uintptr_t) {(h)})
+# endif
+
+/* Ordinarily an Emacs_Pix_Context is just an Emacs_Pix_Container;
+   platforms can override this by defining the latter type
+   and defining the conversion macro PIX_CONTAINER_TO_CONTEXT.  */
+# ifndef PIX_CONTAINER_TO_CONTEXT
+typedef Emacs_Pix_Container Emacs_Pix_Context;
+#  define PIX_CONTAINER_TO_CONTEXT(c) (c)
+# endif
 
 /* ``box'' structure similar to that found in the X sample server,
    meaning that X2 and Y2 are not actually the end of the box, but one
@@ -267,7 +280,7 @@ enum window_part
 /* Macros to include code only if GLYPH_DEBUG is defined.  */
 
 #ifdef GLYPH_DEBUG
-#define IF_DEBUG(X)	((void) (X))
+#define IF_DEBUG(X)	do { (X); } while (false)
 #else
 #define IF_DEBUG(X)	((void) 0)
 #endif
@@ -1900,6 +1913,7 @@ struct face
   bool_bf tty_italic_p : 1;
   bool_bf tty_reverse_p : 1;
   bool_bf tty_strike_through_p : 1;
+  bool_bf tty_overline_p : 1;
 
   /* True means that colors of this face may not be freed because they
      have been copied bitwise from a base face (see
@@ -2065,7 +2079,7 @@ GLYPH_CODE_P (Lisp_Object gc)
 	  : (RANGED_FIXNUMP
 	     (0, gc,
 	      (MAX_FACE_ID < EMACS_INT_MAX >> CHARACTERBITS
-	       ? ((EMACS_INT) MAX_FACE_ID << CHARACTERBITS) | MAX_CHAR
+	       ? ((EMACS_INT) {MAX_FACE_ID} << CHARACTERBITS) | MAX_CHAR
 	       : EMACS_INT_MAX))));
 }
 
@@ -3241,10 +3255,6 @@ struct image
 # if !defined USE_CAIRO && defined HAVE_XRENDER
   /* Picture versions of pixmap and mask for compositing.  */
   Picture picture, mask_picture;
-
-  /* We need to store the original image dimensions in case we have to
-     call XGetImage.  */
-  int original_width, original_height;
 # endif
 #endif	/* HAVE_X_WINDOWS */
 #ifdef HAVE_ANDROID
@@ -3261,9 +3271,6 @@ struct image
 #ifdef HAVE_HAIKU
   /* The affine transformation to apply to this image.  */
   double transform[3][3];
-
-  /* The original width and height of the image.  */
-  int original_width, original_height;
 
   /* Whether or not bilinear filtering should be used to "smooth" the
      image.  */
@@ -3304,7 +3311,17 @@ struct image
      valid, respectively. */
   bool_bf background_valid : 1, background_transparent_valid : 1;
 
-  /* Width and height of the image.  */
+  /* Refresh counter reflecting the current version of the image.
+     Always larger than zero for images which may need refreshing.
+     Right now it is only used by canvas images.  */
+  uint32_t refresh;
+
+  /* The original width and height of the image before transformations
+     like scaling or rotation.  */
+  int original_width, original_height;
+
+  /* Width and height of the image.  These values depend on
+     the :scale or :rotation image parameters.  */
   int width, height;
 
   /* The scale factor applied to the image.  */
@@ -3540,7 +3557,8 @@ enum
   TTY_CAP_DIM = 1 << 4,
   TTY_CAP_ITALIC = 1 << 5,
   TTY_CAP_STRIKE_THROUGH = 1 << 6,
-  TTY_CAP_UNDERLINE_STYLED = 1 << 7
+  TTY_CAP_UNDERLINE_STYLED = 1 << 7,
+  TTY_CAP_OVERLINE = 1 << 8
 };
 
 
@@ -3611,6 +3629,7 @@ int frame_mode_line_height (struct frame *);
 extern bool redisplaying_p;
 extern unsigned int redisplay_counter;
 extern bool display_working_on_window_p;
+extern int dont_resize_frames;
 extern void unwind_display_working_on_window (void);
 extern bool help_echo_showing_p;
 extern Lisp_Object help_echo_string, help_echo_window;
@@ -3634,6 +3653,7 @@ extern void get_font_ascent_descent (struct font *, int *, int *);
 
 #ifdef HAVE_WINDOW_SYSTEM
 
+extern void redraw_image_glyphs (Lisp_Object);
 extern void gui_get_glyph_overhangs (struct glyph *, struct frame *,
                                      int *, int *);
 extern struct font *font_for_underline_metrics (struct glyph_string *);
@@ -3722,6 +3742,8 @@ extern bool buffer_flipping_blocked_p (void);
 extern void update_redisplay_ticks (int, struct window *);
 
 /* Defined in image.c */
+
+extern uint32_t *canvas_data (Lisp_Object);
 
 #ifdef HAVE_WINDOW_SYSTEM
 

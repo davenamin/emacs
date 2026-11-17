@@ -24,11 +24,22 @@ applies, and please also update docstrings as needed.
 
 * Installation Changes in Emacs 32.1
 
+** Changed startup options for 'emacsclient' in "emacsclient.desktop".
+The '--display=$DISPLAY' command-line option is replaced with
+'--reuse-frame' in the 'emacsclient' command-line options, to make
+it compatible with both X11 and Wayland.
+
 
 * Startup Changes in Emacs 32.1
 
+** New terminal type 'Kmscon'.
+Emacs now supports the 'Kmscon' terminal emulator available on GNU/Linux
+systems.
+
 
 * Changes in Emacs 32.1
+
+** Emacs now supports Unicode Standard version 18.0.
 
 ---
 ** Emacs no longer kills child processes after EPIPE.
@@ -37,11 +48,207 @@ exit status to 256 if sending input to that process returned EPIPE.
 Now when this happens, Emacs closes the file descriptor to write to the
 child process, but allows it to continue execution as normal.
 
+---
+** New variable 'tty-cursor-movement-use-TAB'.
+If this is set to the nil value, Emacs will not use TABs to optimize
+cursor motion on text-mode terminals.  This is for the rare cases where
+the hardware tabs of the terminal were set to a non-default value by the
+'tabs' command or similar, or if using TABs for cursor movement has any
+other undesired effects.  The default is t, which preserves past
+behavior.
+
+If this variable is nil, 'tty-cursor-movement-use-TAB-BS' has no effect,
+and Emacs will never use TABs for any cursor-movement sequences.
+
++++
+** New support for the Kitty Keyboard Protocol.
+If your terminal emulator supports the Kitty Keyboard Protocol,
+text-mode frames now make use of it for keyboard input.
+This means that key chords which previously worked only in graphical
+frames now also work in text-mode frames.  For example, the Kitty
+Keyboard Protocol makes it possible for Emacs to distinguish typing
+'RET' and 'C-RET', so now it is possible to bind different commands to
+'RET' and 'C-RET' in text-mode frames and have both work.
+If your terminal emulator's support for the Kitty Keyboard Protocol is
+buggy, you can customize 'tty-use-kitty-kbd-proto' to nil to disable
+this feature.
+
+---
+** File- and directory-local variables respect user option setters.
+Values of variables that are user options mentioned in file-local
+variable sections and directory-locals via ".dir-locals.el" are now
+set similarly to 'setopt-local'; i.e., if a user option has a defcustom
+':set' function, that function will be invoked.
+
+** Emacs can now set the input purpose on PGTK.
+By default Emacs now uses the 'terminal' value for the GTK input
+purpose, which helps on-screen keyboards decide whether to allow
+entering of key sequences using modifiers.  This only affects PGTK
+builds using GTK versions >= 3.6.0.  Set the new variable
+'pgtk-input-purpose' to 'free-form' to restore GTK's default behavior
+(which was also Emacs' previous behavior).
+
+---
+** New user option 'setopt-local-type-mismatch'.
+This option controls what 'setopt-local' does when it detects a type
+mismatch between the specified value and the ':type' specification of a
+user option.  Its backward-compatible default is nil which emits a
+warning and accepts the type-mismatched value.  You can control this by
+customizing 'setopt-local-type-mismatch' to a non-nil value: the value
+'accept' inhibits the warning and silently accepts type-mismatched
+values; the value 'discard' inhibits the warning and discards
+type-mismatched values; any other non-nil value prompts you whether to
+accept or ignore the value.
+
+---
+** Specifying a minor mode as a local variable enables that mode.
+The previous behavior, toggling the mode, was neither reliable nor
+generally desirable.
+
++++
+** Emacs tries to display the overlay arrow in the left margin.
+On a non-graphical display (or when the left fringe is not shown), if a
+left margin is present, Emacs will now display the overlay arrow into
+this margin.  Edebug is now using this feature by explicitly setting up
+a left margin for it.
+
+** Mode Line
+
+*** Popup menus invoked from mode line select another window.
+Clicking mode line elements in inactive windows now first
+selects another window before displaying the menu, so the
+commands invoked from the menu will operate on the right buffer.
+You can restore the previous behavior by removing
+'mode-line-window-select' from 'x-pre-popup-menu-hook'.
+
+---
+*** "%e" in the mode line now expands to a warning when memory is low.
+Previously, this behavior had been inadvertently limited to MS-DOS.
+
+** Minibuffer
+
+---
+*** The variable 'completion-ignore-case' is now customizable.
+
+---
+*** 'icomplete-in-buffer' users need no longer advise 'completion-at-point'.
+The "*Completions*" buffer no longer pops up in addition to Icomplete's
+in-buffer display of completions, by default.
+Therefore, the instructions in the NEWS file for Emacs 30.1 to add
+
+    (advice-add 'completion-at-point :after #'minibuffer-hide-completions)
+
+to your initialization file no longer apply, and you may remove it.
+If you still want to show the "*Completions*" buffer, then customize
+the user option 'icomplete-in-buffer' to the value 'with-completions-popup'.
+
+---
+*** Graceful degradation while reading too many dialog items.
+While using the dialog box, 'read-multiple-choice', 'read-answer',
+'map-y-or-n-p' now fall back to reading the answer from the minibuffer
+when the number of items is greater than 9 instead of signaling an error.
+
+---
+** Improved Emoji support on text-only terminals.
+Emacs now composes Emoji sequences as two-column glyphs on text-mode
+terminals when 'auto-composition-mode' is enabled.  This should correct
+a number of movement and display issues on Emoji-capable terminal
+emulators.
+
+However, the actual rendering of Emoji still depends on the capability
+of the terminal emulator:
+
+- If the terminal emulator does not support grapheme clusters at all,
+  composed Emoji sequences will not work.  In this case, disable
+  'auto-composition-mode'.
+
+- Non-compliant terminal emulators may not always render an Emoji
+  sequence as a wide glyph, depending on the character width of the
+  first code point in the sequence.  In this case, it might help to set
+  'tty-display-emoji-force-wide' to nil.
+
+** Faces
+
+*** New face 'header-line-emphasis'.
+This corresponds to the face 'header-line-highlight' as
+'mode-line-emphasis' corresponds to 'mode-line-highlight'.
+
+*** New face 'mode-line-recursive-edit'.
+This face is used for the "[" and "]" brackets that appear around the
+modes in the mode line when Emacs is in a recursive edit.  By default
+it inherits from 'mode-line-emphasis'.
+
+*** Underline, overline, and strike-through can now be scaled with text.
+The thickness of the line of these face attributes can now optionally
+be scaled when the text is scaled.  This is by default off; you can use
+the new variables 'underline-line-scaling-flag',
+'overline-line-scaling-flag' and 'strike-through-line-scaling-flag' to
+control the scaling for each attribute.
+
+---
+*** Support for overline face attributes on text-only terminals.
+Emacs now displays overlines on text-only terminals.  Terminal support
+for overline is determined based on the 'Smol' capability in the
+terminfo database.  For terminals where the terminfo database does not
+correctly declare the 'Smol' capability, the new function
+'tty-enable-overline' allows manually enabling or disabling support.
+
++++
+** 'make-network-process' now supports setting TCP keepalive options.
+The ':keepalive-idle', ':keepalive-interval', and ':keepalive-count'
+options can now be used to set the various timers and counters used
+when TCP keepalive is enabled for a connection.  The support for this
+is platform-dependent, but works on at least GNU/Linux, FreeBSD,
+NetBSD, and MS Windows.  (OpenBSD does not work, but specifying the
+options does not cause any errors).
+
 
 * Editing Changes in Emacs 32.1
 
++++
+** New user option 'query-replace-show-preview'.
+If non-nil, the replacement commands preview the replacement while you
+type it: the matches visible in the window are shown as they would look
+after the replacement.  Only the matches that the command will replace
+are previewed: those after point, or those before it when replacing
+backward.  The preview also appears at the first prompt, as soon as its
+input holds both halves, as it does after recalling a replacement from
+the history with 'M-p'.  Replacements that use '\,' or '\#' are not
+previewed.  The preview is off by default.
+
+The value can be the symbol 'replacement-only', which shows the
+replacement alone, the symbol 'both', which shows the match and the
+replacement side-by-side, or a custom function of the match and the
+replacement, returning the string to show in place of the match.
+
+** Electric Pair mode
+
+*** Electric pair mode can restrict operation to nearby fields.
+This is particularly useful in comint-based modes (like 'M-x shell' or
+'M-x run-python') and other situations where process output may contain
+unpaired delimiters, while keeping delimiters you insert balanced.  The
+'electric-pair-field-search-size' variable controls the search distance
+for nearby fields.
+
+** Internationalization
+
+---
+*** New language environment and input method for Kyrgyz.
+The language environment and the input method 'cyrillic-kyrgyz' support
+the Kyrgyz language.
+
 
 * Changes in Specialized Modes and Packages in Emacs 32.1
+
+** Use-Package
+
+---
+*** ':ensure t' installs the package only at run-time.
+In previous versions, it tried to install it more eagerly during
+compilation, but such side-effects are not welcome during compilation.
+In a pinch, to recover the previous behavior you can
+set 'use-package-ensure-install-during-compile' to a non-nil value,
+but it is a temporary backward compatibility hack that will disappear.
 
 ** Package
 
@@ -53,14 +260,456 @@ package with the same version.  This is useful if you have started
 making local changes to your tarball installation, and then decided to
 check out the repository to prepare a patch for the package maintainer.
 
+** Compilation mode
+
+---
+*** Messages from Ansible are now recognized.
+
+---
+*** Messages from Ruff are now recognized.
+
+** MML
+
+---
+*** MML can now generate unobtrusive signatures.
+These tend to stand out less when displayed in common receiving MUA than
+PGP/MIME signatures.  New command 'mml-secure-message-sign-unobtrusive',
+bound to 'C-c RET s u' in 'mml-mode-map'.
+
+** Flymake
+
++++
+*** Overhauled inline diagnostics.
+A new user option 'flymake-inline-diagnostics' replaces
+'flymake-show-diagnostics-at-end-of-line' and controls how Flymake
+annotates diagnostic text directly in the buffer.  Besides the previous
+styles ('eol', 'short', and 'fancy'), it can be used to only display
+certain styles in certain situations, such as using a 'fancy' inline
+displays on nearby diagnostic only.  The old variable is now an obsolete
+alias.  In parallel, the user option 'flymake-diagnostic-format-alist'
+contains new options to configure exactly which parts of a diagnostic to
+show for each inline layout possibility.
+
+** Man
+
+---
+*** OSC 8 hyperlinks in man pages are now buttonized.
+When a man page contains OSC 8 hyperlink escape sequences, they
+are now buttonized, allowing using mouse or 'RET' to follow them.
+
+** Woman
+
+---
+*** The variable 'woman-topic-history' is now obsolete.
+Use 'Man-topic-history' instead.
+
+** VC
+
++++
+
+*** VC Directory outgoing revisions count is now asynchronous.
+This means it won't get in your way even if it's slow for your
+repository.  As such, the 'vc-dir-show-outgoing-count' option is now
+obsolete.
+
+---
+*** VC Directory now shows key binding hints.
+To hide these, you can customize the new user option
+'vc-dir-show-key-binding-hints' to nil.
+Backends can supply additional hints using the new 'dir-extra-hints'
+backend method.
+
+---
+*** VC Directory doesn't process very large status output by default.
+If the VCS status process used to populate the VC Directory buffer
+produces a very large amount of output, it often means that you did
+something accidental like renaming a subdirectory containing thousands
+of files, and Emacs can become unresponsive while trying to process all
+the output.  Now Emacs stops early.  When this happens, VC Directory
+includes a message saying so, with a button to override it.  You can
+customize the new user option 'vc-dir-process-output-limit' to control
+how early to stop, and to disable this feature.
+
+---
+*** VC Directory resolves symbolic links only if the directory has no backend.
+When called interactively, 'M-x vc-dir' checks if the passed directory
+has a VC backend.  If it doesn't, but the directory's truename does
+have a backend, and 'vc-follow-symlinks' is non-nil, the truename is
+used instead.  Previously, the truename was used unconditionally.
+
++++
+*** New user option 'vc-dir-simple-unmark-all-files'.
+This inverts the meaning of a prefix argument to the existing 'U'
+('vc-dir-unmark-all-files') command, which some users may find more
+intuitive.
+
++++
+*** Improved creation of commit log entry from ChangeLog.
+When VC detects that all log entries for the current changeset come from
+the same ChangeLog file or buffer, it now inserts the entire body of the
+ChangeLog entry into the "*vc-log*" buffer.  If the ChangeLog entry
+contains a summary line, VC inserts it into the "*vc-log*" Summary
+header.  If one or more files listed in the ChangeLog entry are not in
+the current VC fileset, VC displays a warning.
+
+---
+*** The face 'log-edit-headers-separator' inherits from separator-line.
+The default definition of 'log-edit-headers-separator' now inherits its
+attributes from the face 'separator-line'.  That changes the default
+color and makes it work better in the terminal.
+
+---
+*** New user option 'vc-quick-select-current-working-tree'.
+If you customize this to non-nil, commands that may operate on any
+working tree no longer prompt when the current working tree is the only
+choice.
+
+** Diff
+
+---
+*** 'diff-switches' now includes '-r' by default.
+
+** Diff mode
+
++++
+*** New command 'f' jumps to the corresponding line of the old source.
+This is primarily intended for use in "*vc-diff*" buffers, where it
+mirrors the existing 'f' binding in Log View mode buffers.
+In such buffers, 'f' when point is on an old changed line (i.e. a
+removed line) jumps to the file at the diff's old revision, and 'f' when
+point is on a new changed line (i.e. an added line) or an unchanged line
+jumps to the file at the diff's new revision.
+
+** Outline mode
+
+*** New command 'outline-show-entry-and-parents'.
+It is bound to 'C-e' in the Outline keymaps and reveals the current
+entry with its parent hierarchy.
+
+---
+*** New function 'outline-search-from-regexp'.
+A generic 'outline-search-function' implementation driven by
+'outline-regexp', suitable for modes or minor modes that customize
+'outline-regexp' but do not need a custom search strategy.
+Install it with:
+
+    (setq-local outline-search-function #'outline-search-from-regexp)
+
+---
+*** 'outline-search-function' is now a user option.
+Previously a plain variable, it is now a 'defcustom'
+with named choices for the predefined search functions
+('outline-search-from-regexp' and 'outline-search-level')
+as well as the default nil and arbitrary user functions.
+
+---
+*** New options to recognize comment-prefixed outline headings.
+When the user option 'outline-use-comment-regexp' is non-nil, enabling
+'outline-minor-mode' configures heading recognition so that outline
+headings prefixed by a comment are recognized, for example ";;; *",
+";;; **", and so on in a buffer whose comment syntax is ";;".  The
+heading level is the number of stars.  The heading pattern is taken from
+the buffer-local variable 'outline-comment-regexp' when that is set;
+major modes and users can set it to customize recognition per mode.
+Otherwise, a pattern is built from 'comment-start' and the new option
+'outline-comment-regexp-suffix'.
+
+---
+*** New command 'outline-find-headings'.
+It finds all outline headings in the current buffer and displays them in
+an Xref buffer.  Users can use that Xref buffer to navigate and edit the
+outline.  It is bound to 'M-o' in the Outline keymaps.
+
+** Xref
+
++++
+*** New command 'M-g .'/'M-g M-.' ('xref-find-by-kind').
+This command allows you to jump to a specific kind of definition, such
+as a variable or face definition, or a constructor, instead of the
+function of the same name.  The xref backend defines what kinds of
+definitions are available.
+
+** CPerl mode
+
+*** Perl 5.44 support: Signatures with named parameters.
+Perl 5.44 allows to declare a signature like "sub subname (:$par)", see
+<https://perldoc.perl.org/5.44.0/perldelta#Named-Parameters-in-Signatures>.
+CPerl mode now recognizes this as a variable declaration.
+
+** Lisp mode
+
+---
+*** Improved accuracy of Common Lisp code parsing.
+Lisp mode will now correctly parse multiple escapes as part of symbols
+and will parse dispatch reader macros as expression prefixes.  It uses a
+new function 'lisp-mode-syntax-propertize' as the value of
+'syntax-propertize-function' in Lisp mode.
+
+** Newsticker
+
+---
+*** New command to copy the URL of the selected newsticker item.
+The new command 'newsticker-treeview-copy-url', bound to 'w', adds the
+URL of the currently selected item in the list view to the kill ring.
+
+** Rmail
+
++++
+*** Files named "RMAIL" or ending in ".rmail" are now visited in Rmail mode.
+You can now visit such files in Rmail mode using ordinary file-visiting
+commands, such as 'C-x C-f'.
+
+** Timeclock
+
+---
+*** New user option 'timeclock-use-24hr-format'.
+If this option is set to non-nil, displayed times (clocked in/out
+since, time to leave) will use 24-hour clock instead of 12-hour clock.
+
+** Eshell
+
++++
+*** Eshell now supports piping output to Lisp functions.
+You can now manipulate the output of other commands using the many Lisp
+functions provided in Emacs.  For example, to uppercase the output of
+some other command:
+
+    echo hi | #'upcase
+
+See the "(eshell) Lisp Pipelines" node in the Eshell manual for more
+details.
+
+---
+*** New user option 'eshell-lexical-binding'.
+When enabled, this causes Eshell to evaluate commands in Lisp syntax
+using lexical binding.
+
+** SHR
+
+---
+*** HTML list items are now indented as with other blocks.
+Previously, HTML list items ("<li>") were indented with a narrower width
+than "<blockquote>" elements.  Now, they all have the same indent width.
+
+---
+*** Ordered lists now support attributes modifying their appearance.
+Now, HTML ordered lists ("<ol>") support changing the type (e.g. to use
+letters instead of numbers), the order (ascending or descending), and
+the starting value.
+
+** Dired
+
+*** The 'repeat-mode' key 'j' has been removed from 'dired-jump-repeat-map'.
+'dired-jump-repeat-map' has been renamed from 'dired-jump-map'.
+
+** Viper
+
+---
+*** New ex command: 'number' ('#').
+Ex can now display line numbers when printing lines with the 'number'
+('#') command.
+
+---
+*** New ex command: 'list'.
+Ex can now display lines unambiguously when printing using the 'list'
+command.  This means that certain characters such as 'TAB' will be shown
+with their literal equivalents i.e. '^I'.
+
+*** New ex command: 'z'.
+Ex can now print lines using the 'z' command which allows scrolling the
+output of the lines.
+
+** Tramp
+
++++
+*** New optional connection method "wslc".
+This connection method accesses WSL containers on MS-Windows.
+
++++
+*** Tramp is more strict now in expanding the tilde "~USER".
+If this isn't possible, an error is raised.  This happens often in test
+functions, which use example file names like "/ssh:host:~user/file.txt".
+In order to suppress such errors, let-bind 'tramp-tolerate-tilde' to a
+non-nil value.
+
+---
+*** Package tramp-archive.el has been removed.
+GNOME 51 doesn't support the archive GVFS backend anymore.
+
+---
+*** Connection methods "afp" and "gdrive" have been removed.
+GNOME 50 / 51 don't support the corresponding GVFS backends anymore.
+
+---
+*** 'tramp-recompile-elpa' is marked obsolete.
+Use 'package-recompile' instead.
+
+** Browse URL
+
+---
+*** 'browse-url-chromium' and 'browse-url-chrome' can open new windows.
+These functions no longer ignore the 'browse-url-new-window-flag' user
+option and the NEW-WINDOW optional argument.
+
+---
+*** Prefix arguments to several 'browse-url-browser-function' values fixed.
+Now, like with 'browse-url', a prefix argument to these commands inverts
+the meaning of 'browse-url-new-window-flag' instead of always meaning to
+use a new window.  (This was always how it was intended to work, there
+was a bug.)
+
+** Rcirc
+
+---
+*** Prefix argument to 'rcirc-browse-url' enhanced.
+Now, like with 'browse-url', a prefix argument to this command inverts
+the meaning of 'browse-url-new-window-flag' instead of always meaning to
+use a new window.
+
+** Desktop
+
+---
+*** Saving and restoring a session will now save and restore 'buffer-list'.
+This avoids losing the buffer history for each frame, and in particular,
+'M-n' and 'M-p' at the 'C-x b' prompt will now suggest recent buffers of
+the frame after restoring a session.
+
+** Calc
+
+---
+*** New mass unit 'stone'.
+Stone, which is equivalent to 14 lb or 6.35 kg, is used to measure body
+weight in the United Kingdom and Ireland.
+
+** Speedbar
+
+---
+*** A nil value for 'speedbar-directory-unshown-regexp' means "show all".
+
+---
+*** A nil value for 'speedbar-file-unshown-regexp' means "show all".
+
 
 * New Modes and Packages in Emacs 32.1
+
+** New major modes based on the tree-sitter library
+
+*** New major mode 'markdown-ts-mode'.
+A major mode based on the tree-sitter library for editing Markdown
+files.  Markdown files are visited using this mode when the required
+tree-sitter grammars ('markdown' and 'markdown-inline') are available,
+or when the user has opted in via 'treesit-enabled-modes'.  Otherwise,
+Markdown files fall back to 'text-mode'.
+
+To install the grammars, use 'M-x markdown-ts-mode-install-parsers'.
+
++++
+** New library 'uuid'.
+This library provides useful code for handling Universally Unique
+Identifiers (UUIDs).  It provides methods for generating UUIDs, parsing
+them, and outputting them as a string, a unibyte binary string, or as a
+number.
+
++++
+** New library 'refactor'.
+This library provides a language-agnostic interface for performing
+refactoring actions such as renaming identifiers, extracting and
+inlining functions, and fixing diagnostics.  Its commands include
+'M-x refactor' and 'M-x refactor-rename'.  The actual actions are
+supplied by Refactor backends defined by major modes and packages.
+Refactor was extracted from Eglot, which is its main user and backend.
+The library is also available as a GNU ELPA package.
 
 
 * Incompatible Lisp Changes in Emacs 32.1
 
++++
+** 'intern' and 'intern-soft' ignore 'read-symbol-shorthands'.
+This means they revert to the behavior of Emacs < 28.
+In those cases where shorthands need to be obeyed, you now need to use
+'shorthands-intern', 'shorthands-intern-soft', or 'shorthands-to-longhand'.
+And 'shorthands-of-symbol' provides the reverse mapping.
+
+** Pcase
+
++++
+*** Add 'pcase-let*-strict'.
+This macro is like 'pcase-let*', but signals an error if a 'pcase'
+pattern does not match its corresponding value.  This can be useful for
+destructuring values when you do not wish to continue if the
+corresponding value is not as expected.
+
++++
+** The transition variable 'current-time-list' now defaults to nil.
+Therefore, timestamps now default to '(TICKS . HZ)' form instead of the
+older '(HIGH LOW USEC PSEC)' form.
+
 
 * Lisp Changes in Emacs 32.1
+
+---
+** The regexp engine now matches in linear time.
+In practice, matching a regexp against a string of length N /usually/
+took a time proportional to N (i.e. linear), but with important and
+annoying exceptions, typically described as "pathological" cases,
+where the backtracking algorithm could degenerate to polynomial
+or even exponential time, typically leading to situations where Emacs
+appears frozen.
+
+With the new code, such "pathological" freezes due to regexp matching
+should be gone, because the time is /always/ (rather than "usually")
+linear.
+
+Admittedly, this is not quite true.  We know of the following exceptions:
+
+- The time can still be exponential in the presence of backreferences,
+  of course (theory says it can't be avoided).
+
+- The time can still be exponential in the presence of counted repetitions
+  (i.e. \{N,M\}) because we do not currently apply memoization for
+  regexps that use that.
+
+- The time can still be O(N^2) for a few corner cases, tho with a small
+  constant factor.  [ This is because of a conflict between two
+  optimizations: one brings the constant factor down significantly,
+  the other makes the matching algorithm linear-time.  ]
+
++++
+** Support for canvas image objects.
+Canvas images support efficient updating and refreshing.  An image
+specifier with type 'canvas' creates a canvas image.  The canvas has an
+associated writable pixel buffer.  The dynamic module function 'canvas_data'
+provides access to the pixel buffer.  After changing the ':data' vector or
+writing to the pixel buffer, a call to 'canvas-refresh' redraws the canvas
+image.
+
++++
+** 'ignore' is now also a place, acting as a "blackhole" like "/dev/null".
+E.g., '(push (new-elem) (pcase (foo) (0 var1) (1 var2) (_ (ignore))))'.
+
++++
+** 'kill-all-local-variables' can kill locals silently and reset the buffer.
+This function's KILL-PERMANENT argument now accepts the value
+'permanent-local', which kills all locals ignoring any variable
+watchers.  That argument can also be 'reset', which does what
+'permanent-local' does, and also resets the buffer as if it were newly
+created.  Use these with caution to avoid unexpected behavior such as
+'default-directory' being reset to nil.
+
+---
+** 'with-work-buffer' kills all locals silently and resets its buffers.
+When this macro returns a buffer to its buffer pool, it now kills all
+buffer locals silently, ignoring any variable watchers, and resets the
+buffer as if it were newly created.
+
++++
+** The new function 'markers-in' returns the set of markers in a region.
+
++++
+** New buffer-local variable 'comment-start-line-regexp'.
+Modes that support both line and block comments should set this
+variable to a regexp that matches only the start of line comments, so
+Emacs can distinguish between line and block comments.
 
 ---
 ** New variable 'completion-frontend-properties'.
@@ -69,8 +718,99 @@ Emacs 30.  It allows Lisp programs that present completion candidates
 ("completion frontends") to provide additional information which can be
 used to adjust or optimize completion candidates computation.
 
+** D-Bus
+
++++
+*** Support error handler in asynchronous method calls.
+The HANDLER argument of 'dbus-call-method-asynchronously' can be a cons
+cell '(HANDLER . ERROR-HANDLER)'.  ERROR-HANDLER is invoked if the
+method call returns with a D-Bus error; the error is passed as argument.
+
+** Elisp Scope
+
+*** Custom analyzers can be associated with multiple functions.
+Elisp Scope macros that define custom analyzer functions, such as
+'elisp-scope-define-function-analyzer' and
+'elisp-scope-define-macro-analyzer', can now take a list of symbols to
+which the defined analyzer should apply (or a single symbol, as before).
+This makes it easy to specify the same analyzer for multiple functions.
+
+*** New macro 'elisp-scope-define-function-spec'.
+This macro in a declarative alternative to
+'elisp-scope-define-function-analyzer'.  It lets you tell Elisp Scope
+how to analyze the arguments of a function by declaring the
+specification of each argument, rather than implementing an analyzer
+function as you would with 'elisp-scope-define-function-analyzer'.
+
+*** 'byte-compile-file' ignores ".dir-locals.el"  and ".dir-locals-2.el".
+Placing a ".dir-locals.el" in the "user-lisp" directory caused
+warnings during byte compilation upon startup.  Now, the
+'byte-compile-file' function treats these files as if they had a
+'no-byte-compile' file-local variable set non-nil.  This also affects
+native-compilation, in that any ".dir-locals*" files are no longer
+natively compiled.
+
++++
+** New variable 'display-buffer-default-alist'.
+Lisp programs may let-bind this variable to specify conditional actions
+for nested 'display-buffer' calls.
+
++++
+** New button to diff failed erts-file test output in ERT.
+When a test fails, the erts-file tests buffer displayed by
+'ert-results-pop-to-erts-file-tests-for-test-at-point' now includes a
+button labeled "diff".  Pushing it displays a Diff mode buffer comparing
+the actual and expected output.
+
++++
+** 'math-tzone-names' and 'timezone-world-timezones' are now marked obsolete.
+Strings should use numeric abbreviations like "-0600" instead of
+alphabetic abbreviations like "CST", which are too often ambiguous.
+
++++
+** New 'font-lock-keyword' function declaration.
+The declaration '(font-lock-keyword t)' specifies that a normal
+function is to be highlighted by font-lock like a macro.
+
++++
+** New optional LESSP parameter for 'directory-files-recursively'.
+It allows control over the relative order of file names per directory
+in the resulting list.  The default remains sorting each directory
+according to 'string-lessp'.  A value of t returns files in their
+arbitrary directory order without sorting, which may be faster.
+The argument can also be a function of two parameters suitable as the
+':lessp' argument of 'sort'.  For example, 'string-collate-lessp' would
+result in the locale-specific collation order one might see in Dired.
+
+---
+** New functions 'number-to-roman' and 'roman-to-number'.
+These functions convert between numbers and their Roman numeral forms.
+They were previously part of 'rst-mode' (as 'rst-arabic-to-roman' and
+'rst-roman-to-arabic'), but are now available as autoloaded functions.
+
 
 * Changes in Emacs 32.1 on Non-Free Operating Systems
+
++++
+*** Emacs has been updated to target Android 17.
+Emacs has been updated to require the SDK for Android 17 (API level 37)
+during compilation, and to target that version of the operating system.
+A corollary of this change is that on Android 17 and later systems, it
+must be granted permission to access nearby devices from Settings in
+order to establish network connections to hosts on local networks.
+
+---
+*** Emacs on MS-Windows now supports IME compositions on text-only frames.
+This support is only available on Windows versions of the NT family.
+
+---
+*** Emacs running on Windows Terminal now supports underline styles and colors.
+
+---
+*** 'process-attributes' now returns 'pcpu' and 'pmem' on macOS.
+As a result, 'M-x proced' shows populated %CPU and %Mem columns there.
+In addition, the 'utime', 'stime' and 'time' attributes, which were off
+by the Mach timebase factor on Apple Silicon, are now correct.
 
 
 ----------------------------------------------------------------------

@@ -575,6 +575,15 @@ directory got moved.  This is set to be a pair in the form of:
   ;; file-local variables.
   (defvar comp--no-native-compile (make-hash-table :test #'equal)))
 
+;; `debugger' is initialized to `debug-early' in `eval.c' so as to help
+;; debug bootstrap problems (where loading the real `debug.el' could itself
+;; bump into bootstrap problems), but now that we have brought things
+;; up, we can switch to the real deal.
+;; FIXME: Maybe a simpler option would be to use a single function
+;; that dispatches to `debug-early' or to the full debugger
+;; depending on context, so we don't need to mutate `debugger' and we
+;; additionally avoid bootstrap issues that might occur after the dump.
+(setq debugger #'debug)
 
 ;; Avoid error if user loads some more libraries now.
 (setq purify-flag nil)
@@ -639,10 +648,13 @@ directory got moved.  This is set to be a pair in the form of:
                (message "emacs-pdmp: dump failed: %S" err)
                (ignore-errors (delete-file dump-temp-file-name)))))))
   (if dump-mode
-      (let ((output (cond ((equal dump-mode "pdump") "emacs.pdmp")
+      (let ((output (cond ((equal dump-mode "pdump")
+                           (if (eq system-type 'ms-dos)
+                               "emacs.dmp"
+                             "emacs.pdmp"))
                           ((equal dump-mode "pbootstrap")
                            (if (eq system-type 'ms-dos)
-                               "b-emacs.pdmp"
+                               "b-emacs.dmp"
                              "bootstrap-emacs.pdmp"))
                           (t (error "Unrecognized dump mode %s" dump-mode)))))
         (when (and (featurep 'native-compile)

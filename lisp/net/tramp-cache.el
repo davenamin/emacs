@@ -320,9 +320,9 @@ Remove also properties of all files in subdirectories."
 (defun tramp-flush-file-function ()
   "Flush all Tramp cache properties from `buffer-file-name'.
 This is suppressed for temporary buffers."
-  (save-match-data
-    (unless (or (null (buffer-name))
-		(string-match-p (rx bos (| blank "*")) (buffer-name)))
+  (unless (or (null (buffer-name))
+	      (string-match-p (rx bos (| blank "*")) (buffer-name)))
+    (save-match-data
       (let ((bfn (if (stringp (buffer-file-name))
 		     (buffer-file-name)
 		   default-directory))
@@ -580,7 +580,7 @@ PROPERTIES is a list of file properties (strings)."
 (defun tramp-list-connections ()
   "Return all active `tramp-file-name' structs according to `tramp-cache-data'."
   (let ((tramp-verbose 0))
-    (tramp-compat-seq-keep
+    (seq-keep
      (lambda (key)
        (and (tramp-file-name-p key)
 	    (null (tramp-file-name-localname key))
@@ -605,16 +605,12 @@ PROPERTIES is a list of file properties (strings)."
 	;; If there is the key "login-as", we don't save, because all
 	;; other properties might depend on the login name, and we
 	;; want to give the possibility to use another login name
-	;; later on.  Key "started" exists for the "ftp" method only,
-	;; which must not be kept persistent.
+	;; later on.
 	(maphash
 	 (lambda (key value)
 	   (if (and (tramp-file-name-p key) (hash-table-p value)
-		    (not (string-equal
-			  (tramp-file-name-method key) tramp-archive-method))
 		    (not (tramp-file-name-localname key))
-		    (not (gethash "login-as" value))
-		    (not (gethash "started" value)))
+		    (not (gethash "login-as" value)))
 	       (progn
 		 (dolist (k (hash-table-keys value))
 		   ;; Suppress ephemeral properties.
@@ -660,7 +656,7 @@ your laptop to different networks frequently."
 This function is added always in `tramp-get-completion-function'
 for all methods.  Resulting data are derived from connection history."
   (seq-uniq
-   (tramp-compat-seq-keep
+   (seq-keep
     (lambda (key)
       (let ((tramp-verbose 0))
 	(and (tramp-file-name-p key)
@@ -725,8 +721,6 @@ for all methods.  Resulting data are derived from connection history."
 
 ;;; TODO:
 ;;
-;; * Use multisession.el, starting with Emacs 29.1.
-;;
-;; Use `with-memoization', starting with Emacs 29.1.
+;; * Use multisession.el.
 
 ;;; tramp-cache.el ends here

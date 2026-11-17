@@ -99,13 +99,13 @@ are meaningful here, as described above.
 
 By default, this function uses the minibuffer to read the key
 non-modally (see `read-from-minibuffer').  However, if
-`y-or-n-p-use-read-key' is non-nil, the modal `read-key'
+`y-or-n-p-use-read-key' is non-nil, the modal `read-key-sequence-vector'
 function is used instead.
 
 The function's value is the number of actions taken."
   (let* ((actions 0)
          (msg (current-message))
-	 user-keys mouse-event map prompt char elt def
+	 user-keys mouse-event map prompt chars elt def
 	 ;; Non-nil means we should use mouse menus to ask.
 	 use-menus
 	 delayed-switch-frame
@@ -121,7 +121,8 @@ The function's value is the number of actions taken."
 		      (let ((x next))
 			(setq next (lambda () (setq next x) elt))))))
     (if (and (listp last-nonmenu-event)
-	     use-dialog-box)
+	     use-dialog-box
+	     (length< action-alist 5))
 	;; Make a list describing a dialog box.
 	(let ((objects (if help (capitalize (nth 1 help))))
 	      (action (if help (capitalize (nth 2 help)))))
@@ -173,15 +174,16 @@ The function's value is the number of actions taken."
 						   (cons prompt map))
 				   'quit)))
 		    (y-or-n-p-use-read-key
-		     ;; Prompt in the echo area using `read-key'.
-		     (let ((cursor-in-echo-area (not no-cursor-in-echo-area)))
-                       (message "%s" (substitute-command-keys
-                                     (format
-                                      (apply #'propertize
-                                             "%s(\\`y', \\`n', \\`!', \\`.', \\`q', %sor \\`%s') "
-                                             minibuffer-prompt-properties)
-                                      prompt user-keys
-                                      (help-key))))
+		     ;; Prompt in the echo area using `read-key-sequence-vector'.
+		     (let ((cursor-in-echo-area (not no-cursor-in-echo-area))
+                           (full-prompt
+                            (substitute-command-keys
+                             (format
+                              (apply #'propertize
+                                     "%s(\\`y', \\`n', \\`!', \\`.', \\`q', %sor \\`%s') "
+                                     minibuffer-prompt-properties)
+                              prompt user-keys
+                              (help-key)))))
 		       (if minibuffer-auto-raise
 			   (raise-frame (window-frame (minibuffer-window))))
                        (unwind-protect
@@ -196,8 +198,28 @@ The function's value is the number of actions taken."
                              ;; Do NOT use read-event here.  That
                              ;; function does not consult
                              ;; input-decode-map (bug#75886).
-		             (setq char (read-key))
-                             (when (eq char ?\C-g)
+                             ;; Despite the name 'y-or-n-p-use-read-key',
+                             ;; this uses 'read-key-sequence-vector'
+                             ;; instead of 'read-key' for several reasons.
+                             ;; 'read-key' returns a single key while on TTY
+                             ;; we need also to read escape sequences.
+                             ;; Additionally we need to bind 'ESC ESC ESC'
+                             ;; to allow using 'keyboard-escape-quit'.
+                             ;; This also creates the 'ESC' keymap required to
+                             ;; support escape sequences on TTY such as 'ESC ~'.
+                             (let ((overriding-terminal-local-map nil)
+                                   (overriding-local-map read-key-empty-map)
+                                   (echo-keystrokes 0)
+                                   (old-global-map (current-global-map)))
+                               (unwind-protect
+                                   (progn
+                                     (use-global-map
+                                      (let ((map (make-sparse-keymap)))
+                                        (define-key map [?\e ?\e ?\e] #'keyboard-escape-quit)
+                                        map))
+                                     (setq chars (read-key-sequence-vector full-prompt)))
+                                 (use-global-map old-global-map)))
+                             (when (member chars '([?\C-g] [?\C-\[ ?\C-\[ ?\C-\[]))
                                (signal 'quit nil)))
                          (when (fboundp 'set-text-conversion-style)
                            (set-text-conversion-style text-conversion-style)))
@@ -207,10 +229,10 @@ The function's value is the number of actions taken."
                                        "%s(\\`y', \\`n', \\`!', \\`.', \\`q', %sor \\`%s') %s"
                                        prompt user-keys
                                        (help-key)
-                                       (if (equal char -1)
+                                       (if (equal chars [-1])
                                            "[end-of-keyboard-macro]"
-                                         (single-key-description char))))))
-		     (setq def (lookup-key map (vector char))))
+                                         (key-description chars))))))
+		     (setq def (and chars (lookup-key map chars))))
                     (t
                      ;; Read from the minibuffer.
                      (let* ((full-prompt
@@ -224,7 +246,7 @@ The function's value is the number of actions taken."
                             (cmd-char
                              (lambda ()
                                (interactive)
-                               (setq char last-command-event)
+                               (setq chars (this-command-keys-vector))
                                (exit-minibuffer)))
                             (cmd-help
                              (lambda ()
@@ -250,8 +272,8 @@ The function's value is the number of actions taken."
                        (read-from-minibuffer
                         full-prompt nil remap nil
                         (or y-or-n-p-history-variable t))
-                       (message "%s%s" full-prompt (single-key-description char)))
-                     (setq def (lookup-key map (vector char)))))
+                       (message "%s%s" full-prompt (key-description chars)))
+                     (setq def (and chars (lookup-key map chars)))))
                    (cond ((eq def 'exit)
 			  (setq next (lambda () nil)))
 			 ((eq def 'act)
@@ -266,7 +288,7 @@ The function's value is the number of actions taken."
 			  (funcall actor elt)
 			  (setq actions (1+ actions)
 				next (lambda () nil)))
-			 ((eq def 'quit)
+			 ((memq def '(quit exit-prefix))
 			  (setq quit-flag t)
 			  (funcall try-again))
 			 ((eq def 'automatic)
@@ -318,12 +340,16 @@ Type \\`SPC' or \\`y' to %s the current %s;
 			      (setq actions (1+ actions))
 			    ;; Regurgitated; try again.
 			    (funcall try-again)))
-			 ((and (consp char)
-			       (eq (car char) 'switch-frame))
+			 ((eq chars '[switch-frame])
 			  ;; switch-frame event.  Put it off until we're done.
-			  (setq delayed-switch-frame char)
+			  (setq delayed-switch-frame chars)
 			  (funcall try-again))
-			 ((eq def nil) ;; Special case for bug#67836
+			 ((and noninteractive (member chars '(nil [])))
+                          ;; Special case for kmacro in batch mode (bug#67836).
+                          ;; When 'y-or-n-p-use-read-key' is non-nil,
+                          ;; 'read-key-sequence-vector' returns [].
+                          ;; When 'y-or-n-p-use-read-key' is nil,
+                          ;; 'chars' is nil.
 			  (error "Can't use in a kmacro in batch mode"))
 			 (t
 			  ;; Random char.
@@ -460,7 +486,8 @@ When `use-dialog-box' is t, pop up a dialog window to get user input."
                                       ((and (display-popup-menus-p)
                                             last-input-event ; not during startup
                                             (listp last-nonmenu-event)
-                                            use-dialog-box)
+                                            use-dialog-box
+                                            (length< answers-with-help 10))
                                        (x-popup-dialog
                                         t
                                         (cons question

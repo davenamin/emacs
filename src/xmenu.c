@@ -1131,7 +1131,7 @@ set_frame_menubar (struct frame *f, bool deep_p)
 	     menu item is really supposed to be empty.  */
 	  /* The intptr_t cast avoids a warning.
 	     This value just has to be different from small integers.  */
-	  wv->call_data = (void *) (intptr_t) (-1);
+	  wv->call_data = (void *) (intptr_t) {-1};
 
 	  if (prev_wv)
 	    prev_wv->next = wv;
@@ -1795,7 +1795,7 @@ create_and_show_popup_menu (struct frame *f, widget_value *first_wv,
       event->button = i;
 
   /* Don't allow any geometry request from the user.  */
-  XtSetArg (av[ac], (char *) XtNgeometry, 0); ac++;
+  XtSetArg (av[ac], XtNgeometry, 0); ac++;
   XtSetValues (menu, av, ac);
 
 #ifdef HAVE_XINPUT2

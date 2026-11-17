@@ -58,7 +58,8 @@
 (require 'cl-lib)
 (require 'font-lock)
 (require 'seq)
-(require 'prog-mode) ; For `prog--text-at-point-p'.
+(require 'prog-mode) ; For `prog--text-at-point-or-region-p'.
+(require 'newcomment) ; For `comment-start-line-regexp'.
 
 ;;; Function declarations
 
@@ -680,6 +681,11 @@ If none are valid, return nil."
 
 ;;; Range API supplement
 
+;; See bug#81019.
+(defvar treesit--embed-languages-need-full-parse '(markdown-inline)
+  "Languages that requires a full parse when used as embedded languages.
+This variable is not intended for general use.")
+
 (defvar treesit--range-verbose nil
   "If non-nil, print verbose debugging info for setting ranges.
 Useful when your multi-parser setup doesn't seem to work.")
@@ -1094,6 +1100,14 @@ RANGES is a list of (START . END) or just (START . END)."
     (when (and (null new-ranges) treesit--range-verbose)
       (message "Setting empty ranges to %s\nRanges for embedded parser :%s\nRanges for host parser: %s\nIntersection is empty"
                new-ranges-1 embed-parser host-parser))
+    ;; Due to some tree-sitter bug[1], we need to force a full reparse for
+    ;; some languages to get a correct parse tree.
+    ;; [1] https://github.com/tree-sitter/tree-sitter/issues/5636
+    (when (memq (treesit-parser-language embed-parser)
+                treesit--embed-languages-need-full-parse)
+      (treesit-parser-set-included-ranges
+       embed-parser `((,(point-min) . ,(point-min))))
+      (treesit-parser-root-node embed-parser))
     ;; When there's no range for the embedded language, set it's range
     ;; to a dummy (1 . 1), otherwise it would be set to the whole
     ;; buffer, which is not what we want.
@@ -1585,7 +1599,7 @@ variable `treesit-font-lock-feature-list'.
 
 Setting this variable directly with `setq' or `let' doesn't work;
 use `setopt' or \\[customize-option] instead."
-  :type 'integer
+  :type '(choice integer (alist :key-type symbol :value-type integer))
   :set #'treesit--font-lock-level-setter
   :version "29.1")
 
@@ -2390,10 +2404,13 @@ This variable should take the same form as
 over `treesit-simple-indent-rules'.")
 
 (defun treesit--indent-prev-line-node (pos)
-  "Return the largest node on the previous line of POS."
+  "Return the largest node on the previous (non-empty) line of POS."
   (save-excursion
     (goto-char pos)
     (when (eq (forward-line -1) 0)
+      ;; Skip blank lines.
+      (while (and (looking-at-p (rx (* (syntax whitespace)) eol))
+                  (eq (forward-line -1) 0)))
       (back-to-indentation)
       (treesit--indent-largest-node-at (point)))))
 
@@ -2546,9 +2563,11 @@ as the anchor.")
                          ;; has a prefix, indent to the beginning of
                          ;; prev line's prefix rather than the end of
                          ;; prev line's prefix. (Bug#61314).
-                         (or (and this-line-has-prefix
-                                  (match-beginning 1))
-                             (match-end 0)))))))
+                         (if this-line-has-prefix
+                             (progn
+                               (skip-syntax-forward "-")
+                               (point))
+                           (match-end 0)))))))
         (cons 'grand-parent
               (lambda (_n parent &rest _)
                 (treesit-node-start (treesit-node-parent parent))))
@@ -3751,7 +3770,20 @@ by `text' and `sentence' in `treesit-thing-settings'."
                      (max (point-min) (previous-single-char-property-change
                                        (point) 'treesit-parser)))))))
 
-(defun treesit-forward-comment (&optional count)
+(defun treesit--likely-line-comment-p (node)
+  "Return non-nil if NODE is likely a line comment."
+  (save-excursion
+    (goto-char (treesit-node-start node))
+    (if comment-start-line-regexp
+        (looking-at-p comment-start-line-regexp)
+      ;; Without `comment-start-line-regexp', it's kind of best-effort.
+      (and comment-start
+           ;; If `comment-end' is non-empty, `comment-start' must be
+           ;; paired with it.
+           (string-empty-p (string-trim (or comment-end "")))
+           (looking-at-p (regexp-quote (string-trim-right comment-start)))))))
+
+(defun treesit-forward-comment (count)
   "Tree-sitter `forward-comment-function' implementation.
 
 COUNT is the same as in `forward-comment'."
@@ -3761,7 +3793,15 @@ COUNT is the same as in `forward-comment'."
       (setq thing (treesit-thing-at (point) 'comment))
       (if (and thing (eq (point) (treesit-node-start thing)))
           (progn
-            (goto-char (min (1+ (treesit-node-end thing)) (point-max)))
+            (goto-char (treesit-node-end thing))
+            ;; For line comments, go to the next line.  This is
+            ;; important because a) for navigation convenience, and b)
+            ;; many functions expect `forward-comment' to behave this
+            ;; way (bug#80837).
+            (when (treesit--likely-line-comment-p thing)
+              (skip-chars-forward " \t")
+              (when (looking-at-p "\n")
+                (forward-char)))
             (setq count (1- count)))
         (setq count 0 res nil)))
     (while (< count 0)
@@ -3797,7 +3837,7 @@ the current line if the beginning of the defun is indented."
 Return the first non-nil evaluation of BODY.
 
 \(fn (SYM VAL) &rest BODY)"
-  (declare (indent 1))
+  (declare (indent 1) (debug ((symbolp form) body)))
   (let ((result-sym (gensym))
         (val-sym (gensym))
         (sym (car sym-val))
@@ -4152,7 +4192,7 @@ This is a tree-sitter implementation of `prog-fill-reindent-defun'.
 JUSTIFY is the same as in `fill-paragraph'."
   (interactive "P")
   (save-excursion
-    (if (prog--text-at-point-p)
+    (if (prog--text-at-point-or-region-p)
         (fill-paragraph justify (region-active-p))
       (let* ((treesit-defun-tactic 'parent-first)
              (node (treesit-defun-at-point)))

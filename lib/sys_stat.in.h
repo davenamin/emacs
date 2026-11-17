@@ -255,7 +255,9 @@ struct stat
 # endif
 #endif
 
-#ifndef S_ISMPB /* V7 */
+/* These multiplex file types were in Version 7 Unix, last supported
+   in the early 1980s.  Perhaps remove them here?  */
+#ifndef S_ISMPB
 # ifdef S_IFMPB
 #  define S_ISMPB(m) (((m) & S_IFMT) == S_IFMPB)
 #  define S_ISMPC(m) (((m) & S_IFMT) == S_IFMPC)
@@ -265,11 +267,13 @@ struct stat
 # endif
 #endif
 
-#ifndef S_ISMPX /* AIX */
+/* This multiplex file type is in AIX; although useless these days,
+   it is still in AIX 7.3 <sys/stat.h>.  */
+#ifndef S_ISMPX
 # define S_ISMPX(m) 0
 #endif
 
-#ifndef S_ISNAM /* Xenix */
+#ifndef S_ISNAM /* QNX */
 # ifdef S_IFNAM
 #  define S_ISNAM(m) (((m) & S_IFMT) == S_IFNAM)
 # else
@@ -277,7 +281,9 @@ struct stat
 # endif
 #endif
 
-#ifndef S_ISNWK /* HP/UX */
+/* This network file type was in HP-UX 9 and 10, last supported in the
+   early 2000s.  Perhaps remove S_ISNWK here?  */
+#ifndef S_ISNWK
 # ifdef S_IFNWK
 #  define S_ISNWK(m) (((m) & S_IFMT) == S_IFNWK)
 # else
@@ -331,22 +337,24 @@ struct stat
 # endif
 #endif
 
-/* high performance ("contiguous data") */
+/* This contiguous data file type was in RTU, last supported in the
+   early 2000s.  Perhaps remove it here?  */
 #ifndef S_ISCTG
 # define S_ISCTG(p) 0
 #endif
 
-/* Cray DMF (data migration facility): off line, with data  */
+/* Cray DMF (data migration facility): offline with and without data.
+   These file types were in classic UNICOS, last supported in the mid-2000s.
+   Perhaps remove them here?  */
 #ifndef S_ISOFD
 # define S_ISOFD(p) 0
 #endif
-
-/* Cray DMF (data migration facility): off line, with no data  */
 #ifndef S_ISOFL
 # define S_ISOFL(p) 0
 #endif
 
-/* 4.4BSD whiteout */
+/* Whiteout in 4.4 and later BSDs.  This file type is observed only
+   for files opened by the superuser via fhopen.  */
 #ifndef S_ISWHT
 # define S_ISWHT(m) 0
 #endif
@@ -480,18 +488,18 @@ _GL_CXXALIASWARN (chmod);
 #   define fchmodat rpl_fchmodat
 #  endif
 _GL_FUNCDECL_RPL (fchmodat, int,
-                  (int fd, char const *file, mode_t mode, int flag),
-                  _GL_ARG_NONNULL ((2)) _GL_ATTRIBUTE_NODISCARD);
+                  (int fd, char const *file, mode_t mode, int flags),
+                  _GL_ATTRIBUTE_NODISCARD);
 _GL_CXXALIAS_RPL (fchmodat, int,
-                  (int fd, char const *file, mode_t mode, int flag));
+                  (int fd, char const *file, mode_t mode, int flags));
 # else
 #  if !@HAVE_FCHMODAT@
 _GL_FUNCDECL_SYS (fchmodat, int,
-                  (int fd, char const *file, mode_t mode, int flag),
-                  _GL_ARG_NONNULL ((2)) _GL_ATTRIBUTE_NODISCARD);
+                  (int fd, char const *file, mode_t mode, int flags),
+                  _GL_ATTRIBUTE_NODISCARD);
 #  endif
 _GL_CXXALIAS_SYS (fchmodat, int,
-                  (int fd, char const *file, mode_t mode, int flag));
+                  (int fd, char const *file, mode_t mode, int flags));
 # endif
 _GL_CXXALIASWARN (fchmodat);
 #elif defined GNULIB_POSIXCHECK
@@ -542,7 +550,7 @@ _GL_WARN_ON_USE (fstat, "fstat has portability problems - "
 _GL_FUNCDECL_RPL (fstatat, int,
                   (int fd, char const *restrict name, struct stat *restrict st,
                    int flags),
-                  _GL_ARG_NONNULL ((2, 3)));
+                  _GL_ARG_NONNULL ((3)));
 _GL_CXXALIAS_RPL (fstatat, int,
                   (int fd, char const *restrict name, struct stat *restrict st,
                    int flags));
@@ -551,7 +559,7 @@ _GL_CXXALIAS_RPL (fstatat, int,
 _GL_FUNCDECL_SYS (fstatat, int,
                   (int fd, char const *restrict name, struct stat *restrict st,
                    int flags),
-                  _GL_ARG_NONNULL ((2, 3)));
+                  _GL_ARG_NONNULL ((3)));
 #  endif
 _GL_CXXALIAS_SYS (fstatat, int,
                   (int fd, char const *restrict name, struct stat *restrict st,
@@ -966,18 +974,18 @@ _GL_CXXALIASWARN (umask);
 #   define utimensat rpl_utimensat
 #  endif
 _GL_FUNCDECL_RPL (utimensat, int, (int fd, char const *name,
-                                   struct timespec const times[2], int flag),
-                                  _GL_ARG_NONNULL ((2)));
+                                   struct timespec const times[2], int flags),
+                  );
 _GL_CXXALIAS_RPL (utimensat, int, (int fd, char const *name,
-                                   struct timespec const times[2], int flag));
+                                   struct timespec const times[2], int flags));
 # else
 #  if !@HAVE_UTIMENSAT@
 _GL_FUNCDECL_SYS (utimensat, int, (int fd, char const *name,
-                                   struct timespec const times[2], int flag),
-                                  _GL_ARG_NONNULL ((2)));
+                                   struct timespec const times[2], int flags),
+                  );
 #  endif
 _GL_CXXALIAS_SYS (utimensat, int, (int fd, char const *name,
-                                   struct timespec const times[2], int flag));
+                                   struct timespec const times[2], int flags));
 # endif
 # if __GLIBC__ >= 2 && @HAVE_UTIMENSAT@
 _GL_CXXALIASWARN (utimensat);

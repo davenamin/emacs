@@ -1930,7 +1930,7 @@ of the vars, cnames and rnames."
           (when (and (not (equal colnames "no"))
                      ;; Compatibility note: avoid `length>', which
                      ;; isn't available until Emacs 28.
-                     (or colnames
+                     (if (member colnames '(nil "nil"))
                          ;; :colnames nil (default)
                          ;; Auto-assign column names when the table
                          ;; has hline as the second line after
@@ -1939,7 +1939,10 @@ of the vars, cnames and rnames."
                               (not (eq (car (cdr var)) 'hline)) ; first row
                               (eq (nth 1 (cdr var)) 'hline) ; second row
                               (not (member 'hline (cddr (cdr var)))) ; other rows
-                              )))
+                              )
+                       ;; colnames = yes or something else
+                       ;; force colnames
+                       t))
             (let ((both (org-babel-get-colnames (cdr var))))
               (setq cnames (cons (cons (car var) (cdr both))
                                  cnames))
@@ -2976,6 +2979,7 @@ used as a string to be appended to #+begin_example line."
 		   (forward-line 0) (insert ": ") (forward-line 1)))
 		(t
 		 (goto-char beg)
+		 (unless (bolp) (insert "\n"))
 		 (insert (if results-switches
 			     (format "%s%s\n"
 				     (funcall maybe-cap "#+begin_example")
@@ -2984,7 +2988,9 @@ used as a string to be appended to #+begin_example line."
 		 (let ((p (point)))
 		   (if (markerp end) (goto-char end) (forward-char (- end beg)))
 		   (org-escape-code-in-region p (point)))
-		 (insert (funcall maybe-cap "#+end_example\n")))))))))
+		 (unless (bolp) (insert "\n"))
+		 (insert (funcall maybe-cap "#+end_example"))
+		 (unless (eolp) (insert "\n")))))))))
 
 (defun org-babel-update-block-body (new-body)
   "Update the body of the current code block to NEW-BODY."

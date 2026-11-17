@@ -20,6 +20,66 @@ https://github.com/joaotavora/eglot/issues/1234.
 
 * Changes to upcoming Eglot
 
+** 'eglot-autoshutdown' no longer blocks Emacs.
+
+When 'eglot-autoshutdown' is set to non-nil, killing the last managed
+buffer could block Emacs for close to 2 seconds while the shutdown ran
+through, and failed outright if the server didn't answer the shutdown
+request in time.  Now the autoshutdown process is done asynchronously,
+after the command that killed the buffer.
+
+
+* Changes in Eglot 1.26 (30/10/2026)
+
+This is a bugfix release to align Eglot with its latest Xref and
+Refactor dependencies, fixing small issues with Emacs 26 integration and
+obscure keybindings.  See commit logs for more info.
+
+
+* Changes in Eglot 1.25 (28/10/2026)
+
+** Changes to 'eglot-server-programs'
+
+- new 'vala-language-server' for 'vala-mode'  (bug#81543)
+
+** New variable 'eglot-completion-replace-semantics' (bug#81912)
+
+Some LSP servers send 'InsertReplaceEdit' completions which can both
+insert and replace text at point, depending on user preference.  Eglot
+replaces by default (as it has done historically), but now can be
+configured to insert instead.  The LSP server clangd 23, for example,
+now sends such completions, so set the variable to nil to keep the
+behavior of earlier clangd versions (which used a inserting
+'TextEdit').  See docstring for an example.
+
+** Code actions and renaming now use the new Refactor library
+
+Eglot's code actions machinery has moved to the new Refactor package,
+for which Eglot is now a backend.  The old commands are obsolete aliases
+for Refactor's: for example, 'eglot-code-actions' is now 'M-x refactor'
+and 'eglot-rename' is now 'M-x refactor-rename'.
+
+** Better Xref integration
+
+Eglot can now find references for any symbol, not just the one at
+point, as with 'C-u M-?', as long as the server supports
+'workspace/symbol'.  With a very recent Xref, Eglot also supports
+'M-g .' ('xref-find-by-kind'), for finding references, declarations,
+implementations or type definitions.
+
+** 'eglot-reconnect' reuses the events buffer again
+
+As fallout from a recent redesign, Eglot created a new events buffer,
+suffixed '<2>', '<3>', etc., on every reconnection.  It also never
+killed the previous hidden stderr buffer, so they piled up.
+
+** Miscellaneous bugs fixed
+
+bug#81593, bug#81538, bug#81514, bug#81425, bug#81150, bug#82021.
+
+
+* Changes in Eglot 1.24 (23/6/2026)
+
 ** New command 'M-x eglot-describe-connection'
 
 Pops up a detailed description buffer for the current connection,
@@ -32,11 +92,13 @@ New key bindings: 'k' shuts down, 'r' reconnects, 'e' visits the events
 buffer, 'w' shows workspace configuration, and 'RET' invokes
 'eglot-describe-connection'.
 
-** Eglot uses new built-in 'markdown-ts-mode' of Emacs 31 (bug#80127)
+** New variable 'eglot-documentation-renderer' (bug#80127)
 
-This means that on newer versions of Emacs the external
-'markdown-mode.el' package does not need to be installed to render
-Markdown content.
+The variable 'eglot-documentation-renderer' replaces the now-obsolete
+'eglot-prefer-plaintext' and offers more control over what major mode is
+used to render markdown snippets.  By default, the variable is nil and
+'gfm-view-mode' from NonGNU ELPA's markdown-mode package is used if
+found.  See docstring for more details.
 
 
 * Changes in Eglot 1.23 (2/4/2026)

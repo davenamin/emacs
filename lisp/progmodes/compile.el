@@ -229,6 +229,19 @@ of[ \t]+\"?\\([a-zA-Z]?:?[^\":\n]+\\)\"?:" 3 2 nil (1))
     (aix
      " in line \\([0-9]+\\) of file \\([^ \n]+[^. \n]\\)\\.? " 2 1)
 
+    (ansible-fatal
+     "^fatal: .*: FAILED!" nil nil nil 2 0 (0 compilation-error-face))
+    (ansible-error
+     "^\\[ERROR\\]:"
+     nil nil nil 2 0 (0 compilation-error-face))
+    (ansible-warning
+     "^\\[\\(?:DEPRECATION \\)?WARNING\\]:"
+     nil nil nil 1 0 (0 compilation-warning-face))
+    (ansible-included "^included: \\([^[:space:]]+\\)" 1 nil nil 0 1)
+    (ansible-origin
+     "^Origin: \\([^[:space:]]+\\):\\([[:digit:]]+\\):\\([[:digit:]]+\\)"
+     1 2 3 0 1)
+
     ;; Checkstyle task may report its own severity level: "[checkstyle] [ERROR] ..."
     ;; (see AuditEventDefaultFormatter.java in checkstyle sources).
     (ant
@@ -421,6 +434,33 @@ of[ \t]+\"?\\([a-zA-Z]?:?[^\":\n]+\\)\"?:" 3 2 nil (1))
      nil
      (1 compilation-error-face))
 
+    ;; This must precede the `gnu' rule or the latter would match instead.
+    (rust
+     ,(rx bol (or (group-n 1 "error") (group-n 2 "warning") (group-n 3 "note"))
+          (? "[" (+ (in "A-Z" "0-9")) "]") ":" (* nonl)
+          "\n" (+ " ") "-->"
+          " " (group-n 4 (+ nonl))        ; file
+          ":" (group-n 5 (+ (in "0-9")))  ; line
+          ":" (group-n 6 (+ (in "0-9")))) ; column
+     4 5 6 (2 . 3)
+     nil
+     (1 compilation-error-face)
+     (2 compilation-warning-face)
+     (3 compilation-info-face))
+
+    ;; This must precede the `gnu' rule or the latter would match instead.
+    (ruff
+     ,(rx bol
+          (or (: (+ (in "A-Z")) (+ (in "0-9")))
+              (: (+ (in "a-z" "0-9" "-")) ":"))
+          " " (not " ") (+ nonl)
+          "\n" (* " ") "-->"
+          " " (group-n 1 (+ nonl))                  ; file
+          ":" (group-n 2 (in "1-9") (* (in "0-9"))) ; line
+          ":" (group-n 3 (in "1-9") (* (in "0-9"))) ; column
+          eol)
+     1 2 3 2)
+
     ;; Tested with Lua 5.1, 5.2, 5.3, 5.4, and LuaJIT 2.1.
     (lua
      ,(rx bol
@@ -448,6 +488,54 @@ of[ \t]+\"?\\([a-zA-Z]?:?[^\":\n]+\\)\"?:" 3 2 nil (1))
      ;; It starts with the name of the make program which is variable,
      ;; so don't try to match it.
      ": \\*\\*\\* \\[\\(\\(.+?\\):\\([0-9]+\\): .+\\)\\]" 2 3 nil 0 1)
+
+    (gcc-nested-notes
+     ;; GCC 16 and onwards can produce messages that have structured and
+     ;; elaborate nested notes.  These messages are, in fact,
+     ;; informative, and not errors unto themselves.
+     ;;
+     ;; The issue is that these messages can include locations (and
+     ;; indeed do include a location by default), which Emacs may
+     ;; misconstrue as a new diagnostic.  So, catch it early, to
+     ;; consider it an informative message.
+     ,(rx
+       bol
+       ;; The structure of these messages is something like:
+       ;;   INDENT BULLET MESSAGE \n
+       ;;          INDENT LOCATION
+       ;; ... where INDENT are spaces, BULLET is either an ASCII star or
+       ;; a Unicode bullet (U+2022), MESSAGE is informative text and
+       ;; LOCATION is the usual FILE:LINE:COL coordinate.
+       ;;
+       ;; Sample:
+       ;;      • candidate is: ‘void foo::test(int, int, void*, int)’
+       ;;        test.cc:4:10:
+       ;;            4 |     void test(int i, int j, void *ptr, int k);
+
+       ;; Match first line.
+       (group-n 9 (+ "  ")) (| ?* ?\u2022) space (* nonl) (+ (any "\r\n"))
+
+       ;; Match second line.
+       (backref 9) "  "
+       ;; File name group, from `gnu' rule.
+       (group-n 1
+         ;; Avoid matching the file name as a program in the pattern
+         ;; above by disallowing file names entirely composed of digits.
+         ;; Do not allow file names beginning with a space.
+         (| (not (in "0-9" "\n\t "))
+            (: (+ (in "0-9"))
+               (not (in "0-9" "\n"))))
+         ;; A file name can be composed of any non-newline char, but
+         ;; rule out some valid but unlikely cases, such as a trailing
+         ;; space or a space followed by a -, or a colon followed by a
+         ;; space.
+         (*? (| (not (in "\n :"))
+                (: " " (not (in ?- "/\n")))
+                (: ":" (not (in " \n"))))))
+       ?: (group-n 2 (+ (in "0-9")))              ; Line
+       ?: (group-n 3 (+ (in "0-9")))              ; Column
+       ?:)
+     1 2 3 0)
 
     (gnu
      ;; The `gnu' message syntax is
@@ -581,19 +669,6 @@ during global destruction\\.$\\)" 1 2)
     (php
      "\\(?:Parse\\|Fatal\\) error: \\(.*\\) in \\(.*\\) on line \\([0-9]+\\)"
      2 3 nil nil)
-
-    (rust
-     ,(rx bol (or (group-n 1 "error") (group-n 2 "warning") (group-n 3 "note"))
-          (? "[" (+ (in "A-Z" "0-9")) "]") ":" (* nonl)
-          "\n" (+ " ") "-->"
-          " " (group-n 4 (+ nonl))        ; file
-          ":" (group-n 5 (+ (in "0-9")))  ; line
-          ":" (group-n 6 (+ (in "0-9")))) ; column
-     4 5 6 (2 . 3)
-     nil
-     (1 compilation-error-face)
-     (2 compilation-warning-face)
-     (3 compilation-info-face))
 
     (rxp
      "^\\(?:Error\\|Warnin\\(g\\)\\):.*\n.* line \\([0-9]+\\) char\
@@ -981,7 +1056,8 @@ Elements in this list will be searched before those in
 
 The buffer-local value of this variable will be inherited by the
 compilation buffer."
-  :type '(repeat (string :tag "Directory")))
+  :type '(repeat (string :tag "Directory"))
+  :version "31.1")
 
 ;;;###autoload
 (defcustom compile-command
@@ -2837,7 +2913,7 @@ Optional arg DIFFERENT-FILE, if non-nil, means find next error for a
 file that is different from the current one.
 Optional arg PT, if non-nil, specifies the value of point to start
 looking for the next message.
-In interacvtive invocations, DIFFERENT-FILE and PT are always nil."
+In interactive invocations, DIFFERENT-FILE and PT are always nil."
   (interactive "p")
   (or (compilation-buffer-p (current-buffer))
       (error "Not in a compilation buffer"))

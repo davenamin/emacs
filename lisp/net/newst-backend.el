@@ -1133,7 +1133,7 @@ Restore an xml-string from a an xml NODE that was returned by xml-parse..."
             (when att-list " ")
             (mapconcat #'newsticker--unxml-attribute att-list " ")
             ">"
-            (mapconcat #'newsticker--unxml children "") "</" qname ">")))
+            (mapconcat #'newsticker--unxml children) "</" qname ">")))
 
 (defun newsticker--unxml-attribute (attribute)
   "Actually restore xml-string of an ATTRIBUTE of an xml node."
@@ -1598,7 +1598,7 @@ is present, this function defaults to universal time."
 RFC822-STRING should use RFC 822 (or later) format.
 Examples:
 Sat, 07 September 2002 00:00:01 +0100
-Sat, 07 September 2002 00:00:01 MET
+Sat, 07 September 2002 00:00:01 MDT
 Sat, 07 Sep 2002 00:00:01 GMT
 07 Sep 2002 00:00:01 GMT
 07 Sep 2002"

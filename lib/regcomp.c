@@ -21,6 +21,12 @@
 # include <locale/weight.h>
 #endif
 
+/* The localeinfo-related code fixes glibc bug 20381.
+   Someday this fix should be merged into glibc.  */
+#if !defined _LIBC && !defined _REGEX_AVOID_UCHAR_H
+# include "localeinfo.h"
+#endif
+
 static reg_errcode_t re_compile_internal (regex_t *preg, const char * pattern,
 					  size_t length, reg_syntax_t syntax);
 static void re_compile_fastmap_iter (regex_t *bufp,
@@ -267,11 +273,31 @@ re_compile_fastmap (struct re_pattern_buffer *bufp)
 weak_alias (__re_compile_fastmap, re_compile_fastmap)
 
 static __always_inline void
-re_set_fastmap (char *fastmap, bool icase, int ch)
+re_set_fastmap (char *fastmap, unsigned char ch)
 {
   fastmap[ch] = 1;
-  if (icase)
-    fastmap[tolower (ch)] = 1;
+}
+
+/* Record in FASTMAP the initial byte of the representations of all
+   characters that match WC ignoring case, other than WC itself.
+   Use MBS as a scratch state.  */
+
+static void
+re_set_fastmap_icase (char *fastmap, wchar_t wc, mbstate_t *mbs)
+{
+#if defined _LIBC || defined _REGEX_AVOID_UCHAR_H
+  wchar_t folded[1] = {__towlower (wc)};
+  int nfolded = folded[0] != wc;
+#else
+  wchar_t folded[CASE_FOLDED_BUFSIZE];
+  int nfolded = case_folded_counterparts (wc, folded);
+#endif
+  for (int i = 0; i < nfolded; i++)
+    {
+      char buf[MB_LEN_MAX];
+      if (__wcrtomb (buf, folded[i], mbs) != (size_t) -1)
+	re_set_fastmap (fastmap, buf[0]);
+    }
 }
 
 /* Helper function for re_compile_fastmap.
@@ -283,7 +309,6 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 {
   re_dfa_t *dfa = bufp->buffer;
   Idx node_cnt;
-  bool icase = (dfa->mb_cur_max == 1 && (bufp->syntax & RE_ICASE));
   for (node_cnt = 0; node_cnt < init_state->nodes.nelem; ++node_cnt)
     {
       Idx node = init_state->nodes.elems[node_cnt];
@@ -291,8 +316,8 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 
       if (type == CHARACTER)
 	{
-	  re_set_fastmap (fastmap, icase, dfa->nodes[node].opr.c);
-	  if ((bufp->syntax & RE_ICASE) && dfa->mb_cur_max > 1)
+	  re_set_fastmap (fastmap, dfa->nodes[node].opr.c);
+	  if (bufp->syntax & RE_ICASE)
 	    {
 	      unsigned char buf[MB_LEN_MAX];
 	      unsigned char *p;
@@ -307,22 +332,29 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 		*p++ = dfa->nodes[node].opr.c;
 	      memset (&state, '\0', sizeof (state));
 	      if (__mbrtowc (&wc, (const char *) buf, p - buf,
-			     &state) == p - buf
-		  && (__wcrtomb ((char *) buf, __towlower (wc), &state)
-		      != (size_t) -1))
-		re_set_fastmap (fastmap, false, buf[0]);
+			     &state) == p - buf)
+		re_set_fastmap_icase (fastmap, wc, &state);
 	    }
 	}
       else if (type == SIMPLE_BRACKET)
 	{
-	  int i, ch;
-	  for (i = 0, ch = 0; i < BITSET_WORDS; ++i)
+	  unsigned char ch = 0;
+	  for (int i = 0; i < BITSET_WORDS; i++)
 	    {
 	      int j;
 	      bitset_word_t w = dfa->nodes[node].opr.sbcset[i];
 	      for (j = 0; j < BITSET_WORD_BITS; ++j, ++ch)
 		if (w & ((bitset_word_t) 1 << j))
-		  re_set_fastmap (fastmap, icase, ch);
+		  {
+		    re_set_fastmap (fastmap, ch);
+		    if (bufp->syntax & RE_ICASE)
+		      {
+			wchar_t wc;
+			mbstate_t state = {0};
+			if (__mbrtowc (&wc, (char *) &ch, 1, &state) == 1)
+			  re_set_fastmap_icase (fastmap, wc, &state);
+		      }
+		  }
 	    }
 	}
       else if (type == COMPLEX_BRACKET)
@@ -344,7 +376,7 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 		    _NL_CURRENT (LC_COLLATE, _NL_COLLATE_TABLEMB);
 		  for (i = 0; i < SBC_MAX; ++i)
 		    if (table[i] < 0)
-		      re_set_fastmap (fastmap, icase, i);
+		      re_set_fastmap (fastmap, i);
 		}
 #endif /* _LIBC */
 
@@ -365,7 +397,7 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 		  mbstate_t mbs;
 		  memset (&mbs, 0, sizeof (mbs));
 		  if (__mbrtowc (NULL, (char *) &c, 1, &mbs) == (size_t) -2)
-		    re_set_fastmap (fastmap, false, (int) c);
+		    re_set_fastmap (fastmap, c);
 		}
 	      while (++c != 0);
 	    }
@@ -375,17 +407,13 @@ re_compile_fastmap_iter (regex_t *bufp, const re_dfastate_t *init_state,
 	      /* ... Else catch all bytes which can start the mbchars.  */
 	      for (i = 0; i < cset->nmbchars; ++i)
 		{
-		  char buf[256];
+		  char buf[MB_LEN_MAX];
 		  mbstate_t state;
 		  memset (&state, '\0', sizeof (state));
 		  if (__wcrtomb (buf, cset->mbchars[i], &state) != (size_t) -1)
-		    re_set_fastmap (fastmap, icase, *(unsigned char *) buf);
-		  if ((bufp->syntax & RE_ICASE) && dfa->mb_cur_max > 1)
-		    {
-		      if (__wcrtomb (buf, __towlower (cset->mbchars[i]), &state)
-			  != (size_t) -1)
-			re_set_fastmap (fastmap, false, *(unsigned char *) buf);
-		    }
+		    re_set_fastmap (fastmap, buf[0]);
+		  if (bufp->syntax & RE_ICASE)
+		    re_set_fastmap_icase (fastmap, cset->mbchars[i], &state);
 		}
 	    }
 	}
@@ -494,12 +522,14 @@ weak_alias (__regcomp, regcomp)
    from either regcomp or regexec.   We don't use PREG here.  */
 
 size_t
-regerror (int errcode, const regex_t *__restrict preg, char *__restrict errbuf,
+regerror (int errcode,
+	  __attribute_maybe_unused__ const regex_t *__restrict preg,
+	  char *__restrict errbuf,
 	  size_t errbuf_size)
 {
   const char *msg;
   size_t msg_size;
-  int nerrcodes = sizeof __re_error_msgid_idx / sizeof __re_error_msgid_idx[0];
+  int nerrcodes = countof (__re_error_msgid_idx);
 
   if (__glibc_unlikely (errcode < 0 || errcode >= nerrcodes))
     /* Only error codes returned by the rest of the code should be passed
@@ -1363,7 +1393,7 @@ calc_first (void *extra, bin_tree_t *node)
 
 /* Pass 2: compute NEXT on the tree.  Preorder visit.  */
 static reg_errcode_t
-calc_next (void *extra, bin_tree_t *node)
+calc_next (__attribute_maybe_unused__ void *extra, bin_tree_t *node)
 {
   switch (node->token.type)
     {
@@ -2652,10 +2682,13 @@ parse_byte (unsigned char b, re_dfa_t const *dfa)
 static reg_errcode_t
 build_range_exp (bitset_t sbcset, re_charset_t *mbcset, Idx *range_alloc,
 		 bracket_elem_t *start_elem, bracket_elem_t *end_elem,
-		 re_dfa_t *dfa, reg_syntax_t syntax, uint_fast32_t nrules,
-		 const unsigned char *collseqmb, const char *collseqwc,
-		 int_fast32_t table_size, const void *symb_table,
-		 const unsigned char *extra)
+		 re_dfa_t *dfa, reg_syntax_t syntax,
+		 __attribute_maybe_unused__ uint_fast32_t nrules,
+		 __attribute_maybe_unused__ const unsigned char *collseqmb,
+		 __attribute_maybe_unused__ const char *collseqwc,
+		 __attribute_maybe_unused__ int_fast32_t table_size,
+		 __attribute_maybe_unused__ const void *symb_table,
+		 __attribute_maybe_unused__ const unsigned char *extra)
 {
   /* Equivalence Classes and Character Classes can't be a range start/end.  */
   if (__glibc_unlikely (start_elem->type == EQUIV_CLASS
@@ -2750,10 +2783,14 @@ build_range_exp (bitset_t sbcset, re_charset_t *mbcset, Idx *range_alloc,
    pointer argument since we may update it.  */
 
 static reg_errcode_t
-build_collating_symbol (bitset_t sbcset, re_charset_t *mbcset,
-			Idx *coll_sym_alloc, const unsigned char *name,
-			uint_fast32_t nrules, int_fast32_t table_size,
-			const void *symb_table, const unsigned char *extra)
+build_collating_symbol (bitset_t sbcset,
+			__attribute_maybe_unused__ re_charset_t *mbcset,
+			__attribute_maybe_unused__ Idx *coll_sym_alloc,
+			const unsigned char *name,
+			__attribute_maybe_unused__ uint_fast32_t nrules,
+			__attribute_maybe_unused__ int_fast32_t table_size,
+			__attribute_maybe_unused__ const void *symb_table,
+			__attribute_maybe_unused__ const unsigned char *extra)
 {
   size_t name_len = strlen ((const char *) name);
   if (__glibc_unlikely (name_len != 1))
@@ -3303,7 +3340,8 @@ parse_bracket_exp (re_string_t *regexp, re_dfa_t *dfa, re_token_t *token,
 
 static reg_errcode_t
 parse_bracket_element (bracket_elem_t *elem, re_string_t *regexp,
-		       re_token_t *token, int token_len, re_dfa_t *dfa,
+		       re_token_t *token, int token_len,
+		       __attribute_maybe_unused__ re_dfa_t *dfa,
 		       reg_syntax_t syntax, bool accept_hyphen)
 {
   int cur_char_size;
@@ -3387,8 +3425,10 @@ parse_bracket_symbol (bracket_elem_t *elem, re_string_t *regexp,
      is a pointer argument since we may update it.  */
 
 static reg_errcode_t
-build_equiv_class (bitset_t sbcset, re_charset_t *mbcset,
-		   Idx *equiv_class_alloc, const unsigned char *name)
+build_equiv_class (bitset_t sbcset,
+		   __attribute_maybe_unused__ re_charset_t *mbcset,
+		   __attribute_maybe_unused__ Idx *equiv_class_alloc,
+		   const unsigned char *name)
 {
 #ifdef _LIBC
   uint32_t nrules = _NL_CURRENT_WORD (LC_COLLATE, _NL_COLLATE_NRULES);
@@ -3742,7 +3782,7 @@ free_token (re_token_t *node)
    and its children. */
 
 static reg_errcode_t
-free_tree (void *extra, bin_tree_t *node)
+free_tree (__attribute_maybe_unused__ void *extra, bin_tree_t *node)
 {
   free_token (&node->token);
   return REG_NOERROR;

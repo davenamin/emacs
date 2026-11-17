@@ -334,10 +334,10 @@ automatically killed, which means that in a such case
           (erase-buffer)
           (delete-all-overlays))
         (let (change-major-mode-hook)
-          ;; `kill-all-local-variables' does not kill permanent locals
-          ;; like `buffer-read-only'.
-          (setq buffer-read-only nil)
-          (kill-all-local-variables t))
+          ;; Ensure `kill-all-local-variables' kills *all* permanent locals
+          ;; rather than exempting any, and resets the buffer to pristine
+          ;; state.
+          (kill-all-local-variables 'reset))
         ;; Make the buffer available again.
         (push buffer work-buffer--list)))
   ;; If the maximum number of reusable work buffers is exceeded, kill
@@ -426,42 +426,51 @@ this function using the same ELLIPSIS."
       string
     ;; Keeping a work buffer around is more efficient than creating a
     ;; new temporary buffer.
-    (let ((original-buffer (or buffer (current-buffer))))
+    (let* ((window (selected-window))
+           (original-buffer (window-buffer window))
+           (window-dedication (window-dedicated-p window))
+           (buffer-list-update-hook)
+           (window-scroll-functions)
+           (window-configuration-change-hook))
       (with-work-buffer
-       (work-buffer--prepare-pixelwise string buffer)
-       (set-window-buffer nil (current-buffer) 'keep-margins)
-       ;; Use a binary search to prune the number of calls to
-       ;; `window-text-pixel-size'.
-       ;; These are 1-based buffer indexes.
-       (let* ((low 1)
-              (high (1+ (length string)))
-              mid)
-         (when (> (car (window-text-pixel-size nil 1 high)) max-pixels)
-           (when (and ellipsis (not (stringp ellipsis)))
-             (setq ellipsis (truncate-string-ellipsis)))
-           (setq ellipsis-pixels (if ellipsis
-                                     (if ellipsis-pixels
-                                         ellipsis-pixels
-                                       (string-pixel-width ellipsis buffer))
-                                   0))
-           (let ((adjusted-pixels
-                  (if (> max-pixels ellipsis-pixels)
-                      (- max-pixels ellipsis-pixels)
-                    max-pixels)))
-             (while (<= low high)
-               (setq mid (floor (+ low high) 2))
-               (if (<= (car (window-text-pixel-size nil 1 mid))
-                       adjusted-pixels)
-                   (setq low (1+ mid))
-                 (setq high (1- mid))))))
-         (set-window-buffer nil original-buffer 'keep-margins)
-         (if mid
-             ;; Binary search ran.
-             (if (and ellipsis (> max-pixels ellipsis-pixels))
-                 (concat (substring string 0 (1- high)) ellipsis)
-               (substring string 0 (1- high)))
-           ;; Fast path.
-           string))))))
+        ;; Use a binary search to prune the number of calls to
+        ;; `window-text-pixel-size'.
+        ;; These are 1-based buffer indexes.
+        (unwind-protect
+            (let* ((low 1)
+                   (high (1+ (length string)))
+                   mid)
+              (work-buffer--prepare-pixelwise string buffer)
+              (set-window-dedicated-p window nil)
+              (set-window-buffer window (current-buffer) 'keep-margins)
+              (when (> (car (window-text-pixel-size nil 1 high)) max-pixels)
+                (when (and ellipsis (not (stringp ellipsis)))
+                  (setq ellipsis (truncate-string-ellipsis)))
+                (setq ellipsis-pixels (if ellipsis
+                                          (if ellipsis-pixels
+                                              ellipsis-pixels
+                                            (string-pixel-width ellipsis buffer))
+                                        0))
+                (let ((adjusted-pixels
+                       (if (> max-pixels ellipsis-pixels)
+                           (- max-pixels ellipsis-pixels)
+                         max-pixels)))
+                  (while (<= low high)
+                    (setq mid (floor (+ low high) 2))
+                    (if (<= (car (window-text-pixel-size nil 1 mid))
+                            adjusted-pixels)
+                        (setq low (1+ mid))
+                      (setq high (1- mid))))))
+              (if mid
+                  ;; Binary search ran.
+                  (if (and ellipsis (> max-pixels ellipsis-pixels))
+                      (concat (substring string 0 (1- high)) ellipsis)
+                    (substring string 0 (1- high)))
+                ;; Fast path.
+                string))
+          (set-window-buffer window original-buffer 'keep-margins)
+          (set-window-dedicated-p window window-dedication)
+          (unrecord-window-buffer window (current-buffer) t))))))
 
 ;;;###autoload
 (defun string-glyph-split (string)
@@ -490,6 +499,63 @@ and the current buffer must be displayed in some window."
         (push (substring string start (1+ start)) result)
         (setq start (1+ start))))
     (nreverse result)))
+
+;; Borrowed from a2r.el (version 1.3), by Lawrence Mitchell <wence@gmx.li>.  I
+;; needed to make some tiny changes to the functions, so I put it here.
+;; -- Wei-Wei Guo
+
+(defconst number-to-roman
+  '((1000 .   "M") (900  .  "CM") (500  .   "D") (400  .  "CD")
+    (100  .   "C") (90   .  "XC") (50   .   "L") (40   .  "XL")
+    (10   .   "X") (9    .  "IX") (5    .   "V") (4    .  "IV")
+    (1    .   "I"))
+  "List of maps between numbers and their Roman numeral equivalents.")
+
+;;;###autoload
+(defun number-to-roman (num)
+  "Convert number NUM to its Roman numeral representation.
+
+Obviously, NUM must be greater than zero.  Don't blame me, blame the
+Romans, I mean \"what have the Romans ever _done_ for /us/?\" (with
+apologies to Monty Python)."
+  (unless (and (integerp num) (plusp num))
+    (signal 'wrong-type-argument
+            (list "Argument must be a positive number" num)))
+  (let ((map number-to-roman)
+        (r ""))
+    (while (and map (> num 0))
+      (cl-destructuring-bind ((val &rest sym) &rest next) map
+	(if (>= num val)
+	    (setq r (concat r sym)
+		  num (- num val))
+	  (setq map next))))
+    r))
+
+;;;###autoload
+(defun roman-to-number (string)
+  "Convert STRING of Roman numerals to an number.
+If STRING contains a letter which isn't a valid Roman numeral, signal an
+error."
+  (unless (stringp string)
+    (signal 'wrong-type-argument (list #'stringp string)))
+  (unless (length> string 0)
+    (signal 'wrong-type-argument
+            (list "Roman number may not be an empty string" string)))
+  (let ((res 0)
+        (map number-to-roman))
+    (save-match-data
+      (while map
+	(cl-destructuring-bind ((val &rest sym) &rest next) map
+	  (if (string-match (concat "^" sym) string)
+	      (setq res (+ res val)
+		    string (replace-match "" nil t string))
+	    (setq map next))))
+      (unless (length= string 0)
+        (signal 'wrong-type-argument
+                (list "Invalid characters in roman number" string)))
+      res)))
+
+;; End of borrow.
 
 (defun add-remove--display-text-property (start end spec value
                                                 &optional object remove)

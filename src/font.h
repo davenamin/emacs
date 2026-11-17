@@ -252,7 +252,7 @@ struct font_spec
 {
   union vectorlike_header header;
   Lisp_Object props[FONT_SPEC_MAX];
-};
+} GCALIGNED_STRUCT;
 
 /* Structure for a font-entity.  */
 
@@ -265,7 +265,7 @@ struct font_entity
   /* Whether or not this is an Android font entity.  */
   bool is_android;
 #endif
-};
+} GCALIGNED_STRUCT;
 
 /* A value which may appear in the member `encoding' of struct font
    indicating that a font itself doesn't tell which encoding to be
@@ -401,7 +401,7 @@ struct font
 
   /* There are more members in this structure, but they are private
      to the font-driver.  */
-};
+} GCALIGNED_STRUCT;
 
 enum font_spacing
   {
@@ -758,10 +758,12 @@ struct font_driver
 
      This function updates all fields of the input glyphs.  If the
      output glyphs (M) are more than the input glyphs (N), (N+1)th
-     through (M)th elements of GSTRING are updated possibly by making
-     a new glyph object and storing it in GSTRING.  If (M) is greater
-     than the length of GSTRING, this method should return nil.  In
-     that case, the method is called again with a larger GSTRING.  */
+     through (M)th elements of GSTRING are updated possibly by making a
+     new glyph object and storing it in GSTRING.  If (M) is greater than
+     the length of GSTRING, this method should return nil, or a negative
+     fixnum whose absolute value is (M) if the required number of glyphs
+     is known.  In that case, the method is called again with a larger
+     GSTRING.  */
   Lisp_Object (*shape) (Lisp_Object lgstring, Lisp_Object direction);
 
   /* Optional.

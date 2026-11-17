@@ -797,7 +797,10 @@ To record all your input, use `open-dribble-file'."
     ;; `help-make-xrefs' adds a newline at the end of the buffer, which
     ;; makes impossible to reposition point in `with-help-window'.
     (when view-lossage-auto-refresh
-      (set-window-point (get-buffer-window (help-buffer)) (point-max)))))
+      (if-let* ((window (get-buffer-window (help-buffer))))
+          (set-window-point window (point-max))
+        (with-current-buffer (help-buffer)
+          (goto-char (point-max)))))))
 
 
 ;; Key bindings
@@ -1261,13 +1264,13 @@ current buffer."
                              "\n"))
           (when (delq nil on-link)
             (insert "\n\nThose are influenced by `mouse-1-click-follows-link'"))
-          (insert "\n\nThey're all described below."))
+          (insert "\n\nThey're all described below.\n"))
         (pcase-dolist (`(,_seq ,brief-desc ,defn ,locus)
                        info-list)
           (when defn
             (when (> (length info-list) 1)
               (with-current-buffer standard-output
-                (insert "\n\n" (make-separator-line) "\n")))
+                (insert (make-separator-line))))
 
             (insert brief-desc)
             (when locus
@@ -1998,18 +2001,20 @@ function is called, the window to be resized is selected."
 (define-minor-mode temp-buffer-resize-mode
   "Toggle auto-resizing temporary buffer windows (Temp Buffer Resize Mode).
 
-When Temp Buffer Resize mode is enabled, the windows in which we
-show a temporary buffer are automatically resized in height to
+When Temp Buffer Resize mode is enabled, the windows in which Emacs
+shows a temporary buffer are automatically resized in height to
 fit the buffer's contents, but never more than
 `temp-buffer-max-height' nor less than `window-min-height'.
 
-A window is resized only if it has been specially created for the
-buffer.  Windows that have shown another buffer before are not
-resized.  A frame is resized only if `fit-frame-to-buffer' is
-non-nil.
+When this mode is enabled, a window is resized only if it has been
+specially created for a temporary buffer.  Windows that have shown
+another buffer before being reused for displaying a temporary buffer
+are not resized (but note that if `even-window-sizes' is non-nil, they
+might be resized in some situations anyway).  A frame is resized only
+if `fit-frame-to-buffer' is non-nil.
 
 This mode is used by `help', `apropos' and `completion' buffers,
-and some others."
+and some others, when they display their pop-up buffers."
   :global t :group 'help
   (if temp-buffer-resize-mode
       ;; `help-make-xrefs' may add a `back' button and thus increase the
@@ -2050,7 +2055,10 @@ provided `fit-frame-to-buffer' is non-nil."
 	 (quit-cadr (cadr (window-parameter window 'quit-restore))))
     ;; Resize WINDOW only if it was made by `display-buffer'.
     (when (or (and (eq quit-cadr 'window)
-		   (or (and (window-combined-p window)
+                   ;; When WINDOW was reused, its buffer must be the one
+                   ;; initially shown in it (Bug#81207).
+                   (eq buffer (nth 3 (window-parameter window 'quit-restore)))
+                   (or (and (window-combined-p window)
 			    (not (eq fit-window-to-buffer-horizontally
 				     'only))
 			    (pos-visible-in-window-p

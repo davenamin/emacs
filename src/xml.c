@@ -133,14 +133,12 @@ make_dom (xmlNode *node)
       property = node->properties;
       while (property != NULL)
 	{
-	  if (property->children &&
-	      property->children->content)
-	    {
-	      char *content = (char *) property->children->content;
-	      plist = Fcons (Fcons (intern ((char *) property->name),
-				    build_string (content)),
-			     plist);
-	    }
+	  const char *content = "";
+	  if (property->children && property->children->content)
+	    content = (char *) property->children->content;
+	  plist = Fcons (Fcons (intern ((char *) property->name),
+				build_string (content)),
+			 plist);
 	  property = property->next;
 	}
       result = Fcons (Fnreverse (plist), result);
@@ -209,7 +207,7 @@ parse_region (Lisp_Object start, Lisp_Object end, Lisp_Object base_url,
     }
 
   buftext = BYTE_POS_ADDR (istart_byte);
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
   /* Prevent ralloc.c from relocating the current buffer while libxml2
      functions below read its text.  */
   r_alloc_inhibit_buffer_relocation (1);
@@ -226,7 +224,7 @@ parse_region (Lisp_Object start, Lisp_Object end, Lisp_Object base_url,
 			 XML_PARSE_NONET|XML_PARSE_NOWARNING|
 			 XML_PARSE_NOBLANKS |XML_PARSE_NOERROR);
 
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
   r_alloc_inhibit_buffer_relocation (0);
 #endif
   /* If the assertion below fails, malloc was called inside the above

@@ -361,12 +361,16 @@ only in the active region if `dired-mark-region' is non-nil."
      dir1 nil
      (lambda ()
        (dired-mark-if
-        (member (dired-get-filename nil t) file-list1) nil)))
+        (and (not (dired--hidden-p))
+             (member (dired-get-filename nil t) file-list1))
+        nil)))
     (dired-fun-in-all-buffers
      dir2 nil
      (lambda ()
        (dired-mark-if
-        (member (dired-get-filename nil t) file-list2) nil)))
+        (and (not (dired--hidden-p))
+             (member (dired-get-filename nil t) file-list2))
+        nil)))
     (message "Marked in dir1: %s, in dir2: %s"
              (format-message (ngettext "%d file" "%d files" (length file-list1))
                              (length file-list1))
@@ -2272,7 +2276,7 @@ that suppresses the confirmation, and backup files are always created."
 (declare-function make-symbolic-link "fileio.c")
 
 (defcustom dired-create-destination-dirs nil
-  "Whether Dired should create destination dirs when copying/removing files.
+  "Whether Dired should create destination dirs when copying/moving files.
 If nil, don't create non-existent destination directories.
 If `ask', ask the user whether to create them.
 If `always', create them without asking.
@@ -2349,26 +2353,79 @@ Dired renames them using `vc-rename-file'."
   :group 'dired
   :version "27.1")
 
+(declare-function vc-file-tree-walk "vc")
+
 ;;;###autoload
 (defun dired-rename-file (file newname ok-if-already-exists)
   "Rename FILE to NEWNAME.
 Signal a `file-already-exists' error if a file NEWNAME already exists
 unless OK-IF-ALREADY-EXISTS is non-nil."
-  (let ((file-is-dir-p (file-directory-p file)))
+  (let* ((file-is-dir-p (file-directory-p file))
+         (file-base (file-name-nondirectory file))
+         (newname (if (string-empty-p (file-name-nondirectory newname))
+                      (concat newname file-base)
+                    newname)))
     (dired-handle-overwrite newname)
     (dired-maybe-create-dirs (file-name-directory newname))
-    (if (and dired-vc-rename-file
-             (if file-is-dir-p
-                 (ignore-errors (vc-responsible-backend file))
-               (vc-backend file))
-             (ignore-errors (vc-responsible-backend newname)))
-        (vc-rename-file file newname ok-if-already-exists)
+    (if-let* (dired-vc-rename-file
+              (file-backend (if file-is-dir-p
+                                (ignore-errors
+                                  (vc-responsible-backend file))
+                              (vc-backend file)))
+              (file-root (vc-root-dir file-backend
+                                      (file-name-directory file))))
+        (let* ((newname-backend (ignore-errors
+                                  (vc-responsible-backend newname)))
+               (newname-root
+                (and newname-backend
+                     (vc-root-dir newname-backend
+                                  (file-name-directory newname)))))
+          (if (equal file-root newname-root)
+              (vc-rename-file file newname ok-if-already-exists)
+            (let ((already-exists (file-exists-p newname)))
+              ;; The delete commands for several VCS (at least Git and
+              ;; Mercurial) will fail if asked to remove a directory
+              ;; containing only untracked files.  See `vc-rename-file'
+              ;; which resolves a similar issue in the same way.
+              (if (and file-is-dir-p
+                       (catch 'done
+                         (vc-file-tree-walk file (lambda (_)
+                                                   (throw 'done nil)))
+                         t))
+                  (rename-file file newname ok-if-already-exists)
+                (let ((target (file-attribute-type
+                               (file-attributes file))))
+                  (cond ((stringp target)
+                         (make-symbolic-link target newname
+                                             ok-if-already-exists))
+                        (file-is-dir-p
+                         (copy-directory file newname t))
+                        (t
+                         (when (and ok-if-already-exists
+                                    (file-symlink-p newname))
+                           (delete-file newname))
+                         (copy-file file newname
+                                    ok-if-already-exists t t t)))
+                  (handler-bind
+                      ((error (lambda (_)
+                                (unless already-exists
+                                  (if (or (stringp target)
+                                          (not file-is-dir-p))
+                                      (delete-file newname)
+                                    (delete-directory newname t))))))
+                    (vc-delete-file file 'noconfirm 'keep))))
+              (when newname-backend
+                (let ((newname (expand-file-name newname newname-root))
+                      (default-directory newname-root))
+                  (if already-exists
+                      (vc-state-refresh newname newname-backend)
+                    (vc-register `(,newname-backend (,newname)))))))))
       ;; error is caught in -create-files
       (rename-file file newname ok-if-already-exists))
     ;; Silently rename the visited file of any buffer visiting this file.
     (and (get-file-buffer file)
          (with-current-buffer (get-file-buffer file)
-	   (set-visited-file-name newname nil t)))
+	   (set-visited-file-name newname t t)))
     (dired-remove-file file)
     ;; See if it's an inserted subdir, and rename that, too.
     (when file-is-dir-p
@@ -3352,7 +3409,26 @@ This function takes some pains to conform to `ls -lR' output."
 	(modflag (buffer-modified-p))
 	(old-switches switches)
 	switches-have-R mark-alist case-fold-search buffer-read-only)
-    (and (not switches) cons (setq switches (cdr cons)))
+    (and (not switches)
+         ;; FIXME: This line fixes a bug when entering `C-u i' with
+         ;; `dired-auto-toggle-b-switch' non-nil, but the fix is
+         ;; controversial so currently not used; see
+         ;; <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=81295#20> and
+         ;; the following messages and also bug#81522 for discussion.
+         ;; (not (dired-switches-escape-p dired-actual-switches))
+         cons (setq switches (cdr cons)))
+    ;; FIXME: Since the bug results is a bad Dired display, we warn the
+    ;; user; remove this warning when an acceptable fix is installed.
+    (when (and dired-auto-toggle-b-switch dired-switches-alist
+               (directory-files (caar dired-switches-alist) nil "\n")
+               (dired-switches-escape-p dired-actual-switches)
+               (not (dired-switches-escape-p (cdar dired-switches-alist))))
+      (display-warning 'dired
+                       "
+You have encountered a known Emacs bug
+for which there is currently no acceptable solution;
+see <https://debbugs.gnu.org/cgi/bugreport.cgi?bug=81295#56>
+and the related messages for details."))
     (dired-insert-subdir-validate dirname switches)
     ;; case-fold-search is nil now, so we can test for capital `R':
     (if (setq switches-have-R (and switches (string-match-p "R" switches)))
@@ -3378,6 +3454,16 @@ This function takes some pains to conform to `ls -lR' output."
 		 (if cur-cons
 		     (setcdr cur-cons switches)
 		   (push (cons cur-dir switches) dired-switches-alist)))))))
+    ;; Since we insert subdirs without calling `dired-internal-noselect'
+    ;; we also have to test here whether the subdir contains a file name
+    ;; with a newline, and if so, pop up a warning.  FIXME: Is there a
+    ;; cleaner way to do this?  See bug#81295 and bug#81522.
+    (unless (or dired-auto-toggle-b-switch
+                (dired-switches-escape-p dired-listing-switches)
+                (dired-switches-escape-p dired-actual-switches))
+      (when (and (dired--filename-with-newline-p)
+                 (dired--check-use-ls-dired))
+        (dired--display-filename-with-newline-warning (current-buffer))))
     (dired-initial-position dirname)
     (save-excursion (dired-mark-remembered mark-alist))
     (restore-buffer-modified-p modflag)))

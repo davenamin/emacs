@@ -412,7 +412,7 @@ that was visited in the buffer.
 * Interlocking::        How Emacs protects against simultaneous editing
                           of one file by two users.
 * Shadowing: File Shadowing.  Copying files to ``shadows'' automatically.
-* Time Stamps::         Emacs can update time stamps when a file is saved.
+* Time Stamps::         Emacs can update time stamp text when saving a file.
 @end menu
 
 @node Save Commands
@@ -912,7 +912,7 @@ does not actually take place.
 @end table
 
   If Emacs or the operating system crashes, this may leave behind lock
-files which are stale, so you may occasionally get warnings about
+files that are stale, so you may occasionally get warnings about
 spurious collisions.  When you determine that the collision is
 spurious, just use @kbd{p} to tell Emacs to go ahead anyway.
 
@@ -1071,7 +1071,7 @@ To customize the time stamp in a particular file, set the
 variable @code{time-stamp-pattern} in that file's local variables
 list (@pxref{Specifying File Variables}).
 You can change what pattern @code{time-stamp} will match against to
-identify a template and where in the file to look for the pattern using
+identify a template, and where in the file to look for the pattern, using
 @code{time-stamp-pattern}; for details, see the variable's built-in
 documentation (with @kbd{C-h v}, @pxref{Name Help}).
 
@@ -1808,11 +1808,20 @@ Move to the next hunk-start (@code{diff-hunk-next}).  With prefix
 argument @var{n}, move forward to the @var{n}th next hunk.
 
 @vindex diff-refine
-By default, Diff mode @dfn{refines} hunks as Emacs displays them,
-highlighting their changes with better granularity.  Alternatively, if
-you set @code{diff-refine} to the symbol @code{navigation}, Diff mode
-only refines the hunk you move to with this command or with
-@code{diff-hunk-prev}.
+By default, Diff mode automatically @dfn{refines} hunks as Emacs
+displays them, highlighting their changes with better granularity.
+Alternatively, if you set @code{diff-refine} to the symbol
+@code{navigation}, Diff mode only refines the hunk you move to with this
+command or with @code{diff-hunk-prev}.  Finally, you can set
+@code{diff-refine} to @code{nil} and manually refine hunks using
+@kbd{C-c C-b} (@code{diff-refine-hunk}), described below.
+
+@cindex shadow cursor (Diff mode)
+@vindex smerge-refine-shadow-cursor
+By default, refining a hunk in any way displays a @dfn{shadow cursor} at
+one of the two edges of the refined region, to better show where the
+refined region starts or ends.  This can be controlled by customizing
+the variable @code{smerge-refine-shadow-cursor}.
 
 @findex diff-hunk-prev
 @item M-p
@@ -1895,7 +1904,8 @@ parts of the buffer where the hunks' file names are specified.
 @item C-c C-b
 Highlight the changes of the hunk at point with a finer granularity
 (@code{diff-refine-hunk}).  This allows you to see exactly which parts
-of each changed line were actually changed.
+of each changed line were actually changed.  Refining a hunk by default
+shows a ``shadow cursor'' at one of the two edges of the refined region.
 
 @vindex diff-refine
 By default, Diff mode refines hunks as Emacs displays them, so you may
@@ -1914,10 +1924,27 @@ default jumps to the ``old'' file, and the meaning of the prefix
 argument is reversed.  If the prefix argument is a number greater than
 8 (e.g., if you type @kbd{C-u C-u C-c C-c}), then this command also
 sets @code{diff-jump-to-old-file} for the next invocation.
+
 If the source file is under version control (@pxref{Version Control}),
-this jumps to the work file by default.  With a prefix argument, jump
-to the ``old'' revision of the file (@pxref{Old Revisions}), when
-point is on the old line, or otherwise jump to the ``new'' revision.
+this jumps to the work file by default.  With a prefix argument, jump to
+the source code corresponding to one of the diff's old or new revisions
+as follows:
+@itemize @minus
+@item
+if point is on an old changed line (i.e.@: a removed line), jump to the
+old source file in the manner of @kbd{C-x v ~}
+(@code{vc-revision-other-window}; @pxref{Old Revisions});
+@item
+otherwise, jump to the new source file, either by visiting the work file
+or in the manner of @kbd{C-x v ~}.
+@end itemize
+
+@findex diff-goto-old-source
+@item f @r{(in read-only Diff mode buffers)}
+Like @kbd{C-c C-c}, but with @code{diff-jump-to-old-file} always
+non-@code{nil}: jump to the corresponding line of the old source file.
+If the source file is under version control, jump to the source code
+corresponding to one of the diff's old or new revisions as above.
 
 @findex diff-ediff-patch
 @item C-c C-e

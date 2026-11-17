@@ -179,7 +179,7 @@ sed -e "/#define EMACS_CONFIG_FEATURES/s/^.*$/#define EMACS_CONFIG_FEATURES \"LI
 set libxml=1
 :xmlDone
 rm -f junk.c junk junk.exe
-Rem See if they requested a SYSTEM_MALLOC build
+Rem See if they requested a build with the system malloc.
 if "%sys_malloc%" == "" Goto cfgDone
 rm -f config.tmp
 ren config.h2 config.tmp
@@ -203,9 +203,9 @@ rm -f makefile.tmp
 :src5
 
 if "%sys_malloc%" == "" goto src5a
-sed -e "/^GMALLOC_OBJ *=/s/gmalloc.o//" <Makefile >makefile.tmp
-sed -e "/^VMLIMIT_OBJ *=/s/vm-limit.o//" <makefile.tmp >makefile.tmp2
-sed -e "/^RALLOC_OBJ *=/s/ralloc.o//" <makefile.tmp2 >Makefile
+sed -e "/^MSDOS_OBJ *=/s/gmalloc.o//" <Makefile >makefile.tmp
+sed -e "/^MSDOS_OBJ *=/s/vm-limit.o//" <makefile.tmp >makefile.tmp2
+sed -e "/^MSDOS_OBJ *=/s/ralloc.o//" <makefile.tmp2 >Makefile
 rm -f makefile.tmp makefile.tmp2
 :src5a
 
@@ -292,6 +292,7 @@ If Exist limits.in.h update limits.in.h limits.in-h
 If Exist signal.in.h update signal.in.h signal.in-h
 If Exist signal.in.h update signal.in.h signal.in-h
 If Exist stdalign.in.h update stdalign.in.h stdalign.in-h
+If Exist stdcountof.in.h update stdcountof.in.h stdcountof.in-h
 If Exist stddef.in.h update stddef.in.h  stddef.in-h
 If Exist stdint.in.h update stdint.in.h  stdint.in-h
 If Exist stdio.in.h update stdio.in.h stdio.in-h

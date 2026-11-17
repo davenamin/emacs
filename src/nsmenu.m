@@ -630,7 +630,7 @@ prettify_key (const char *key)
   int len = strlen (key);
   char *buf = xmalloc (len + 1);
   memcpy (buf, key, len + 1);
-  for (int i = 0; i < ARRAYELTS (key_symbols); i++)
+  for (int i = 0; i < countof (key_symbols); i++)
     {
       ptrdiff_t fromlen = strlen (key_symbols[i].from);
       char *p = buf;
@@ -1109,8 +1109,6 @@ free_frame_tool_bar (struct frame *f)
   f->output_data.ns->in_animation = 1;
   [[[view window] toolbar] setVisible:NO];
   f->output_data.ns->in_animation = 0;
-
-  [[view window] setToolbar:nil];
 
   unblock_input ();
 }

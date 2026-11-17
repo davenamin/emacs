@@ -272,7 +272,7 @@ init_dosfns (void)
   _go32_dpmi_registers dpmiregs;
   unsigned long xbuf = _go32_info_block.linear_address_of_transfer_buffer;
 
-#ifndef SYSTEM_MALLOC
+#ifdef GMALLOC_REL_ALLOC
   extern void get_lim_data (void);
 
   get_lim_data (); /* why the hell isn't this called elsewhere? */
@@ -395,7 +395,7 @@ msdos_stdcolor_idx (const char *name)
 {
   int i;
 
-  for (i = 0; i < ARRAYELTS (vga_colors); i++)
+  for (i = 0; i < countof (vga_colors); i++)
     if (xstrcasecmp (name, vga_colors[i]) == 0)
       return i;
 
@@ -413,7 +413,7 @@ msdos_stdcolor_name (int idx)
     return build_string (unspecified_fg);
   else if (idx == FACE_TTY_DEFAULT_BG_COLOR)
     return build_string (unspecified_bg);
-  else if (idx >= 0 && idx < ARRAYELTS (vga_colors))
+  else if (idx >= 0 && idx < countof (vga_colors))
     return build_string (vga_colors[idx]);
   else
     return Qunspecified;	/* meaning the default */
@@ -534,7 +534,7 @@ system_process_attributes (Lisp_Object pid)
       int i;
       Lisp_Object cmd_str, decoded_cmd, tem;
       double pmem;
-#ifndef SYSTEM_MALLOC
+#ifdef GMALLOC_REL_ALLOC
       extern unsigned long ret_lim_data ();
 #endif
 
@@ -569,9 +569,9 @@ system_process_attributes (Lisp_Object pid)
 			    INT_TO_INTEGER ((unsigned long) sbrk (0) / 1024)),
 		     attrs);
       attrs = Fcons (Fcons (Qetime, tem), attrs);
-#ifndef SYSTEM_MALLOC
-      /* ret_lim_data is on vm-limit.c, which is not compiled in under
-	 SYSTEM_MALLOC.  */
+#ifdef GMALLOC_REL_ALLOC
+      /* ret_lim_data is in vm-limit.c, which is compiled only if
+	 GMALLOC_REL_ALLOC.  */
       pmem = (double)((unsigned long) sbrk (0)) / ret_lim_data () * 100.0;
       if (pmem > 100)
 #endif

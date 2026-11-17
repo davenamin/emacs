@@ -76,11 +76,13 @@ get_random_fixnum (EMACS_INT lim)
 
 DEFUN ("random", Frandom, Srandom, 0, 1, 0,
        doc: /* Return a pseudo-random integer.
-By default, return a fixnum; all fixnums are equally likely.
-With positive integer LIMIT, return random integer in interval [0,LIMIT).
-With argument t, set the random number seed from the system's entropy
+By default, return a random fixnum value with all fixnums equally likely.
+With positive integer value of the optional argument LIMIT, return random
+integer in interval [0,LIMIT); it is an error to pass a negative LIMIT.
+If LIMIT is t, set the random number seed from the system's entropy
 pool if available, otherwise from less-random volatile data such as the time.
-With a string argument, set the seed based on the string's contents.
+If LIMIT is a string, set the seed based on the string's contents.
+Any other value of LIMIT is interpreted as nil.
 
 See Info node `(elisp)Random Numbers' for more details.  */)
   (Lisp_Object limit)
@@ -902,7 +904,7 @@ concat_to_string (ptrdiff_t nargs, Lisp_Object *args)
 
       result_len += len;
       if (MOST_POSITIVE_FIXNUM < result_len)
-	memory_full (SIZE_MAX);
+	memory_full_up ();
     }
 
   if (dest_multibyte && some_unibyte)
@@ -1122,7 +1124,7 @@ concat_to_vector (ptrdiff_t nargs, Lisp_Object *args)
       EMACS_INT len = XFIXNAT (Flength (arg));
       result_len += len;
       if (MOST_POSITIVE_FIXNUM < result_len)
-	memory_full (SIZE_MAX);
+	memory_full_up ();
     }
 
   /* Create the output vector.  */
@@ -1579,8 +1581,9 @@ DEFUN ("substring", Fsubstring, Ssubstring, 1, 3, 0,
 The returned string consists of the characters between index FROM
 \(inclusive) and index TO (exclusive) of STRING.  FROM and TO are
 zero-indexed: 0 means the first character of STRING.  Negative values
-are counted from the end of STRING.  If TO is nil, the substring runs
-to the end of STRING.
+are counted from the end of STRING.  If TO is nil or omitted, the
+substring runs to the end of STRING.  If FROM is nil or omitted, it
+defaults to the first character of STRING.
 
 The STRING argument may also be a vector.  In that case, the return
 value is a new vector that contains the elements between index FROM
@@ -1824,7 +1827,10 @@ DEFUN ("nthcdr", Fnthcdr, Snthcdr, 2, 2, 0,
 	  mpz_export (&iz, NULL, -1, sizeof iz, 0, 0, mpz[0]);
 	  num += iz;
 	}
-      num += cycle_length - large_num % cycle_length;
+      if (num < cycle_length)
+	num += cycle_length;
+      num -= large_num % cycle_length;
+      eassume (num >= 0);
     }
   num %= cycle_length;
 
@@ -3959,14 +3965,14 @@ The data read from the system are decoded using `locale-coding-system'.  */)
 # endif
 # ifdef HAVE_LANGINFO__NL_PAPER_WIDTH
   if (EQ (item, Qpaper))
-    /* We have to cast twice here: first to a correctly-sized integer,
+    /* We have to convert twice here: first to a correctly-sized integer,
        then to int, because that's what nl_langinfo is documented to
-       return for _NO_PAPER_{WIDTH,HEIGHT}.  The first cast doesn't
+       return for _NO_PAPER_{WIDTH,HEIGHT}.  The cast doesn't
        suffice because it could overflow an Emacs fixnum.  This can
        happen when running under ASan, which fills allocated but
        uninitialized memory with 0xBE bytes.  */
-    return list2i ((int) (intptr_t) nl_langinfo (_NL_PAPER_WIDTH),
-		   (int) (intptr_t) nl_langinfo (_NL_PAPER_HEIGHT));
+    return list2i ((int) {(intptr_t) nl_langinfo (_NL_PAPER_WIDTH)},
+		   (int) {(intptr_t) nl_langinfo (_NL_PAPER_HEIGHT)});
 # endif
 #endif	/* HAVE_LANGINFO_CODESET*/
   return Qnil;
@@ -4672,7 +4678,7 @@ larger_vector (Lisp_Object vec, ptrdiff_t incr_min, ptrdiff_t nitems_max)
   incr_max = n_max - old_size;
   incr = max (incr_min, min (old_size >> 1, incr_max));
   if (incr_max < incr)
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   new_size = old_size + incr;
   v = allocate_vector (new_size);
   memcpy (v->contents, XVECTOR (vec)->contents, old_size * sizeof *v->contents);
@@ -4759,7 +4765,7 @@ cmpfn_user_defined (Lisp_Object key1, Lisp_Object key2,
 		    struct Lisp_Hash_Table *h)
 {
   Lisp_Object args[] = { h->test->user_cmp_function, key1, key2 };
-  return hash_table_user_defined_call (ARRAYELTS (args), args, h);
+  return hash_table_user_defined_call (countof (args), args, h);
 }
 
 static EMACS_INT
@@ -4805,7 +4811,7 @@ static hash_hash_t
 hashfn_user_defined (Lisp_Object key, struct Lisp_Hash_Table *h)
 {
   Lisp_Object args[] = { h->test->user_hash_function, key };
-  Lisp_Object hash = hash_table_user_defined_call (ARRAYELTS (args), args, h);
+  Lisp_Object hash = hash_table_user_defined_call (countof (args), args, h);
   return reduce_emacs_uint_to_hash_hash (FIXNUMP (hash)
 					 ? XUFIXNUM(hash) : sxhash (hash));
 }
@@ -4828,15 +4834,18 @@ allocate_hash_table (void)
 
 /* Compute the size of the index (as log2) from the table capacity.  */
 static int
-compute_hash_index_bits (hash_idx_t size)
+compute_hash_index_bits (unsigned long long int size)
 {
-  /* An upper bound on the size of a hash table index index.  */
+  /* An upper bound on the size of a hash table index.  */
   hash_idx_t upper_bound = min (MOST_POSITIVE_FIXNUM,
-				min (TYPE_MAXIMUM (hash_idx_t),
-				     PTRDIFF_MAX / sizeof (hash_idx_t)));
-  /* Use next higher power of 2.  This works even for size=0.  */
+				min (HASH_IDX_MAX,
+				     (PTRDIFF_MAX
+				      / max (sizeof (hash_idx_t),
+					     2 * sizeof (Lisp_Object)))));
+
+      /* Use next higher power of 2.  This works even for size=0.  */
   int bits = elogb (size) + 1;
-  if (bits >= TYPE_WIDTH (uintmax_t) || ((uintmax_t)1 << bits) > upper_bound)
+  if (! (bits < UINTMAX_WIDTH && (uintmax_t) {1} << bits <= upper_bound))
     error ("Hash table too large");
   return bits;
 }
@@ -4861,8 +4870,8 @@ make_hash_table (const struct hash_table_test *test, EMACS_INT size,
 		 hash_table_weakness_t weak)
 {
   eassert (SYMBOLP (test->name));
-  eassert (0 <= size && size <= min (MOST_POSITIVE_FIXNUM, PTRDIFF_MAX));
-
+  eassert (0 <= size && size <= MOST_POSITIVE_FIXNUM);
+  int index_bits = compute_hash_index_bits (size);
   struct Lisp_Hash_Table *h = allocate_hash_table ();
 
   h->test = test;
@@ -4893,7 +4902,6 @@ make_hash_table (const struct hash_table_test *test, EMACS_INT size,
 	h->next[i] = i + 1;
       h->next[size - 1] = -1;
 
-      int index_bits = compute_hash_index_bits (size);
       h->index_bits = index_bits;
       ptrdiff_t index_size = hash_table_index_size (h);
       h->index = hash_table_alloc_bytes (index_size * sizeof *h->index);
@@ -4959,12 +4967,16 @@ maybe_resize_hash_table (struct Lisp_Hash_Table *h)
     {
       ptrdiff_t old_size = HASH_TABLE_SIZE (h);
       ptrdiff_t min_size = 6;
-      ptrdiff_t base_size = min (max (old_size, min_size), PTRDIFF_MAX / 2);
       /* Grow aggressively at small sizes, then just double.  */
-      ptrdiff_t new_size =
-	old_size == 0
-	? min_size
-	: (base_size <= 64 ? base_size * 4 : base_size * 2);
+      ptrdiff_t new_size;
+      if (!old_size)
+	new_size = min_size;
+      else if (old_size <= 64)
+	new_size = max (min_size, old_size) * 4;
+      else if (old_size <= PTRDIFF_MAX / (2 * 2 * sizeof (Lisp_Object)))
+	new_size = old_size * 2;
+      else
+	memory_full_up ();
 
       /* Allocate all the new vectors before updating *H, to
 	 avoid problems if memory is exhausted.  */
@@ -4987,7 +4999,7 @@ maybe_resize_hash_table (struct Lisp_Hash_Table *h)
 
       ptrdiff_t old_index_size = hash_table_index_size (h);
       ptrdiff_t index_bits = compute_hash_index_bits (new_size);
-      ptrdiff_t index_size = (ptrdiff_t)1 << index_bits;
+      ptrdiff_t index_size = (ptrdiff_t) {1} << index_bits;
       hash_idx_t *index = hash_table_alloc_bytes (index_size * sizeof *index);
       for (ptrdiff_t i = 0; i < index_size; i++)
 	index[i] = -1;
@@ -5480,10 +5492,10 @@ static EMACS_UINT
 sxhash_bignum (Lisp_Object bignum)
 {
   mpz_t const *n = xbignum_val (bignum);
-  size_t i, nlimbs = mpz_size (*n);
-  EMACS_UINT hash = mpz_sgn(*n) < 0;
+  ptrdiff_t nlimbs = emacs_mpz_size (*n);
+  EMACS_UINT hash = mpz_sgn (*n) < 0;
 
-  for (i = 0; i < nlimbs; ++i)
+  for (ptrdiff_t i = 0; i < nlimbs; i++)
     hash = sxhash_combine (hash, mpz_getlimbn (*n, i));
 
   return hash;
@@ -5996,7 +6008,7 @@ DEFUN ("internal--hash-table-histogram",
 {
   struct Lisp_Hash_Table *h = check_hash_table (hash_table);
   ptrdiff_t size = HASH_TABLE_SIZE (h);
-  ptrdiff_t *freq = xzalloc (size * sizeof *freq);
+  ptrdiff_t *freq = xcalloc (size, sizeof *freq);
   ptrdiff_t index_size = hash_table_index_size (h);
   for (ptrdiff_t i = 0; i < index_size; i++)
     {

@@ -347,6 +347,9 @@ you can define more of these faces using the same numbering scheme."
 When non-nil, all text currently visible on the screen
 matching the current search string is highlighted lazily
 (see `lazy-highlight-initial-delay' and `lazy-highlight-interval').
+However, if `lazy-highlight-buffer' is non-nil, all text in the
+entire buffer matching the search string is highlighted lazily.
+The highlighting uses the `lazy-highlight' face.
 
 When multiple windows display the current buffer, the
 highlighting is displayed only on the selected window, unless
@@ -385,8 +388,8 @@ If this is nil, extra highlighting can be \"manually\" removed with
 
 (defcustom lazy-highlight-initial-delay 0.25
   "Seconds to wait before beginning to lazily highlight all matches.
-This setting only has effect when the search string is less than
-`lazy-highlight-no-delay-length' characters long."
+This setting only has effect when the search string is shorter than
+`lazy-highlight-no-delay-length' characters."
   :type 'number
   :group 'lazy-highlight)
 
@@ -428,7 +431,9 @@ When non-nil, all text in the buffer matching the current search
 string is highlighted lazily (see `lazy-highlight-initial-delay',
 `lazy-highlight-interval' and `lazy-highlight-buffer-max-at-a-time').
 This is useful when `lazy-highlight-cleanup' is customized to nil
-and doesn't remove full-buffer highlighting after a search."
+and doesn't remove full-buffer highlighting after a search.
+If this is nil (the default), only the text currently visible in
+the window is highlighted, subject to `isearch-lazy-highlight'."
   :type 'boolean
   :group 'lazy-highlight
   :version "27.1")
@@ -443,7 +448,9 @@ and doesn't remove full-buffer highlighting after a search."
     (((class color) (min-colors 8))
      (:background "turquoise3" :distant-foreground "white"))
     (t (:underline t)))
-  "Face for lazy highlighting of matches other than the current one."
+  "Face for lazy highlighting of matches other than the current one.
+Used in Isearch when `isearch-lazy-highlight' is non-nil,
+and in `query-replace' when `query-replace-lazy-highlight' is non-nil."
   :group 'lazy-highlight
   :group 'basic-faces)
 
@@ -1006,6 +1013,9 @@ Each element is an `isearch--state' struct where the slots are
 With a prefix argument, do an incremental regular expression search instead.
 \\<isearch-mode-map>
 As you type characters, they add to the search string and are found.
+Current match for the search string is highlighted using the `isearch' face,
+and if `isearch-lazy-highlight' is non-nil, the other matches are
+highlighted using the `lazy-highlight' face.
 The following non-printing keys are bound in `isearch-mode-map'.
 
 Type \\[isearch-delete-char] to cancel last input item from end of search string.
@@ -1412,20 +1422,24 @@ The last thing is to trigger a new round of lazy highlighting."
                          (set-window-hscroll (selected-window) 0))
                 (other-window 1))
               (goto-char found-point))
-	  ;; Keep same hscrolling as at the start of the search when possible
-	  (let ((current-scroll (window-hscroll))
-		visible-p)
-	    (set-window-hscroll (selected-window) isearch-start-hscroll)
-	    (setq visible-p (pos-visible-in-window-group-p nil nil t))
-	    (if (or (not visible-p)
-		    ;; When point is not visible because of hscroll,
-		    ;; pos-visible-in-window-group-p returns non-nil, but
-		    ;; the X coordinate it returns is 1 pixel beyond
-		    ;; the last visible one.
-		    (>= (car visible-p)
-                        (* (window-max-chars-per-line) (frame-char-width)))
-                    (< (car visible-p) 0))
-		(set-window-hscroll (selected-window) current-scroll))))
+	  ;; Keep the same window hscrolling as at the start of the
+	  ;; search, when possible.  If only the current line is
+	  ;; hscrolled, this is not needed, as the window is not
+	  ;; hscrolled.
+          (when (not (eq auto-hscroll-mode 'current-line))
+	    (let ((current-scroll (window-hscroll))
+		  visible-p)
+	      (set-window-hscroll (selected-window) isearch-start-hscroll)
+	      (setq visible-p (pos-visible-in-window-group-p nil nil t))
+	      (if (or (not visible-p)
+		      ;; When point is not visible because of hscroll,
+		      ;; pos-visible-in-window-group-p returns non-nil, but
+		      ;; the X coordinate it returns is 1 pixel beyond
+		      ;; the last visible one.
+		      (>= (car visible-p)
+                          (* (window-max-chars-per-line) (frame-char-width)))
+                      (< (car visible-p) 0))
+		(set-window-hscroll (selected-window) current-scroll)))))
 	(if isearch-other-end
             (if (< isearch-other-end (point)) ; isearch-forward?
                 (isearch-highlight isearch-other-end (point) isearch-match-data)
@@ -1810,8 +1824,8 @@ You can update the global isearch variables by setting new values to
 				     "")
 
 		  isearch-message
-		  (mapconcat 'isearch-text-char-description
-			     isearch-string ""))
+		  (mapconcat #'isearch-text-char-description
+			     isearch-string))
 	    ;; After taking the last element, adjust ring to previous one.
 	    (isearch-ring-adjust1 nil)))
 
@@ -1881,8 +1895,8 @@ The following additional command keys are active while editing.
 		      (1+ (or search-ring-yank-pointer -1))))
 	      nil t))
 	   isearch-new-message
-	   (mapconcat 'isearch-text-char-description
-		      isearch-new-string "")))))
+	   (mapconcat #'isearch-text-char-description
+		      isearch-new-string)))))
 
 (defun isearch-nonincremental-exit-minibuffer ()
   (interactive)
@@ -1947,8 +1961,8 @@ Use `isearch-exit' to quit without signaling."
 	    (setq isearch-string
 		  (car (if isearch-regexp regexp-search-ring search-ring))
 		  isearch-message
-		  (mapconcat 'isearch-text-char-description
-			     isearch-string "")
+		  (mapconcat #'isearch-text-char-description
+			     isearch-string)
 		  isearch-case-fold-search isearch-last-case-fold-search)
 	    ;; After taking the last element, adjust ring to previous one.
 	    (isearch-ring-adjust1 nil))
@@ -2194,8 +2208,8 @@ nil and a non-nil value of the option `search-invisible'
    (if (setq isearch-invisible
              (if isearch-invisible
                  nil (or search-invisible 'open)))
-       "match invisible text"
-     "match visible text")))
+       "match also invisible text"
+     "match only visible text")))
 
 
 ;; Word search
@@ -2217,7 +2231,7 @@ Used in `word-search-forward', `word-search-backward',
    (t (concat
        (if (string-match-p "\\`\\W" string) "\\W+"
 	 "\\<")
-       (mapconcat 'regexp-quote (split-string string "\\W+" t) "\\W+")
+       (mapconcat #'regexp-quote (split-string string "\\W+" t) "\\W+")
        (if (string-match-p "\\W\\'" string) "\\W+"
 	 (unless lax "\\>"))))))
 
@@ -2346,7 +2360,7 @@ the beginning or the end of the string need not match a symbol boundary."
 	 (if (string-match-p (format "\\`%s" not-word-symbol-re) string)
 	     not-word-symbol-re
 	   "\\_<")
-	 (mapconcat 'regexp-quote (split-string string not-word-symbol-re t)
+	 (mapconcat #'regexp-quote (split-string string not-word-symbol-re t)
 		    not-word-symbol-re)
 	 (if (string-match-p (format "%s\\'" not-word-symbol-re) string)
 	     not-word-symbol-re
@@ -2440,7 +2454,7 @@ type \\[help-command] at that time."
               (isearch--describe-regexp-mode (or delimited isearch-regexp-function) t)
 	      (if backward " backward" "")
 	      (if (use-region-p) " in region" ""))
-      isearch-regexp)
+      isearch-regexp (or delimited isearch-regexp-function) backward)
      t isearch-regexp (or delimited isearch-regexp-function) nil nil
      (use-region-beginning) (use-region-end)
      backward))
@@ -2608,8 +2622,8 @@ If search string is empty, just beep."
     (setq isearch-string (substring isearch-string 0
 				    (- (min (or arg 1)
 					    (length isearch-string))))
-          isearch-message (mapconcat 'isearch-text-char-description
-                                     isearch-string "")))
+          isearch-message (mapconcat #'isearch-text-char-description
+                                     isearch-string)))
   ;; Do the following before moving point.
   (funcall (or isearch-message-function #'isearch-message) nil t)
   ;; Use the isearch-other-end as new starting point to be able
@@ -2633,7 +2647,7 @@ If search string is empty, just beep."
   ;; Don't move cursor in reverse search.
   (setq isearch-yank-flag t)
   (isearch-process-search-string
-   string (mapconcat 'isearch-text-char-description string "")))
+   string (mapconcat #'isearch-text-char-description string)))
 
 (defun isearch-yank-kill ()
   "Pull string from kill ring into search string."
@@ -2652,9 +2666,9 @@ If search string is empty, just beep."
      (if isearch-regexp (setq string (regexp-quote string)))
      (setq isearch-yank-flag t)
      (setq isearch-new-string (concat isearch-string string)
-           isearch-new-message (concat isearch-message
-                                       (mapconcat 'isearch-text-char-description
-                                                  string ""))))))
+           isearch-new-message
+           (concat isearch-message
+                   (mapconcat #'isearch-text-char-description string))))))
 
 (defun isearch-yank-pop ()
   "Replace just-yanked search string with previously killed string.
@@ -2831,8 +2845,8 @@ With argument, add COUNT copies of the character."
 		       (char-to-string char))))
 	 (setq isearch-new-string (concat isearch-new-string string)
 	       isearch-new-message (concat isearch-new-message
-					   (mapconcat 'isearch-text-char-description
-						      string ""))))))))
+					   (mapconcat #'isearch-text-char-description
+						      string))))))))
 
 (defun isearch-emoji-by-name (&optional count)
   "Read an Emoji name and add it to the search string COUNT times.
@@ -2853,8 +2867,8 @@ The command accepts Unicode names like \"smiling face\" or
      (when emoji
        (setq isearch-new-string (concat isearch-new-string emoji)
              isearch-new-message (concat isearch-new-message
-					   (mapconcat 'isearch-text-char-description
-						      emoji "")))))))
+					   (mapconcat #'isearch-text-char-description
+						      emoji)))))))
 
 (defun isearch-search-and-update ()
   "Do the search and update the display."
@@ -3281,8 +3295,8 @@ See more for options in `search-exit-option'."
                       (or isearch-other-end isearch-opoint) (point))))
          (if isearch-regexp (setq string (regexp-quote string)))
          (setq isearch-string string)
-         (setq isearch-message (mapconcat 'isearch-text-char-description
-                                          string ""))
+         (setq isearch-message (mapconcat #'isearch-text-char-description
+                                          string))
          (setq isearch-yank-flag t)
          (setq isearch-forward (<= (or isearch-other-end isearch-opoint) (point)))
          (when isearch-forward
@@ -3346,7 +3360,7 @@ Search is updated accordingly."
 		   (char-to-string char)))
 	 (message (if (>= char ?\200)
 		      string
-		    (mapconcat 'isearch-text-char-description string ""))))
+		    (mapconcat #'isearch-text-char-description string))))
     (isearch-process-search-string string message)))
 
 (defun isearch-process-search-string (string message)
@@ -3373,8 +3387,8 @@ Search is updated accordingly."
 			 (if advance -1 1))
 		      length)))
       (setq isearch-string (nth yank-pointer ring)
-	    isearch-message (mapconcat 'isearch-text-char-description
-				       isearch-string ""))
+	    isearch-message (mapconcat #'isearch-text-char-description
+				       isearch-string))
       (isearch-update-from-string-properties isearch-string))))
 
 (defun isearch-ring-adjust (advance)
@@ -3434,8 +3448,8 @@ If there is no completion possible, say so and continue searching."
   (interactive)
   (if (isearch-complete1)
       (progn (setq isearch-message
-		   (mapconcat 'isearch-text-char-description
-			      isearch-string ""))
+		   (mapconcat #'isearch-text-char-description
+			      isearch-string))
 	     (isearch-edit-string))
     ;; else
     (sit-for 1)

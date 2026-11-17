@@ -3,7 +3,7 @@
 ;; Copyright (C) 2011-2026 Free Software Foundation, Inc.
 
 ;; Author: Nicolas Goaziou <n.goaziou at gmail dot com>
-;; Maintainer: Daniel Fleischer <danflscr@gmail.com>
+;; Maintainer: Pedro A. Aranda<paaguti aT gmail DoT com>
 ;; Keywords: outlines, hypermedia, calendar, text
 
 ;; This file is part of GNU Emacs.
@@ -1552,7 +1552,7 @@ calling `org-latex-compile'."
 (defcustom org-latex-toc-include-unnumbered nil
   "Whether to include unnumbered headings in the table of contents.
 
-The default behaviour is to include numbered headings only, as it is
+The default behavior is to include numbered headings only, as it is
 usually the case in LaTeX (but different from other Org exporters).
 To include an unnumbered heading, set the `:UNNUMBERED:'
 property to `toc'"
@@ -1712,7 +1712,7 @@ Return the new header."
 	 ;; exclusively through ini files, return HEADER as-is.
 	 (header (if (or language-ini-only
 			 (not (stringp language-code))
-			 (not (string-match "\\\\usepackage\\[\\(.*\\)\\]{babel}" header)))
+			 (not (string-match "\\\\usepackage\\[\\([^]]*\\)\\]{babel}" header)))
 		     header
 		   (let ((options (save-match-data
 				    (org-split-string (match-string 1 header) ",[ \t]*"))))
@@ -1983,7 +1983,7 @@ INFO is a plist used as a communication channel."
 (defcustom org-latex-use-sans nil
   "Whether to typeset the document with the Sans font family.
 
-The default behaviour is to typeset with the Roman font family."
+The default behavior is to typeset with the Roman font family."
   :group 'org-export-latex
   :package-version '(Org . "9.8")
   :type 'boolean

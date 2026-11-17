@@ -590,6 +590,10 @@ read_minibuf (Lisp_Object map, Lisp_Object initial, Lisp_Object prompt,
 
   specbind (Qminibuffer_default, defalt);
   specbind (Qinhibit_read_only, Qnil);
+  /* Bound recursively so that code can check the current command from
+     code running from minibuffer hooks (and the like), without being
+     overwritten by subsequent minibuffer calls.  */
+  specbind (Qcurrent_minibuffer_command, Vthis_command);
 
   /* If Vminibuffer_completing_file_name is `lambda' on entry, it was t
      in previous recursive minibuffer, but was not set explicitly
@@ -666,8 +670,9 @@ read_minibuf (Lisp_Object map, Lisp_Object initial, Lisp_Object prompt,
   /* Choose the minibuffer window and frame, and take action on them.  */
 
   /* Prepare for restoring the current buffer since choose_minibuf_frame
-     calling Fset_frame_selected_window may change it (Bug#12766).  */
-  record_unwind_protect (restore_buffer, Fcurrent_buffer ());
+     calling Fset_frame_selected_window may change it (Bug#12766).  Make
+     sure the current buffer is still live at that time (Bug#81828).  */
+  record_unwind_current_buffer ();
 
   choose_minibuf_frame ();
   mini_frame = WINDOW_FRAME (XWINDOW (minibuf_window));
@@ -693,17 +698,23 @@ read_minibuf (Lisp_Object map, Lisp_Object initial, Lisp_Object prompt,
 
   record_unwind_protect_void (minibuffer_unwind);
   if (read_minibuffer_restore_windows)
-    record_unwind_protect (restore_window_configuration,
-			   list3 (Fcurrent_window_configuration (Qnil),
-				  Qt, Qt));
+    {
+      record_unwind_protect
+	(restore_window_configuration,
+	 list3 (Fcurrent_window_configuration (Qnil), Qt, Qt));
 
-  /* If the minibuffer window is on a different frame, save that
-     frame's configuration too.  */
-  if (read_minibuffer_restore_windows &&
-      !EQ (mini_frame, selected_frame))
-    record_unwind_protect (restore_window_configuration,
-			   list3 (Fcurrent_window_configuration (mini_frame),
-				  Qnil, Qt));
+      /* If the minibuffer window is on a different frame, save that
+	 frame's configuration too.  */
+      if (!EQ (mini_frame, selected_frame))
+	record_unwind_protect
+	  (restore_window_configuration,
+	   list3 (Fcurrent_window_configuration (mini_frame), Qnil, Qt));
+    }
+  else if (!EQ (mini_frame, selected_frame))
+    record_unwind_protect
+      (restore_focus_frame,
+       Fcons (selected_frame, XFRAME (selected_frame)->focus_frame));
+
 
   /* If the minibuffer is on an iconified or invisible frame,
      make it visible now.  */
@@ -2148,7 +2159,8 @@ STRING and PREDICATE have the same meanings as in `try-completion',
 `all-completions', and `test-completion'.
 
 If FLAG is nil, invoke `try-completion'; if it is t, invoke
-`all-completions'; otherwise invoke `test-completion'.  */)
+`all-completions'; if it is `lambda', invoke `test-completion';
+if it is `metadata', return completion metadata.  */)
   (Lisp_Object string, Lisp_Object predicate, Lisp_Object flag)
 {
   if (NILP (flag))
@@ -2363,6 +2375,22 @@ STR the i-th character of PAT matched.  */)
     /* Bail if strings are empty or matrix too large.  */
     if (patlen == 0 || strlen == 0 || size > FLEX_MAX_MATRIX_SIZE)
       return Qnil;
+
+    /* Also bail if PAT is not a subsequence of STR so bail "cheaply"
+       before the O(N*M) DP algorithm.  Walking both strings
+       byte-by-byte for this purpose (and only for case-sensitive common
+       case) should be valid even for multibyte strings. */
+    if (!completion_ignore_case)
+      {
+	const unsigned char *p = SDATA (pat);
+	const unsigned char *s = SDATA (str);
+	int pi = 0;
+	for (int si = 0; si < strlen && pi < patlen; si++)
+	  if (s[si] == p[pi])
+	    pi++;
+	if (pi < patlen)
+	  return Qnil;
+      }
 
     /* Initialize M and D with positive infinity...  */
     for (int j = 0; j < size; j++)

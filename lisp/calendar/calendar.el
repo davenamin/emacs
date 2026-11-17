@@ -918,7 +918,9 @@ including those inserted into the diary from the calendar with
 (defconst diary-european-date-insertion-form '(day "/" month "/" year)
   "Pseudo-pattern for European dates in `diary-date-insertion-form'")
 
-(defconst diary-iso-date-insertion-form '(year "/" month "/" day)
+(defconst diary-iso-date-insertion-form '((format "%s-%.2d-%.2d" year
+                                                  (string-to-number month)
+                                                  (string-to-number day)))
   "Pseudo-pattern for ISO dates in `diary-date-insertion-form'")
 
 (defcustom diary-date-insertion-form
@@ -2741,7 +2743,7 @@ ATTRLIST is a list with elements of the form :face face :foreground color."
                                    ((symbolp sym) (symbol-name sym))
                                    ((numberp sym) (number-to-string sym))
                                    (t sym)))
-                                attrlist ""))))
+                                attrlist))))
       ;; Create this new face if it does not already exist.
       (unless (member temp-face (face-list))
         (make-face temp-face)
@@ -2826,7 +2828,7 @@ name of the day of the week."
          (day (number-to-string (calendar-extract-day date)))
          (month (number-to-string month))
          (year (number-to-string (calendar-extract-year date))))
-      (mapconcat #'eval calendar-date-display-form ""))))
+      (mapconcat #'eval calendar-date-display-form))))
 
 (defun calendar-dayname-on-or-before (dayname date)
   "Return the absolute date of the DAYNAME on or before absolute DATE.

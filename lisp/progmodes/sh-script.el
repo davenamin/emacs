@@ -406,8 +406,6 @@ name symbol."
 	;; to work fine. This is needed so that dabbrev-expand
 	;; $VARNAME works.
 	?$ "'"
-	?* "."
-	?+ "."
 	?! "."
 	?% "."
 	?: "."
@@ -1039,7 +1037,7 @@ subshells can nest."
               ;; Skip through one pattern
               (while
                   (or (/= 0 (skip-syntax-backward "w_"))
-                      (/= 0 (skip-chars-backward "-$=?[]*@/\\\\"))
+                      (/= 0 (skip-chars-backward "-$=?[]*@/\\\\!%:.^~,"))
                       (and (sh-is-quoted-p (1- (point)))
                            (goto-char (- (point) 2)))
                       (when (memq (char-before) '(?\" ?\' ?\}))
@@ -1473,10 +1471,12 @@ implementations.  Currently there are two: `sh-mode' and
   (setq-local skeleton-pair-default-alist
 	      sh-skeleton-pair-default-alist)
 
+  (setq-local editorconfig-indent-size-vars '(sh-basic-offset))
   (setq-local paragraph-start (concat page-delimiter "\\|$"))
   (setq-local paragraph-separate (concat paragraph-start "\\|#!/"))
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+[\t ]*")
+  (setq-local comment-start-line-regexp comment-start-skip)
   (setq-local local-abbrev-table sh-mode-abbrev-table)
   (setq-local comint-dynamic-complete-functions
 	      sh-dynamic-complete-functions)
@@ -1494,12 +1494,19 @@ implementations.  Currently there are two: `sh-mode' and
   (setq-local skeleton-filter-function #'sh-feature)
   (setq-local skeleton-newline-indent-rigidly t)
   (setq-local defun-prompt-regexp
-              (concat
-               "^\\("
-               "\\(function[ \t]\\)?[ \t]*[[:alnum:]_]+[ \t]*([ \t]*)"
-               "\\|"
-               "function[ \t]+[[:alnum:]_]+[ \t]*\\(([ \t]*)\\)?"
-               "\\)[ \t]*"))
+              (let* ((fname-char "^ \t\n\r\v\f\\\"'`$|&;()<>")
+                     (fname-char0 (concat fname-char "#"))
+                     (fname-re
+                      (concat "[" fname-char0 "]"
+                              "[" fname-char "]*")))
+                (concat
+                 "^\\([ \t]*"
+                 "\\("
+                 "\\(function[ \t]+\\)?" fname-re "[ \t]*([ \t]*)"
+                 "\\|"
+                 "function[ \t]+" fname-re "[ \t]*\\(([ \t]*)\\)?"
+                 "\\)"
+                 "\\)[ \t]*")))
   (setq-local add-log-current-defun-function #'sh-current-defun-name)
   (add-hook 'completion-at-point-functions
             #'sh-completion-at-point-function nil t)
@@ -1585,7 +1592,9 @@ with your script for an edit-interpret-debug cycle."
 This mode automatically falls back to `sh-mode' if the buffer is
 not written in Bash or sh."
   :syntax-table sh-mode-syntax-table
-  (when (treesit-ensure-installed 'bash)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'bash)
+             (treesit-ready-p 'bash))
     (sh-set-shell "bash" nil nil)
     (add-hook 'flymake-diagnostic-functions #'sh-shellcheck-flymake nil t)
     (add-hook 'hack-local-variables-hook
@@ -1618,11 +1627,11 @@ not written in Bash or sh."
                                  "process_substitution")
                          eos))
                    (sexp-default
-                    ;; For `C-M-f' in "$|(a)"
-                    ("$(" .
+                    ;; For `C-M-f' in "$|{a}" or "$|(a)"
+                    ("$[{(]" .
                      ,(lambda (node)
-                        (equal (treesit-node-type (treesit-node-parent node))
-                               "command_substitution"))))
+                        (member (treesit-node-type (treesit-node-parent node))
+                                '("expansion" "command_substitution")))))
                    (sentence
                     ,(rx bos (or "redirected_statement"
                                  "declaration_command"
@@ -2370,8 +2379,9 @@ whose value is the shell name (don't quote it)."
       (progn
 	(message "Setting up indent for shell type %s" sh-shell)
         (let ((mksym (lambda (name)
-                       (intern (format "sh-smie-%s-%s"
-                                       sh-indent-supported-here name)))))
+                       (let (read-symbol-shorthands)
+                         (intern (format "sh-smie-%s-%s"
+                                         sh-indent-supported-here name))))))
 	  (add-function :around (local 'smie--hanging-eolp-function)
 			(lambda (orig)
 			  (if (looking-at "[ \t]*\\\\\n")

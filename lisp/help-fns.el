@@ -1184,7 +1184,8 @@ Returns a list of the form (REAL-FUNCTION DEF ALIASED REAL-DEF)."
                     ;; FIXME: If someday Emacs has a function type symbol
                     ;; like `unicode-function' or `hour-function', this
                     ;; will produce an ungrammatical string (bug#79469).
-                    (concat (if (string-match-p "\\`[aeiou]" (symbol-name type))
+                    (concat (if (and (equal beg "a ")
+                                     (string-match-p "\\`[aeiou]" typ-str))
                                 "an "
                               beg)
                             typ-str))))))
@@ -2006,9 +2007,7 @@ current buffer and the selected frame, respectively."
                 (doc (cdr (cadr docs))))  ;Doc to add at BOB.
             (when doc
               (insert doc)
-              (delete-region (point)
-                             (progn (skip-chars-backward " \t\n") (point)))
-              (insert "\n\n" (make-separator-line) "\n")
+              (insert "\n" (make-separator-line))
               (when name
                 (insert (symbol-name symbol)
                         " is also a " name "." "\n\n"))))

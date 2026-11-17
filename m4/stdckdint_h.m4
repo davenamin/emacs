@@ -1,5 +1,5 @@
 # stdckdint_h.m4
-# serial 1
+# serial 3
 dnl Copyright 2025-2026 Free Software Foundation, Inc.
 dnl This file is free software; the Free Software Foundation
 dnl gives unlimited permission to copy and/or distribute it,
@@ -52,7 +52,7 @@ AC_DEFUN_ONCE([gl_STDCKDINT_H],
       HAVE_C_STDCKDINT_H=0
       HAVE_WORKING_C_STDCKDINT_H=0
     fi
-    if test "$CXX" != no; then
+    if test -n "$CXX" && test "$CXX" != no; then
       AC_CACHE_CHECK([whether stdckdint.h can be included in C++],
         [gl_cv_header_cxx_stdckdint_h],
         [dnl We can't use AC_LANG_PUSH([C++]) and AC_LANG_POP([C++]) here, due to
@@ -60,7 +60,7 @@ AC_DEFUN_ONCE([gl_STDCKDINT_H],
          cat > conftest.cpp <<\EOF
 #include <stdckdint.h>
 EOF
-         gl_command="$CXX $CXXFLAGS $CPPFLAGS -c conftest.cpp"
+         gl_command="$CXX $CXXFLAGS $CPPFLAGS -c conftest.cpp > /dev/null"
          if AC_TRY_EVAL([gl_command]); then
            gl_cv_header_cxx_stdckdint_h=yes
          else
@@ -85,7 +85,7 @@ main (void)
   return !!(ckd_add (&r, a, b) || ckd_sub (&r, a, b) || ckd_mul (&r, a, b));
 }
 EOF
-           gl_command="$CXX $CXXFLAGS $CPPFLAGS -c conftest.cpp"
+           gl_command="$CXX $CXXFLAGS $CPPFLAGS -c conftest.cpp > /dev/null"
            if AC_TRY_EVAL([gl_command]); then
              gl_cv_header_cxx_stdckdint_h_works=yes
            else
@@ -114,7 +114,7 @@ EOF
   AC_SUBST([HAVE_CXX_STDCKDINT_H])
   AC_SUBST([HAVE_WORKING_CXX_STDCKDINT_H])
 
-  if test "$CXX" != no; then
+  if test -n "$CXX" && test "$CXX" != no; then
     dnl We might need the header for C or C++.
     if test $HAVE_C_STDCKDINT_H = 1 \
        && test $HAVE_WORKING_C_STDCKDINT_H = 1 \

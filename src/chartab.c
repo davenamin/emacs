@@ -23,6 +23,7 @@ along with GNU Emacs.  If not, see <https://www.gnu.org/licenses/>.  */
 #include "lisp.h"
 #include "character.h"
 #include "charset.h"
+#include "coding.h"
 
 /* 64/16/32/128 */
 
@@ -1163,7 +1164,7 @@ uniprop_decode_value_run_length (Lisp_Object table, Lisp_Object value)
 static uniprop_decoder_t uniprop_decoder [] =
   { uniprop_decode_value_run_length };
 
-static const int uniprop_decoder_count = ARRAYELTS (uniprop_decoder);
+static const int uniprop_decoder_count = countof (uniprop_decoder);
 
 /* Return the decoder of char-table TABLE or nil if none.  */
 
@@ -1238,7 +1239,7 @@ static uniprop_encoder_t uniprop_encoder[] =
     uniprop_encode_value_run_length,
     uniprop_encode_value_numeric };
 
-static const int uniprop_encoder_count = ARRAYELTS (uniprop_encoder);
+static const int uniprop_encoder_count = countof (uniprop_encoder);
 
 /* Return the encoder of char-table TABLE or nil if none.  */
 
@@ -1271,7 +1272,17 @@ uniprop_table (Lisp_Object prop)
   if (STRINGP (table))
     {
       AUTO_STRING (intl, "international/");
+      /* The uni-*.el files _must_ be read using utf-8-emacs-unix, or
+         else Emacs might crash.  We bind coding-system-for-read below
+         to protect against some Lisp which overrides the coding:
+         cookies in the uni-*.el files by, for example, binding
+         auto-coding-regexp-alist to some strange value.  */
+      specpdl_ref count = SPECPDL_INDEX ();
+      Lisp_Object coding = coding_inherit_eol_type (Qutf_8_emacs, Qunix);
+      specbind (Qcoding_system_for_read, coding);
       result = save_match_data_load (concat2 (intl, table), Qt, Qt, Qt, Qt);
+      unbind_to (count, Qnil);
+
       if (NILP (result))
 	return Qnil;
       table = XCDR (val);
@@ -1376,4 +1387,5 @@ syms_of_chartab (void)
 	       doc: /* Alist of character property name vs char-table containing property values.
 Internal use only.  */);
   Vchar_code_property_alist = Qnil;
+  DEFSYM (Qcoding_system_for_read, "coding-system-for-read");
 }

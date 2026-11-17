@@ -38,6 +38,7 @@
   (require 'cl-lib)
   (require 'subr-x))
 (require 'icons)
+(require 'xref)
 
 (defgroup outlines nil
   "Support for hierarchical outlining."
@@ -61,8 +62,10 @@ The recommended way to set this is with a `Local Variables:' list
 in the file it applies to.")
 ;;;###autoload(put 'outline-heading-end-regexp 'safe-local-variable 'stringp)
 
-(defvar outline-search-function nil
-  "Function to search the next outline heading.
+(defcustom outline-search-function nil
+  "If non-nil, the function to search the next outline heading.
+When nil, headings are found by searching for `outline-regexp'.
+
 The function is called with four optional arguments: BOUND, MOVE, BACKWARD,
 LOOKING-AT.  The first two arguments BOUND and MOVE are almost the same as
 the BOUND and NOERROR arguments of `re-search-forward', with the difference
@@ -71,7 +74,15 @@ BACKWARD is non-nil, the search should search backward like
 `re-search-backward' does.  In case of a successful search, the
 function should return non-nil, move point, and set match-data
 appropriately.  When the argument LOOKING-AT is non-nil, it should
-imitate the function `looking-at'.")
+imitate the function `looking-at'."
+  :type '(choice (const :tag "Use `outline-regexp'" nil)
+                 (function-item :tag "Search by `outline-regexp' (regexp-based)"
+                                outline-search-from-regexp)
+                 (function-item :tag "Search by `outline-level' text property"
+                                outline-search-level)
+                 (function :tag "Other function"))
+  :group 'outlines
+  :version "32.1")
 
 (defvar-keymap outline-mode-prefix-map
   "@"   #'outline-mark-subtree
@@ -86,7 +97,7 @@ imitate the function `looking-at'.")
   "C-t" #'outline-hide-body
   "C-a" #'outline-show-all
   "C-c" #'outline-hide-entry
-  "C-e" #'outline-show-entry
+  "C-e" #'outline-show-entry-and-parents
   "C-l" #'outline-hide-leaves
   "C-k" #'outline-show-branches
   "C-q" #'outline-hide-sublevels
@@ -97,7 +108,8 @@ imitate the function `looking-at'.")
   "/ h" #'outline-hide-by-heading-regexp
   "C-<" #'outline-promote
   "C->" #'outline-demote
-  "RET" #'outline-insert-heading)
+  "RET" #'outline-insert-heading
+  "M-o" #'outline-find-headings)
 
 (defvar outline-mode-menu-bar-map
   (let ((map (make-sparse-keymap)))
@@ -130,14 +142,17 @@ imitate the function `looking-at'.")
     (define-key map [show outline-show-branches]
       '(menu-item "Show Branches" outline-show-branches
 		  :help "Show all subheadings of this heading, but not their bodies"))
-    (define-key map [show outline-show-entry]
-      '(menu-item "Show Entry" outline-show-entry
+    (define-key map [show outline-show-entry-and-parents]
+      '(menu-item "Show Entry" outline-show-entry-and-parents
 		  :help "Show the body directly following this heading"))
     (define-key map [show outline-show-all]
       '(menu-item "Show All" outline-show-all
 		  :help "Show all of the text in the buffer"))
     (define-key map [headings]
       (cons "Headings" (make-sparse-keymap "Headings")))
+    (define-key map [headings outline-find-headings]
+      '(menu-item "Find All Headings" outline-find-headings
+		  :help "Find all outline headings in the buffer"))
     (define-key map [headings demote-subtree]
       '(menu-item "Demote Subtree" outline-demote
 		  :help "Demote headings lower down the tree"))
@@ -609,7 +624,9 @@ See the command `outline-mode' for more information on this mode."
         (setq-local line-move-ignore-invisible t)
 	;; Cause use of ellipses for invisible text.
 	(add-to-invisibility-spec '(outline . t))
+	(outline--setup-from-comment-regexp)
 	(outline-apply-default-state))
+    (outline--restore-from-comment-regexp)
     (jit-lock-unregister #'outline--fix-buttons)
     (remove-hook 'revert-buffer-restore-functions
                  #'outline-revert-buffer-restore-visibility t)
@@ -1095,7 +1112,7 @@ If FLAG is nil then text is shown, while if FLAG is t the text is hidden."
 ;; `outline-flag-region').
 (defun outline-isearch-open-invisible (_overlay)
   ;; We rely on the fact that isearch places point on the matched text.
-  (outline-show-entry))
+  (outline-show-entry-and-parents))
 
 (defun outline-hide-entry ()
   "Hide the body directly following this heading."
@@ -1122,6 +1139,67 @@ Show the heading too, if it is currently invisible."
                          nil)))
 
 (define-obsolete-function-alias 'show-entry #'outline-show-entry "25.1")
+
+(defun outline-show-entry-and-parents ()
+  "Reveal the current entry and its parent hierarchy.
+This command ensures that the current entry, all of its ancestor
+headings, and their immediate sibling headings are visible.
+
+The function iteratively unfolds the children and body of the target
+entry until it is fully revealed.  If invoked when the point is inside
+a completely hidden subtree, it manages the visibility state to avoid
+leaving the buffer in an inconsistent layout.  This guarantees a safe
+and predictable visual expansion."
+  (interactive)
+  ;; Wrap in `save-match-data' because outline functions use regular
+  ;; expressions.  Without this, calling `outline-show-entry-and-parents'
+  ;; programmatically would clobber the caller's match data, leading to
+  ;; subtle, hard-to-trace bugs.
+  (save-match-data
+    ;; Repeatedly expand the outline structure at point from the outside
+    ;; in until the target text is fully visible.
+    ;;
+    ;; Think of this block as manually opening nested folds:
+    ;; - It checks whether the heading at point is folded.
+    ;; - If it is folded, it moves backward to that parent heading.
+    ;; - It opens the heading to reveal its text and subheadings.
+    ;; - It repeats this process layer by layer down to the target.
+    (let (heading-point
+          prior-heading-point)
+      (while (condition-case nil
+                 (save-excursion
+                   ;; Workaround: `outline-back-to-heading' throws an
+                   ;; `outline-before-first-heading' error if the
+                   ;; heading is on the first line (e.g., in
+                   ;; `markdown-ts-mode') and point is deep within the
+                   ;; hidden body of that folded first heading.
+                   (vertical-motion 0)
+                   ;; Navigate backward to the nearest visible heading
+                   (outline-back-to-heading)
+                   (setq heading-point (point))
+                   ;; Break the loop if we stop making progress,
+                   ;; preventing infinite recursion
+                   (if (eq heading-point prior-heading-point)
+                       ;; Break out of the loop
+                       nil
+                     (setq prior-heading-point heading-point)
+                     ;; Check if the heading is folded by inspecting the
+                     ;; end of the line
+                     (when (invisible-p (pos-eol))
+                       ;; Ignore errors to guarantee the target entry is
+                       ;; still revealed via `outline-show-entry' even
+                       ;; if a buggy third-party `outline-level'
+                       ;; function fails during child expansion.
+                       (ignore-errors (outline-show-children))
+
+                       ;; Show the body directly following this heading
+                       (outline-show-entry)
+
+                       ;; Return t to continue drilling down to the next
+                       ;; layer of the outline hierarchy
+                       t)))
+               (outline-before-first-heading
+                nil))))))
 
 (defun outline-hide-body ()
   "Hide all body lines in buffer, leaving all headings visible.
@@ -1280,7 +1358,9 @@ This also unhides the top heading-less body, if any."
   (interactive)
   (save-excursion
     (outline-back-to-heading)
-    (if (not (outline-invisible-p (pos-eol)))
+    (if (save-excursion
+          (outline-end-of-heading)
+          (not (outline-invisible-p)))
         (outline-hide-subtree)
       (outline-show-children)
       (outline-show-entry))))
@@ -1313,7 +1393,7 @@ This also unhides the top heading-less body, if any."
 		(or first (> (funcall outline-level) level)))
       (setq first nil)
       (outline-next-heading))
-    (if (and (bolp) (not (eolp)))
+    (if (or (eobp) (and (bolp) (not (eolp))))
 	;; We stopped at a nonempty line (the next heading).
 	(outline--end-of-previous))))
 
@@ -1488,6 +1568,26 @@ The rest of arguments are described in `outline-search-function'."
               nil))
         (when move (goto-char (or bound (if backward (point-min) (point-max)))))
         nil))))
+
+
+;;; Search regexp for outline headings
+
+;;;###autoload
+(defun outline-search-from-regexp (&optional bound move backward looking-at)
+  "Search for the next heading matching `outline-regexp'.
+The arguments BOUND, MOVE, BACKWARD, and LOOKING-AT are described
+in `outline-search-function'.  This function is intended to be
+used in `outline-search-function' by modes and minor modes that
+customize `outline-regexp' but do not need a custom search strategy.
+Install it with
+
+  (setq-local outline-search-function #\\='outline-search-from-regexp)"
+  (if looking-at
+      (looking-at outline-regexp)
+    (funcall (if backward #'re-search-backward #'re-search-forward)
+             (concat "^\\(?:" outline-regexp "\\)")
+             bound
+             (if move 'move t))))
 
 
 (defun outline-headers-as-kill (beg end)
@@ -2087,6 +2187,202 @@ With a prefix argument, show headings up to that LEVEL."
   ">"   #'outline-demote
   "C-<" #'outline-promote
   "<"   #'outline-promote)
+
+
+;;; Comment-prefixed outline headings
+
+(defcustom outline-use-comment-regexp nil
+  "If non-nil, recognize comment-prefixed headings in `outline-minor-mode'.
+When non-nil, enabling `outline-minor-mode' configures `outline-regexp'
+and the variable `outline-level' to recognize outline headings that are
+prefixed by a comment.  The heading pattern is taken from
+`outline-comment-regexp' when that variable is set buffer-locally, and
+otherwise from a default constructed from `comment-start' and
+`outline-comment-regexp-suffix'."
+  :type '(choice (const :tag "Don't recognize comment headings" nil)
+                 (const :tag "Recognize comment headings" t))
+  :group 'outlines
+  :version "32.1")
+
+(defcustom outline-comment-regexp-suffix " \\([*]+\\)"
+  "Regexp matching a heading marker that follows the comment prefix.
+This is appended to the comment prefix to construct a default value for
+`outline-regexp' when `outline-use-comment-regexp' is non-nil and
+`outline-comment-regexp' is nil.  Group 1 must match the heading-level
+characters; the heading level is the length of that group's match.
+
+The default value matches a space followed by one or more stars, so that
+headings look like \";; *\", \";; **\", and so on.  Set it buffer-locally
+to use a different separator or level character."
+  :type 'regexp
+  :group 'outlines
+  :version "32.1")
+
+(defvar-local outline-comment-regexp nil
+  "If non-nil, regexp matching comment-prefixed outline headings.
+This has an effect only when `outline-use-comment-regexp' is non-nil.
+In that case, enabling `outline-minor-mode' derives `outline-regexp'
+and the variable `outline-level' from it.
+
+Group 1 of the regexp must match the heading-level characters; the
+heading level is the length of that group's match.  For example, the
+value
+
+  \";;; \\([*]+\\)\"
+
+recognizes the headings \";;; *\", \";;; **\", and so on, using the number
+of stars as the level.
+
+When this variable is nil, a default is constructed from `comment-start'
+and `outline-comment-regexp-suffix'.  Major modes can set this variable
+to provide a mode-specific heading syntax.")
+;;;###autoload(put 'outline-comment-regexp 'safe-local-variable 'stringp)
+
+(defvar-local outline--saved-outline-regexp nil
+  "Value of `outline-regexp' saved before comment-heading setup.
+Set by `outline--setup-from-comment-regexp' and restored by
+`outline--restore-from-comment-regexp'.")
+
+(defvar-local outline--saved-outline-level nil
+  "Value of the variable `outline-level' saved before comment-heading setup.
+Set by `outline--setup-from-comment-regexp' and restored by
+`outline--restore-from-comment-regexp'.")
+
+(defvar-local outline--saved-outline-search-function nil
+  "Value of `outline-search-function' saved before comment-heading setup.
+Set by `outline--setup-from-comment-regexp' and restored by
+`outline--restore-from-comment-regexp'.")
+
+(defvar-local outline--comment-regexp nil
+  "Regexp whose group 1 gives the level of a comment-prefixed heading.
+Set by `outline--setup-from-comment-regexp' and used by
+`outline--comment-level'.")
+
+(defun outline--comment-level ()
+  "Return the level of a comment-prefixed outline heading.
+Point must be at the beginning of a heading line.  When the line matches
+`outline--comment-regexp' with a non-empty group 1 (the heading-level
+characters), return the length of that group's match.  Otherwise defer to
+the function `outline-level' that was in effect before comment-heading
+setup, saved in `outline--saved-outline-level', after re-establishing its
+expected match data from `outline--saved-outline-regexp'.
+
+This is installed into the variable `outline-level' by
+`outline--setup-from-comment-regexp'."
+  (if (and outline--comment-regexp
+           (looking-at outline--comment-regexp)
+           (match-beginning 1))
+      (- (match-end 1) (match-beginning 1))
+    (when outline--saved-outline-regexp
+      (looking-at outline--saved-outline-regexp))
+    (funcall (or outline--saved-outline-level #'outline-level))))
+
+(defun outline--default-comment-regexp ()
+  "Construct a default comment-heading regexp from `comment-start'.
+The result matches `comment-start' (with the variable `comment-add'
+applied for single-character comment starters) followed by
+`outline-comment-regexp-suffix'.  For example, the result is
+\";; \\([*]+\\)\" in a buffer whose `comment-start' is \";\", and
+\"// \\([*]+\\)\" when it is \"//\".
+
+Return nil when `comment-start' is nil."
+  (when comment-start
+    (let* ((cs (string-trim-right comment-start))
+           (prefix (if (= (length cs) 1)
+                       (make-string (1+ (or comment-add 0)) (aref cs 0))
+                     cs)))
+      (concat (regexp-quote prefix) outline-comment-regexp-suffix))))
+
+(defun outline--setup-from-comment-regexp ()
+  "Configure outline heading recognition for comment-prefixed headings.
+Called from `outline-minor-mode' on activation.  Do nothing unless
+`outline-use-comment-regexp' is non-nil.  Use `outline-comment-regexp'
+when it is set buffer-locally, and otherwise a default from
+`outline--default-comment-regexp'; do nothing when no comment-heading
+regexp is available.
+
+Set `outline-regexp' and the variable `outline-level' from that regexp,
+and clear `outline-search-function' (which many modes set, and which
+would otherwise override `outline-regexp').  Save the previous values in
+`outline--saved-outline-regexp', `outline--saved-outline-level', and
+`outline--saved-outline-search-function', so that `outline--comment-level'
+can defer to them and `outline--restore-from-comment-regexp' can restore
+them."
+  (when outline-use-comment-regexp
+    (when-let* ((regexp (or outline-comment-regexp
+                            (outline--default-comment-regexp))))
+      (unless outline--saved-outline-level
+        (setq outline--saved-outline-regexp outline-regexp
+              outline--saved-outline-level outline-level
+              outline--saved-outline-search-function outline-search-function))
+      (setq outline--comment-regexp regexp)
+      (setq-local outline-regexp regexp)
+      (setq-local outline-level #'outline--comment-level)
+      (setq-local outline-search-function nil))))
+
+(defun outline--restore-from-comment-regexp ()
+  "Undo `outline--setup-from-comment-regexp'.
+Restore `outline-regexp', the variable `outline-level', and
+`outline-search-function' from the values saved by
+`outline--setup-from-comment-regexp', and clear the internal state.
+Called from `outline-minor-mode' when the mode is disabled.  Do nothing
+when comment-heading setup was not performed."
+  (when outline--saved-outline-level
+    (setq-local outline-level outline--saved-outline-level
+                outline-regexp outline--saved-outline-regexp
+                outline-search-function outline--saved-outline-search-function)
+    (setq outline--saved-outline-level nil
+          outline--saved-outline-regexp nil
+          outline--saved-outline-search-function nil
+          outline--comment-regexp nil)))
+
+
+;;; Xref outline navigation
+
+(defun outline-find-headings--fetch-xrefs (search-function buffer)
+  "Return a list of Xref values matching SEARCH-FUNCTION in BUFFER."
+  (let (headings)
+    (with-current-buffer buffer
+      (save-excursion
+        (goto-char (point-min))
+        (while (funcall search-function nil t)
+          (let* ((line-beg (line-beginning-position))
+                 (line-end (line-end-position))
+                 (summary (progn
+                            (font-lock-ensure line-beg line-end)
+                            (buffer-substring line-beg line-end)))
+                 (location (xref-make-buffer-location buffer line-beg))
+                 (length (length summary)))
+            (push (xref-make-match summary location length) headings))
+          (forward-line 1))))
+    (nreverse headings)))
+
+(defun outline-find-headings--show-xrefs (search-function)
+  "Display search results in an Xref buffer.
+Populate an Xref buffer with the matches returned by SEARCH-FUNCTION
+applied to the current buffer."
+  (let ((buf (current-buffer)))
+    (xref-show-xrefs
+     (lambda ()
+       (outline-find-headings--fetch-xrefs search-function buf))
+     nil)))
+
+;;;###autoload
+(defun outline-find-headings ()
+  "Find all outline headings in the current buffer.
+Display an Xref buffer with the outline headings found in the current
+buffer.  You can use that Xref buffer to navigate and edit the outline.
+
+If `outline-search-function' is non-nil, it is used to find the outline
+headings.  Otherwise, `outline-regexp' is used."
+  (interactive)
+  (cond
+   (outline-search-function
+    (outline-find-headings--show-xrefs outline-search-function))
+   (outline-regexp
+    (outline-find-headings--show-xrefs #'outline-search-from-regexp))
+   (t
+    (user-error "Undefined outline search strategy"))))
 
 
 (provide 'outline)

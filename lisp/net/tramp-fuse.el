@@ -48,8 +48,8 @@
 (defsubst tramp-fuse-remove-hidden-files (files)
   "Remove hidden files from FILES."
   (if tramp-fuse-remove-hidden-files
-      (cl-remove-if
-       (lambda (x) (and (stringp x) (string-match-p (rx ".fuse_hidden") x)))
+      (seq-remove
+       (lambda (x) (and (stringp x) (string-prefix-p ".fuse_hidden" x)))
        files)
     files))
 
@@ -108,11 +108,16 @@
 (defun tramp-fuse-handle-insert-directory
     (filename switches &optional wildcard full-directory-p)
   "Like `insert-directory' for Tramp files."
-  (insert-directory
-   (tramp-fuse-local-file-name filename) switches wildcard full-directory-p)
-  (goto-char (point-min))
-  (while (search-forward (tramp-fuse-local-file-name filename) nil 'noerror)
-    (replace-match filename)))
+  (with-tramp-progress-reporter
+      (tramp-dissect-file-name filename)
+      0 (format "Opening directory %s" filename)
+    (insert-directory
+     (tramp-fuse-local-file-name filename)
+     switches wildcard full-directory-p)
+    (goto-char (point-min))
+    (while
+	(search-forward (tramp-fuse-local-file-name filename) nil 'noerror)
+      (replace-match filename))))
 
 (defun tramp-fuse-handle-make-directory (dir &optional parents)
   "Like `make-directory' for Tramp files."
@@ -164,7 +169,7 @@ It has the same meaning as `remote-file-name-inhibit-cache'.")
         (let* ((default-directory tramp-compat-temporary-file-directory)
                (command (format "mount -t fuse.%s" (tramp-file-name-method vec)))
 	       (mount (shell-command-to-string command))
-	       (mount-spec (split-string (tramp-fuse-mount-spec vec) ":" 'omit)))
+	       (mount-spec (string-split (tramp-fuse-mount-spec vec) ":" 'omit)))
           (tramp-message vec 6 "%s\n%s" command mount)
 	  ;; The mount-spec contains a trailing local file name part,
 	  ;; which might not be visible, for example with rclone

@@ -91,14 +91,14 @@ If t, use no switches."
 		 (repeat :tag "Argument List" :value ("") string))
   :version "21.1")
 
-(defcustom vc-cvs-diff-switches nil
+(defcustom vc-cvs-diff-switches '("-u")
   "String or list of strings specifying switches for CVS diff under VC.
 If nil, use the value of `vc-diff-switches'.  If t, use no switches."
   :type '(choice (const :tag "Unspecified" nil)
                  (const :tag "None" t)
                  (string :tag "Argument String")
                  (repeat :tag "Argument List" :value ("") string))
-  :version "21.1")
+  :version "32.1")
 
 (defcustom vc-cvs-annotate-switches nil
   "String or list of strings specifying switches for cvs annotate under VC.
@@ -1077,18 +1077,27 @@ state."
     (if basedir result
       (funcall update-function result))))
 
+(declare-function vc-dir-maybe-narrow-and-show-more-button "vc-dir")
+(defvar vc-dir-process-output-limit)
+
 (defun vc-cvs-dir-status-files (dir files update-function)
   "Create a list of conses (file . state) for FILES in DIR.
 Query all files in DIR if files is nil."
-  (let ((local (vc-cvs-stay-local-p dir)))
+  (require 'vc-dir)
+  (let ((local (vc-cvs-stay-local-p dir))
+        (limit vc-dir-process-output-limit))
     (if (and (not files) local (not (eq local 'only-file)))
         (vc-cvs-dir-status-heuristic dir update-function))
-    (vc-cvs-command (current-buffer) 'async
-                    files
-                    "-f" "-n" "-q" "update")
+    (set-process-query-on-exit-flag
+     (vc-cvs-command (current-buffer) 'async
+                     files
+                     "-f" "-n" "-q" "update")
+     nil)
     ;; FIXME: Consider `vc-run-delayed-success'.
     (vc-run-delayed
-      (vc-cvs-after-dir-status update-function))))
+      (let ((vc-dir-process-output-limit limit))
+        (vc-dir-maybe-narrow-and-show-more-button)
+        (vc-cvs-after-dir-status update-function)))))
 
 (defun vc-cvs-file-to-string (file)
   "Read the content of FILE and return it as a string."

@@ -351,7 +351,7 @@ baz"))))
                                        (ert-resource-directory))
                        :failed :passed)
   (skip-unless (executable-find shell-file-name))
-  (skip-unless (executable-find diff-command))
+  (skip-unless (zerop (call-process diff-command nil nil nil "-a" "-" "-")))
   (let ((default-directory (ert-resource-directory))
         (old "hello_world.c")
         (new "hello_emacs.c")
@@ -416,7 +416,7 @@ baz"))))
                                        (ert-resource-directory))
                        :failed :passed)
   (skip-unless (executable-find shell-file-name))
-  (skip-unless (executable-find diff-command))
+  (skip-unless (zerop (call-process diff-command nil nil nil "-a" "-" "-")))
   (let ((default-directory (ert-resource-directory))
         (old "hello_world_1.c")
         (new "hello_emacs_1.c")
@@ -612,6 +612,7 @@ index 9f6c5fe43e47eab441232e54456c5c2b06297b65..7b3f91a8b4ed923c8f43183276e3ab36
 ")
 
 (ert-deftest diff-mode-test-git-patch ()
+  (skip-unless (zerop (call-process diff-command nil nil nil "-a" "-" "-")))
   (with-temp-buffer
     (insert diff-mode-tests--git-patch)
     (diff-mode)
@@ -625,6 +626,7 @@ index 9f6c5fe43e47eab441232e54456c5c2b06297b65..7b3f91a8b4ed923c8f43183276e3ab36
                 'diff-added))))
 
 (ert-deftest diff-mode-test-git-patch/before-first-hunk ()
+  (skip-unless (zerop (call-process diff-command nil nil nil "-a" "-" "-")))
   (with-temp-buffer
     (insert diff-mode-tests--git-patch)
     (diff-mode)
@@ -639,6 +641,7 @@ index 9f6c5fe43e47eab441232e54456c5c2b06297b65..7b3f91a8b4ed923c8f43183276e3ab36
                 'diff-context))))
 
 (ert-deftest diff-mode-test-git-patch/signature ()
+  (skip-unless (zerop (call-process diff-command nil nil nil "-a" "-" "-")))
   (with-temp-buffer
     (insert diff-mode-tests--git-patch)
     (diff-mode)
@@ -743,6 +746,214 @@ plum
         (with-current-buffer buf-after
           (set-buffer-modified-p nil)
           (kill-buffer buf-after))))))
+
+(ert-deftest diff-mode-test-setup-buffer-type ()
+  "Check that `diff-setup-buffer-type' recognizes the diff's origin."
+  (with-temp-buffer
+    (insert "diff --git a/foo b/foo\n--- a/foo\n+++ b/foo\n")
+    (diff-mode)
+    (should (eq diff-buffer-type 'git)))
+  (with-temp-buffer
+    (insert "diff -r 0123456789ab foo\n--- a/foo\n+++ b/foo\n")
+    (diff-mode)
+    (should (eq diff-buffer-type 'hg)))
+  (with-temp-buffer
+    (insert "--- foo\n+++ foo\n@@ -1 +1 @@\n-a\n+b\n")
+    (diff-mode)
+    (should (eq diff-buffer-type nil))))
+
+(ert-deftest diff-mode-test-find-file-name-create ()
+  "Check `diff-find-file-name' for a Git/Hg file creation.
+It should not use existing file without subdirectory."
+  (ert-with-temp-directory temp-dir
+    (let ((default-directory temp-dir)
+          call-dir call-initial call-mustmatch)
+      ;; A decoy with the same basename as the created file, but in a
+      ;; different directory.
+      (with-temp-file (expand-file-name "created.txt" temp-dir)
+        (insert "decoy\n"))
+      (with-temp-buffer
+        (insert "diff --git a/sub/created.txt b/sub/created.txt
+new file mode 100644
+index 0000000..3456789
+--- /dev/null
++++ b/sub/created.txt
+@@ -0,0 +1 @@
++new
+")
+        (diff-mode)
+        (goto-char (point-min))
+        (let ((read-file-name-function
+               (lambda (_p &optional dir _def mustmatch initial _pred)
+                 (setq call-dir dir
+                       call-initial initial
+                       call-mustmatch mustmatch)
+                 "magic")))
+          (should (equal (diff-find-file-name)
+                         "magic"))
+          (should (equal call-dir (expand-file-name "sub/" temp-dir)))
+          (should (equal call-initial "created.txt"))
+          (should (equal call-mustmatch nil)))))))
+
+(defvar diff-mode-tests--unified-patch
+  "--- /tmp/a.el	2026-07-14 08:27:52.751202012 +0200
++++ /tmp/b.el	2026-07-14 08:28:01.087191220 +0200
+@@ -2,7 +2,7 @@ (defun foo ()
+   x
+   y
+   z
+-  a)
++  b)
+ ;;
+ ;;
+ ;;
+@@ -19,4 +19,4 @@ (defun bar ()
+   x
+   y
+   z
+-  aa)
++  bb)
+")
+
+(defvar diff-mode-tests--context-patch
+  "*** /tmp/a.el	2026-07-14 08:27:52.751202012 +0200
+--- /tmp/b.el	2026-07-14 08:28:01.087191220 +0200
+*************** (defun foo ()
+*** 2,8 ****
+    x
+    y
+    z
+!   a)
+  ;;
+  ;;
+  ;;
+--- 2,8 ----
+    x
+    y
+    z
+!   b)
+  ;;
+  ;;
+  ;;
+*************** (defun bar ()
+*** 19,22 ****
+    x
+    y
+    z
+!   aa)
+--- 19,22 ----
+    x
+    y
+    z
+!   bb)
+")
+
+(ert-deftest diff-mode-tests-undo-unified->context ()
+  (let* ((unified diff-mode-tests--unified-patch)
+         (context diff-mode-tests--context-patch))
+    (pcase-dolist (`(,convert ,v1 ,v2)
+                   `((,#'diff-unified->context ,unified ,context)
+                     (,#'diff-context->unified ,context ,unified)))
+      (let ((b (generate-new-buffer "test.diff")))
+        (unwind-protect
+	    (with-current-buffer b
+	      (insert v1)
+	      (diff-mode)
+	      (undo-boundary)
+	      (funcall convert (point-min) (point-max))
+              (should (equal (buffer-string) v2))
+	      (undo-boundary)
+	      (undo)
+	      (should (equal (buffer-string) v1)))
+          (kill-buffer b))))))
+
+(defvar diff-mode-tests--selective-undo-patch-1
+  "--- /tmp/a.el	2026-07-14 08:27:52.751202012 +0200
++++ /tmp/b.el	2026-07-14 08:28:01.087191220 +0200
+@@ -2,7 +2,7 @@ (defun foo ()
+   x
+   y
+   z
+-  a)
++  b)
+ ;;
+ ;;
+ ;;
+*************** (defun bar ()
+*** 19,22 ****
+    x
+    y
+    z
+!   aa)
+--- 19,22 ----
+    x
+    y
+    z
+!   bb)
+")
+
+(defvar diff-mode-tests--selective-undo-patch-2
+  "*** /tmp/a.el	2026-07-14 08:27:52.751202012 +0200
+--- /tmp/b.el	2026-07-14 08:28:01.087191220 +0200
+*************** (defun foo ()
+*** 2,8 ****
+    x
+    y
+    z
+!   a)
+  ;;
+  ;;
+  ;;
+--- 2,8 ----
+    x
+    y
+    z
+!   b)
+  ;;
+  ;;
+  ;;
+@@ -19,4 +19,4 @@ (defun bar ()
+   x
+   y
+   z
+-  aa)
++  bb)
+")
+
+(defun diff-mode-tests--mark-region (beg end)
+  (transient-mark-mode 1)
+  (goto-char beg)
+  (push-mark (point) t t)
+  (setq mark-active t)
+  (goto-char end))
+
+(ert-deftest diff-mode-tests-selective-undo ()
+  (let* ((unified diff-mode-tests--unified-patch)
+         (context diff-mode-tests--context-patch)
+         (mixed-1 diff-mode-tests--selective-undo-patch-1)
+         (mixed-2 diff-mode-tests--selective-undo-patch-2))
+    (pcase-dolist (`(,convert ,v1 ,v2 ,v3)
+                   `((,#'diff-unified->context ,unified ,context ,mixed-1)
+                     (,#'diff-context->unified ,context ,unified ,mixed-2)))
+      (let ((b (generate-new-buffer "test.diff")))
+        (unwind-protect
+	    (with-current-buffer b
+	      (insert v1)
+	      (diff-mode)
+	      (undo-boundary)
+	      (funcall convert (point-min) (point-max))
+              (should (equal (buffer-string) v2))
+              (goto-char (point-min))
+              (re-search-forward "(defun foo ()")
+              (replace-match "(defun baz ()")
+              (goto-char (point-min))
+              (should (not (re-search-forward "(defun foo ()" nil t)))
+              (re-search-forward (regexp-quote "(defun bar ()"))
+              (diff-mode-tests--mark-region (point-min) (point))
+	      (undo-boundary)
+	      (undo)
+              (should (equal (buffer-string) v3)))
+          (kill-buffer b))))))
 
 (provide 'diff-mode-tests)
 ;;; diff-mode-tests.el ends here

@@ -1180,7 +1180,8 @@ This function is called from `load' via `load-path-filter-function'."
         (let ((completion-regexp-list nil))
           (seq-filter
            (lambda (dir)
-             (when (file-directory-p dir)
+             (when (file-directory-p (or dir
+					 (setq dir default-directory)))
                (try-completion
                 file
                 (with-memoization (gethash dir ht)
@@ -1263,22 +1264,32 @@ unconditionally."
             (not (string-match-p ignored (file-name-nondirectory dir)))))
          (dir (expand-file-name user-lisp-directory))
          (backup-inhibited t)
-         (dirs (list dir)))
+         (dirs (list dir)) (files '()) (excluded '()))
     (add-to-list 'load-path (directory-file-name dir))
     (dolist (file (directory-files-recursively dir "" t pred t))
-      (cond
-       ((and (file-regular-p file) (string-suffix-p ".el" file))
-        (unless just-activate
-          (with-demoted-errors "Error while compiling: %S"
-            (byte-recompile-file file force 0)
-            (when (native-comp-available-p)
-              (native-compile-async file)))))
-       ((and (file-directory-p file)
-             (not (string-match-p ignored (file-name-nondirectory file))))
-        (add-to-list 'load-path (directory-file-name file))
-        (push file dirs))))
+      (let ((attr (file-attribute-type (file-attributes file))))
+        (cond
+         ;; Dangling symlinks.
+         ((and (stringp attr) (not (file-exists-p file)))
+          (push file excluded))
+         ;; Directories.
+         ((and (not (string-match-p ignored
+                                    (file-name-nondirectory file)))
+               (or (eq attr t)
+                   (and (stringp attr) (file-directory-p file))))
+          (add-to-list 'load-path (directory-file-name file))
+          (push file dirs))
+         ;; Everything else.
+         ((and (or (null attr) (stringp attr))
+               (string-suffix-p ".el" file))
+          (push file files)))))
     (unless just-activate
-      (loaddefs-generate dirs autoload-file nil nil nil force))
+      (loaddefs-generate dirs autoload-file excluded nil nil force)
+      (dolist (file files)
+        (with-demoted-errors "Error while compiling: %S"
+          (byte-recompile-file file force 0)
+          (when (native-comp-available-p)
+            (native-compile-async file)))))
     (when (file-exists-p autoload-file)
       (load autoload-file nil t))))
 
@@ -2285,7 +2296,8 @@ splash screen in another window."
       (if (and view-read-only (not view-mode))
 	  (view-mode-enter nil 'kill-buffer))
       (goto-char (point-min))
-      (forward-line (if concise 2 4)))
+      ;; Move to the "Emacs Tutorial" line.
+      (forward-line (if concise 2 3)))
     (if concise
 	(progn
 	  (display-buffer splash-buffer)

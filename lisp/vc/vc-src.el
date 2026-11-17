@@ -176,6 +176,7 @@ For a description of possible values, see `vc-check-master-templates'."
 
 (autoload 'vc-expand-dirs "vc")
 
+;; FIXME: Respect `vc-dir-process-output-limit'.
 (defun vc-src-dir-status-files (dir files update-function)
   (let* ((result nil)
          (status nil)
@@ -192,9 +193,10 @@ For a description of possible values, see `vc-check-master-templates'."
          dlist)
     (when (eq 0 status)
       (dolist (line (split-string out "[\n\r]" t))
-        (let* ((pair (split-string line "[\t]" t))
-               (state (vc-src--parse-state (car pair)))
-               (frel (cadr pair)))
+        (let ((state (vc-src--parse-state line))
+              (frel (if (char-equal (aref line 1) ?\t)
+                        (substring line 2)
+                      (substring line 3)))) ;bug#82149
           (if (file-directory-p frel)
               (push frel dlist)
             (when (not (eq state 'up-to-date))

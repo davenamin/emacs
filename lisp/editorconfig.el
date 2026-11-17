@@ -89,7 +89,7 @@ show line numbers on the left:
     \\='(lambda (props)
        (let ((show-line-num (gethash \\='emacs_linum props)))
          (cond ((equal show-line-num \"true\") (linum-mode 1))
-           ((equal show-line-num \"false\") (linum-mode 0))))))
+           ((equal show-line-num \"false\") (linum-mode -1))))))
 
 This hook will be run even when there are no matching sections in
 \".editorconfig\", or no \".editorconfig\" file was found at all."
@@ -127,24 +127,8 @@ This hook will be run even when there are no matching sections in
   "0.5")
 (defcustom editorconfig-indentation-alist
   ;; For contributors: Sort modes in alphabetical order
-  '((awk-mode c-basic-offset)
-    (bash-ts-mode sh-basic-offset)
-    (bpftrace-mode c-basic-offset)
-    (c++-mode c-basic-offset)
-    (cmake-mode cmake-tab-width)
+  '((cmake-mode cmake-tab-width)
     (coffee-mode coffee-tab-width)
-    (csharp-mode c-basic-offset)
-    (css-ts-mode css-indent-offset)
-    (d-mode c-basic-offset)
-    (elixir-ts-mode elixir-ts-indent-offset)
-    (emacs-lisp-mode . editorconfig--get-indentation-lisp-mode)
-    (f90-mode f90-associate-indent
-              f90-continuation-indent
-              f90-critical-indent
-              f90-do-indent
-              f90-if-indent
-              f90-program-indent
-              f90-type-indent)
     (feature-mode feature-indent-offset
                   feature-indent-level)
     (fsharp-mode fsharp-continuation-offset
@@ -159,51 +143,22 @@ This hook will be run even when there are no matching sections in
                   haskell-indentation-where-pre-offset
                   shm-indent-spaces)
     (haxor-mode haxor-tab-width)
-    (idl-mode c-basic-offset)
     (jade-mode jade-tab-width)
-    (java-mode c-basic-offset)
-    (js-ts-mode js-indent-level)
-    (js-jsx-mode js-indent-level sgml-basic-offset)
     (js2-jsx-mode js2-basic-offset sgml-basic-offset)
     (json-mode js-indent-level)
     (jsonian-mode jsonian-default-indentation)
     (kotlin-mode kotlin-tab-width)
-    (latex-mode . editorconfig--get-indentation-latex-mode)
-    (lisp-mode . editorconfig--get-indentation-lisp-mode)
+    (LaTeX-mode . editorconfig--get-indentation-latex-mode)
     (livescript-mode livescript-tab-width)
     (magik-ts-mode magik-indent-level)
     (meson-mode meson-indent-basic)
     (mips-mode mips-tab-width)
-    (nxml-mode . editorconfig--get-indentation-nxml-mode)
-    (objc-mode c-basic-offset)
-    (octave-mode octave-block-offset)
-    ;; No need to change `php-mode-coding-style' value for php-mode
-    ;; since we run editorconfig later than it resets `c-basic-offset'.
-    ;; See https://github.com/editorconfig/editorconfig-emacs/issues/116
-    ;; for details.
-    (php-mode c-basic-offset)
-    (pike-mode c-basic-offset)
-    (protobuf-mode c-basic-offset)
-    (ps-mode ps-mode-tab)
     (pug-mode pug-tab-width)
     (python-mode . editorconfig--get-indentation-python-mode)
-    (python-ts-mode . editorconfig--get-indentation-python-mode)
     (rjsx-mode js-indent-level sgml-basic-offset)
-    (ruby-ts-mode ruby-indent-level)
     (scala-mode scala-indent:step)
-    (scss-mode css-indent-offset)
     (swift-mode swift-mode:basic-offset)
-    (tcl-mode tcl-indent-level
-              tcl-continued-indent-level)
-    (typescript-ts-base-mode typescript-ts-indent-offset)
-    (verilog-mode verilog-indent-level
-                  verilog-indent-level-behavioral
-                  verilog-indent-level-declaration
-                  verilog-indent-level-module
-                  verilog-cexp-indent
-                  verilog-case-indent)
     (web-mode . editorconfig--get-indentation-web-mode)
-    (yaml-ts-mode yaml-indent-offset)
     )
   "Alist of indentation setting methods by modes.
 
@@ -234,17 +189,6 @@ Otherwise, use `delete-trailing-whitespace'."
   "Hash object of EditorConfig properties that was enabled for current buffer.")
 (put 'editorconfig-properties-hash 'permanent-local t)
 
-(defvar editorconfig-lisp-use-default-indent nil
-  "Selectively ignore the value of indent_size for Lisp files.
-Prevents `lisp-indent-offset' from being set selectively.
-
-nil - `lisp-indent-offset' is always set normally.
-t   - `lisp-indent-offset' is never set normally
-       (always use default indent for lisps).
-number - `lisp-indent-offset' is not set only if indent_size is
-         equal to this number.  For example, if this is set to 2,
-         `lisp-indent-offset' will not be set only if indent_size is 2.")
-
 (define-error 'editorconfig-error
               "Error thrown from editorconfig lib")
 
@@ -272,32 +216,19 @@ Make a message by passing ARGS to `format-message'."
 
 (defun editorconfig--get-indentation-python-mode (size)
   "Vars to set `python-mode' indent size to SIZE."
-  `((python-indent-offset . ,size)      ;For python.el
-    (py-indent-offset . ,size)))        ;For python-mode.el
+  ;; FIXME: `python.el' now sets `editorconfig-indent-size-vars' so this
+  ;; is used only in other Python modes; we should get rid of it.
+  (declare (obsolete editorconfig-indent-size-vars "32.1"))
+  `((py-indent-offset . ,size)))        ;For python-mode.el
 
 (defun editorconfig--get-indentation-latex-mode (size)
-  "Vars to set `latex-mode' indent size to SIZE."
-  `((tex-indent-basic . ,size)
-    (tex-indent-item . ,size)
-    (tex-indent-arg . ,(* 2 size))
-    ;; For AUCTeX
-    (TeX-brace-indent-level . ,size)
+  "Vars to set `LaTeX-mode' indent size to SIZE."
+  ;; FIXME: `tex-mode.el' now sets `editorconfig-indent-size-vars' so this
+  ;; is used only in other LaTeX modes; we should get rid of it.
+  (declare (obsolete editorconfig-indent-size-vars "32.1"))
+  `((TeX-brace-indent-level . ,size)
     (LaTeX-indent-level . ,size)
     (LaTeX-item-indent . ,(- size))))
-
-(defun editorconfig--get-indentation-nxml-mode (size)
-  "Vars to set `nxml-mode' indent size to SIZE."
-  `((nxml-child-indent . ,size)
-    (nxml-attribute-indent . ,(* 2 size))))
-
-(defun editorconfig--get-indentation-lisp-mode (size)
-  "Set indent size to SIZE for Lisp mode(s)."
-  (when (cond ((null editorconfig-lisp-use-default-indent)  t)
-              ((eql t editorconfig-lisp-use-default-indent) nil)
-              ((numberp editorconfig-lisp-use-default-indent)
-               (not (eql size editorconfig-lisp-use-default-indent)))
-              (t t))
-    `((lisp-indent-offset . ,size))))
 
 (cl-defun editorconfig--should-set (symbol)
   "Determine if editorconfig should set SYMBOL."

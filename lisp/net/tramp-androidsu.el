@@ -112,7 +112,9 @@ multibyte mode and waits for the shell prompt to appear."
   (with-tramp-debug-message vec "Opening connection"
     (let ((p (tramp-get-connection-process vec))
 	  (process-name (tramp-get-connection-property vec " process-name"))
-	  (process-environment (copy-sequence process-environment)))
+	  (process-environment (copy-sequence process-environment))
+	  (timeout (tramp-get-method-parameter
+		    vec 'tramp-connection-timeout tramp-connection-timeout)))
       ;; Open a new connection.
       (condition-case err
 	  (unless (process-live-p p)
@@ -151,11 +153,13 @@ multibyte mode and waits for the shell prompt to appear."
 		(setq path (tramp-shell-quote-argument
                             (string-join tramp-androidsu-remote-path ":"))
                       su-binary
-                      (shell-quote-argument
+                      (tramp-shell-quote-argument
                        (or (executable-find "su")
                            (tramp-user-error
 			    vec
                             "No su binary is available in any of `exec-path'")))
+		      user (if (tramp-string-empty-or-nil-p user)
+			       "" (tramp-shell-quote-argument user))
                       command (format "PATH=%s exec %s - %s || exit"
                                       path su-binary user))
                 ;; Attempt to execute the shell inside the global mount
@@ -189,8 +193,7 @@ multibyte mode and waits for the shell prompt to appear."
 		;; guaranteed to reach the root shell until its prompt
 		;; is displayed.
 		(with-current-buffer (process-buffer p)
-		  (tramp-wait-for-regexp p tramp-connection-timeout
-					 "#[[:space:]]*$"))
+		  (tramp-wait-for-regexp p timeout "#[[:space:]]*$"))
 	        ;; Set connection-local variables.
 	        (tramp-set-connection-local-variables vec)
 	        ;; Change prompt.
@@ -360,13 +363,9 @@ FUNCTION."
 	    :coding coding
             :noquery noquery
             :connection-type connection-type
+	    :filter filter
 	    :sentinel (or sentinel #'ignore)
             :stderr stderr)))
-      ;; Set filter.  Prior Emacs 29.1, it doesn't work reliably to
-      ;; provide it as `make-process' argument when filter is t.  See
-      ;; Bug#51177.
-      (when filter
-	(set-process-filter p filter))
       (tramp-post-process-creation p v)
       ;; Query flag is overwritten in `tramp-post-process-creation',
       ;; so we reset it.
@@ -416,7 +415,6 @@ FUNCTION."
     (directory-files . tramp-handle-directory-files)
     (directory-files-and-attributes
      . tramp-androidsu-handle-directory-files-and-attributes)
-    (dired-compress-file . ignore)
     (dired-uncache . tramp-handle-dired-uncache)
     (exec-path . tramp-androidsu-handle-exec-path)
     (expand-file-name . tramp-handle-expand-file-name)
@@ -463,7 +461,6 @@ FUNCTION."
     (lock-file . tramp-handle-lock-file)
     (make-auto-save-file-name . tramp-handle-make-auto-save-file-name)
     (make-directory . tramp-androidsu-handle-make-directory)
-    (make-directory-internal . ignore)
     (make-lock-file-name . tramp-handle-make-lock-file-name)
     (make-nearby-temp-file . tramp-handle-make-nearby-temp-file)
     (make-process . tramp-androidsu-handle-make-process)

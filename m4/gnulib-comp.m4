@@ -188,8 +188,10 @@ AC_DEFUN([gl_EARLY],
   # Code from module stdc_bit_width:
   # Code from module stdc_count_ones:
   # Code from module stdc_leading_zeros:
+  # Code from module stdc_memreverse8u:
   # Code from module stdc_trailing_zeros:
   # Code from module stdckdint-h:
+  # Code from module stdcountof-h:
   # Code from module stddef-h:
   # Code from module stdint-h:
   # Code from module stdio-h:
@@ -219,6 +221,7 @@ AC_DEFUN([gl_EARLY],
   # Code from module timespec:
   # Code from module timespec-add:
   # Code from module timespec-sub:
+  # Code from module tzsanitize:
   # Code from module u64:
   # Code from module unistd-h:
   # Code from module unlocked-io:
@@ -554,15 +557,18 @@ AC_DEFUN([gl_INIT],
   gl_CONDITIONAL_HEADER([stdbit.h])
   AC_PROG_MKDIR_P
   AC_REQUIRE([gl_STDBIT_H])
-  GL_STDC_BIT_WIDTH=1
+  gl_STDBIT_MODULE_INDICATOR([stdc_bit_width])
   AC_REQUIRE([gl_STDBIT_H])
-  GL_STDC_COUNT_ONES=1
+  gl_STDBIT_MODULE_INDICATOR([stdc_count_ones])
   AC_REQUIRE([gl_STDBIT_H])
-  GL_STDC_LEADING_ZEROS=1
+  gl_STDBIT_MODULE_INDICATOR([stdc_leading_zeros])
   AC_REQUIRE([gl_STDBIT_H])
-  GL_STDC_TRAILING_ZEROS=1
+  gl_STDBIT_MODULE_INDICATOR([stdc_trailing_zeros])
   gl_STDCKDINT_H
   gl_CONDITIONAL_HEADER([stdckdint.h])
+  AC_PROG_MKDIR_P
+  gl_STDCOUNTOF_H
+  gl_CONDITIONAL_HEADER([stdcountof.h])
   AC_PROG_MKDIR_P
   gl_STDDEF_H
   gl_STDDEF_H_REQUIRE_DEFAULTS
@@ -606,6 +612,7 @@ AC_DEFUN([gl_INIT],
   case "$host_os" in
     mingw* | windows*)
       AC_EGREP_CPP([Special], [
+  #include <stdio.h>
   #ifndef _UCRT
    Special
   #endif
@@ -614,7 +621,7 @@ AC_DEFUN([gl_INIT],
       ;;
   esac
   gl_CONDITIONAL([GL_COND_OBJ_STDIO_CONSOLESAFE], [test $USES_MSVCRT = 1])
-  AC_CHECK_FUNCS([vasprintf])
+  AC_CHECK_FUNCS_ONCE([vasprintf])
   gl_STDLIB_H
   gl_STDLIB_H_REQUIRE_DEFAULTS
   AC_PROG_MKDIR_P
@@ -694,10 +701,8 @@ AC_DEFUN([gl_INIT],
     [Define to 1 if you want the FILE stream functions getc, putc, etc.
      to use unlocked I/O if available, throughout the package.
      Unlocked I/O can improve performance, sometimes dramatically.
-     But unlocked I/O is safe only in single-threaded programs,
-     as well as in multithreaded programs for which you can guarantee that
-     every FILE stream, including stdin, stdout, stderr, is used only
-     in a single thread.])
+     But unlocked I/O is safe only in processes in which two threads
+     never simultaneously access the same FILE stream.])
   AC_DEFINE([USE_UNLOCKED_IO], [GNULIB_STDIO_SINGLE_THREAD],
     [An alias of GNULIB_STDIO_SINGLE_THREAD.])
   gl_FUNC_GLIBC_UNLOCKED_IO
@@ -727,7 +732,9 @@ AC_DEFUN([gl_INIT],
   gl_gnulib_enabled_03e0aaad4cb89ca757653bd367a6ccb7=false
   gl_gnulib_enabled_rawmemchr=false
   gl_gnulib_enabled_6099e9737f757db36c47fa9d9f02e88c=false
+  gl_gnulib_enabled_stdc_memreverse8u=false
   gl_gnulib_enabled_strtoll=false
+  gl_gnulib_enabled_tzsanitize=false
   gl_gnulib_enabled_utimens=false
   gl_gnulib_enabled_verify=false
   func_gl_gnulib_m4code_260941c0e5dc67ec9e87d1fb321c300b ()
@@ -945,6 +952,14 @@ AC_DEFUN([gl_INIT],
       gl_gnulib_enabled_6099e9737f757db36c47fa9d9f02e88c=true
     fi
   }
+  func_gl_gnulib_m4code_stdc_memreverse8u ()
+  {
+    if $gl_gnulib_enabled_stdc_memreverse8u; then :; else
+      AC_REQUIRE([gl_STDBIT_H])
+      gl_STDBIT_MODULE_INDICATOR([stdc_memreverse8u])
+      gl_gnulib_enabled_stdc_memreverse8u=true
+    fi
+  }
   func_gl_gnulib_m4code_strtoll ()
   {
     if $gl_gnulib_enabled_strtoll; then :; else
@@ -956,6 +971,15 @@ AC_DEFUN([gl_INIT],
       ])
       gl_STDLIB_MODULE_INDICATOR([strtoll])
       gl_gnulib_enabled_strtoll=true
+    fi
+  }
+  func_gl_gnulib_m4code_tzsanitize ()
+  {
+    if $gl_gnulib_enabled_tzsanitize; then :; else
+      AC_REQUIRE([AC_CANONICAL_HOST])
+      gl_CONDITIONAL([GL_COND_OBJ_TZSANITIZE],
+                     [case "$host_os" in mingw* | windows*) true;; *) false;; esac])
+      gl_gnulib_enabled_tzsanitize=true
     fi
   }
   func_gl_gnulib_m4code_utimens ()
@@ -972,6 +996,9 @@ AC_DEFUN([gl_INIT],
       gl_gnulib_enabled_verify=true
     fi
   }
+  if $GL_GENERATE_BYTESWAP_H; then
+    func_gl_gnulib_m4code_stdc_memreverse8u
+  fi
   if test $HAVE_CANONICALIZE_FILE_NAME = 0 || test $REPLACE_CANONICALIZE_FILE_NAME = 1; then
     func_gl_gnulib_m4code_925677f0343de64b89a9f0c790b4104c
   fi
@@ -1035,6 +1062,9 @@ AC_DEFUN([gl_INIT],
   if $GL_GENERATE_IEEE754_H; then
     func_gl_gnulib_m4code_endian
   fi
+  if test $REPLACE_MKTIME = 1; then
+    func_gl_gnulib_m4code_tzsanitize
+  fi
   if test $HAVE_READLINKAT = 0 || test $REPLACE_READLINKAT = 1; then
     func_gl_gnulib_m4code_260941c0e5dc67ec9e87d1fb321c300b
   fi
@@ -1087,7 +1117,9 @@ AC_DEFUN([gl_INIT],
   AM_CONDITIONAL([gl_GNULIB_ENABLED_03e0aaad4cb89ca757653bd367a6ccb7], [$gl_gnulib_enabled_03e0aaad4cb89ca757653bd367a6ccb7])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_rawmemchr], [$gl_gnulib_enabled_rawmemchr])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_6099e9737f757db36c47fa9d9f02e88c], [$gl_gnulib_enabled_6099e9737f757db36c47fa9d9f02e88c])
+  AM_CONDITIONAL([gl_GNULIB_ENABLED_stdc_memreverse8u], [$gl_gnulib_enabled_stdc_memreverse8u])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_strtoll], [$gl_gnulib_enabled_strtoll])
+  AM_CONDITIONAL([gl_GNULIB_ENABLED_tzsanitize], [$gl_gnulib_enabled_tzsanitize])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_utimens], [$gl_gnulib_enabled_utimens])
   AM_CONDITIONAL([gl_GNULIB_ENABLED_verify], [$gl_gnulib_enabled_verify])
   # End of code from modules
@@ -1328,7 +1360,6 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/dtotimespec.c
   lib/dup2.c
   lib/dynarray.h
-  lib/eloop-threshold.h
   lib/endian.c
   lib/endian.in.h
   lib/errno.in.h
@@ -1414,6 +1445,7 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/mempcpy.c
   lib/memrchr.c
   lib/memset_explicit.c
+  lib/min-eloop-threshold.h
   lib/mini-gmp-gnulib.c
   lib/mini-gmp.c
   lib/mini-gmp.h
@@ -1463,13 +1495,14 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/signal.in.h
   lib/stat-time.c
   lib/stat-time.h
-  lib/stdbit.c
   lib/stdbit.in.h
   lib/stdc_bit_width.c
   lib/stdc_count_ones.c
   lib/stdc_leading_zeros.c
+  lib/stdc_memreverse8u.c
   lib/stdc_trailing_zeros.c
   lib/stdckdint.in.h
+  lib/stdcountof.in.h
   lib/stddef.in.h
   lib/stdint.in.h
   lib/stdio-consolesafe.c
@@ -1508,6 +1541,8 @@ AC_DEFUN([gl_FILE_LIST], [
   lib/timespec-sub.c
   lib/timespec.c
   lib/timespec.h
+  lib/tzsanitize.c
+  lib/tzsanitize.h
   lib/u64.c
   lib/u64.h
   lib/unistd.c
@@ -1633,6 +1668,7 @@ AC_DEFUN([gl_FILE_LIST], [
   m4/stdalign.m4
   m4/stdbit_h.m4
   m4/stdckdint_h.m4
+  m4/stdcountof_h.m4
   m4/stddef_h.m4
   m4/stdint.m4
   m4/stdio_h.m4

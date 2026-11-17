@@ -129,6 +129,19 @@ by the close of the first pair.")
 (put 'comment-start-skip 'safe-local-variable 'stringp)
 
 ;;;###autoload
+(defvar comment-start-line-regexp nil
+  "Regexp matching the start of a line comment.
+
+Unlike `comment-start-skip', which matches the start of any comment,
+this regexp matches only the start of line comments (as opposed to block
+comments), so it can be used to distinguish between the two.
+
+Modes that support both line and block comments should set this
+variable.")
+;;;###autoload
+(put 'comment-start-line-regexp 'safe-local-variable 'stringp)
+
+;;;###autoload
 (defvar comment-end-skip nil
   "Regexp to match the end of a comment plus everything back to its body.")
 ;;;###autoload
@@ -865,11 +878,11 @@ Ensure that `comment-normalize-vars' has been called before you use this."
 	;; construct a regexp that would match anything from just S
 	;; to any possible output of this function for any N.
 	(concat (mapconcat (lambda (c) (concat (regexp-quote (string c)) "?"))
-			   lpad "")	;padding is not required
+			   lpad)	;padding is not required
 		(regexp-quote s)
 		(when multi "+") ;the last char of S might be repeated
 		(mapconcat (lambda (c) (concat (regexp-quote (string c)) "?"))
-			   rpad "")))))) ;padding is not required
+			   rpad)))))) ;padding is not required
 
 (defun comment-padleft (str &optional n)
   "Construct a string composed of `comment-padding' plus STR.
@@ -958,39 +971,45 @@ This function is the default value of `uncomment-region-function'."
 	    (box-equal nil))	   ;Whether we might be using `=' for boxes.
 	(save-restriction
 	  (narrow-to-region spt ept)
+	  (goto-char (point-max))
+	  ;; Find the end-of-content before we mess with the rest of
+          ;; the comment (which flushes the syntax-propertization,
+          ;; thus impacting the work of `comment-enter-backward').
+          (comment-enter-backward)
+	  (let ((end-of-content (copy-marker (point))))
 
-	  ;; Remove the comment-start.
-	  (goto-char ipt)
-	  (skip-syntax-backward " ")
-	  ;; A box-comment starts with a looong comment-start marker.
-	  (when (and (or (and (= (- (point) (point-min)) 1)
-			      (setq box-equal t)
-			      (looking-at "=\\{7\\}")
-			      (not (eq (char-before (point-max)) ?\n))
-			      (skip-chars-forward "="))
-			 (> (- (point) (point-min) (length comment-start)) 7))
-		     (> (count-lines (point-min) (point-max)) 2))
-	    (setq box t))
-	  ;; Skip the padding.  Padding can come from comment-padding and/or
-	  ;; from comment-start, so we first check comment-start.
-	  (if (or (save-excursion (goto-char (point-min)) (looking-at csre))
-		  (looking-at (regexp-quote comment-padding)))
+	    ;; Remove the comment-start.
+	    (goto-char ipt)
+	    (skip-syntax-backward " ")
+	    ;; A box-comment starts with a looong comment-start marker.
+	    (when (and (or (and (= (- (point) (point-min)) 1)
+			        (setq box-equal t)
+			        (looking-at "=\\{7\\}")
+			        (not (eq (char-before (point-max)) ?\n))
+			        (skip-chars-forward "="))
+			   (> (- (point) (point-min) (length comment-start)) 7))
+		       (> (count-lines (point-min) (point-max)) 2))
+	      (setq box t))
+	    ;; Skip the padding.  Padding can come from comment-padding and/or
+	    ;; from comment-start, so we first check comment-start.
+	    (if (or (save-excursion (goto-char (point-min)) (looking-at csre))
+		    (looking-at (regexp-quote comment-padding)))
+		(goto-char (match-end 0)))
+	    (when (and sre (looking-at (concat "\\s-*\n\\s-*" srei)))
 	      (goto-char (match-end 0)))
-	  (when (and sre (looking-at (concat "\\s-*\n\\s-*" srei)))
-	    (goto-char (match-end 0)))
-	  (if (null arg) (delete-region (point-min) (point))
-            (let ((opoint (point-marker)))
-              (skip-syntax-backward " ")
-              (delete-char (- numarg))
-              (unless (and (not (bobp))
-                           (save-excursion (goto-char (point-min))
-                                           (looking-at comment-start-skip)))
-                ;; If there's something left but it doesn't look like
-                ;; a comment-start any more, just remove it.
-                (delete-region (point-min) opoint))))
+	    (if (null arg) (delete-region (point-min) (point))
+              (let ((opoint (point-marker)))
+                (skip-syntax-backward " ")
+                (delete-char (- numarg))
+                (unless (and (not (bobp))
+                             (save-excursion (goto-char (point-min))
+                                             (looking-at comment-start-skip)))
+                  ;; If there's something left but it doesn't look like
+                  ;; a comment-start any more, just remove it.
+                  (delete-region (point-min) opoint))))
 
+	    (goto-char end-of-content))
 	  ;; Remove the end-comment (and leading padding and such).
-	  (goto-char (point-max)) (comment-enter-backward)
 	  ;; Check for special `=' used sometimes in comment-box.
 	  (when (and box-equal (not (eq (char-before (point-max)) ?\n)))
 	    (let ((pos (point)))

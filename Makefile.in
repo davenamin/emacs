@@ -115,6 +115,8 @@ HAVE_GSETTINGS = @HAVE_GSETTINGS@
 
 ANDROID = @ANDROID@
 
+DOCLANGS?=@DOCLANGS@
+
 # ==================== Where To Install Things ====================
 
 # Location to install Emacs.app under GNUstep / macOS.
@@ -174,6 +176,7 @@ man1dir=$(mandir)/man1
 # Where to install and expect the info files describing Emacs.
 infodir=@infodir@
 # Info files not in the doc/misc directory (we get those via make echo-info).
+# These are not gated by DOCLANGS: see MANDATORY_DOC_DIRS below.
 INFO_NONMISC=emacs.info eintr.info elisp.info
 
 # Directory for local state files for all programs.
@@ -854,7 +857,7 @@ install-info: info
 	   [ -f "$(DESTDIR)${infodir}/dir" ] || \
 	      [ ! -f ${srcdir}/info/dir ] || \
 	      ${INSTALL_DATA} ${srcdir}/info/dir "$(DESTDIR)${infodir}/dir"; \
-	   info_misc=`MAKEFLAGS= $(MAKE) --no-print-directory -s -C doc/misc echo-info`; \
+	   info_misc="$(foreach lang,$(DOCLANGS),`MAKEFLAGS= $(MAKE) --no-print-directory -s -C doc/misc DOCLANG=$(lang) echo-info`)"; \
 	   cd ${srcdir}/info ; \
 	   for elt in ${INFO_NONMISC} $${info_misc}; do \
 	      for f in `ls $$elt $$elt-[1-9] $$elt-[1-9][0-9] 2>/dev/null`; do \
@@ -866,7 +869,7 @@ install-info: info
 	      done; \
 	     (cd "$${thisdir}"; \
 	      ${INSTALL_INFO} --info-dir="$(DESTDIR)${infodir}" "$(DESTDIR)${infodir}/$$elt"); \
-	      cp elisp_type_hierarchy* $(DESTDIR)${infodir}/; \
+	      cp *.jpg *.png $(DESTDIR)${infodir}/; \
 	   done; \
 	fi
 
@@ -1004,7 +1007,7 @@ uninstall: uninstall-$(NTDIR) uninstall-doc uninstall-gsettings-schemas
 	done
 	-rm -rf "$(DESTDIR)${libexecdir}/emacs/${version}"
 	thisdir=`pwd -P`; \
-	(info_misc=`MAKEFLAGS= $(MAKE) --no-print-directory -s -C doc/misc echo-info`; \
+	(info_misc="$(foreach lang,$(DOCLANGS),`MAKEFLAGS= $(MAKE) --no-print-directory -s -C doc/misc DOCLANG=$(lang) echo-info`)"; \
 	 if cd "$(DESTDIR)${infodir}"; then \
 	   for elt in ${INFO_NONMISC} $${info_misc}; do \
 	     (cd "$${thisdir}"; \
@@ -1182,7 +1185,7 @@ TAGS tags: lib lib-src # src
 	$(MAKE) -C doc/emacs tags
 	$(MAKE) -C doc/lispintro tags
 	$(MAKE) -C doc/lispref tags
-	$(MAKE) -C doc/misc tags
+	$(foreach DOCLANG,$(DOCLANGS),$(MAKE) -C doc/misc DOCLANG=$(DOCLANG) tags;)
 
 CHECK_TARGETS = check check-maybe check-expensive check-all check-byte-compile
 .PHONY: $(CHECK_TARGETS)
@@ -1203,8 +1206,38 @@ PDFS  = lispref-pdf  lispintro-pdf  emacs-pdf  misc-pdf
 PSS   = lispref-ps   lispintro-ps   emacs-ps   misc-ps
 
 DOCS = $(DVIS) $(HTMLS) $(INFOS) $(PDFS) $(PSS)
-$(DOCS):
-	$(MAKE) -C doc/$(subst -, ,$@)
+
+define MAKE_DOC_FOR_DOCLANG
+$(1)-DOCLANG-$(2): $(1)-common
+	$$(MAKE) -C doc/$$(subst -, DOCLANG=$(2) ,$(1))
+
+endef
+## Directories whose manuals are always built in the default language,
+## whatever DOCLANGS says: the Emacs and Emacs Lisp manuals are
+## referenced from doc strings, and the Emacs Lisp Intro is an
+## important enough part of Emacs to be available regardless of the
+## language preferences of the user who builds the manuals.
+MANDATORY_DOC_DIRS = emacs lispintro lispref
+## Languages from DOCLANGS to build the manuals in doc/$(1) for: the
+## default language (when in DOCLANGS, or always for the directories
+## above), plus every other language in DOCLANGS that has translations
+## for this directory (doc/translations/<lang>/$(1)).  Directories
+## without translations for a language must not run a sub-make for it:
+## the doc Makefiles of untranslated directories ignore DOCLANG, so
+## such a sub-make would just repeat the default-language build, and
+## two sub-makes producing the same outputs race under "make -j" (e.g.
+## "cp: cannot create regular file ...: File exists").
+FILTER_DOCLANGS = $(if $(filter $(1),$(MANDATORY_DOC_DIRS)),default,$(filter $(DOCLANGS),default)) $(foreach lang,$(filter-out default,$(DOCLANGS)),$(if $(wildcard ${srcdir}/doc/translations/$(lang)/$(1)),$(lang)))
+# $(1) = doc target (e.g. lispintro-info), $(2) = languages to build
+define MAKE_DOC
+# Define a target to which dependencies common to all of the doc files
+# in this directory may be assigned.
+$(1)-common:
+$(1): $$(addprefix $(1)-DOCLANG-,$(2))
+
+$$(foreach lang,$(2),$$(eval $$(call MAKE_DOC_FOR_DOCLANG,$(1),$$(lang))))
+endef
+$(foreach doc,$(DOCS),$(eval $(call MAKE_DOC,$(doc),$(call FILTER_DOCLANGS,$(word 1,$(subst -, ,$(doc)))))))
 
 .PHONY: $(DOCS) docs pdf ps
 .PHONY: info dvi dist html info-dir check-info
@@ -1221,20 +1254,43 @@ ps: $(PSS)
 # Depending on src is sufficient, but ends up being slow, since the
 # uncompiled lisp/org/*.el files are used to build the .texi files
 # (which can be slow even with the elc files).
-misc-info: lisp
+misc-info-common: lisp
 # Using src rather than lisp because one is less likely to get unnecessary
 # rebuilds of stuff that is not strictly necessary for generating manuals.
-misc-dvi misc-html misc-pdf misc-ps: src
+misc-dvi-common misc-html-common misc-pdf-common misc-ps-common: src
 
 info-dir: ${srcdir}/info/dir
 
-texi_misc = $(shell MAKEFLAGS= ${MAKE} --no-print-directory -s -C doc/misc echo-sources)
+define set_texi_misc
+texi_misc_$(1) = $$(shell MAKEFLAGS= $${MAKE} --no-print-directory -s -C doc/misc DOCLANG=$(1) echo-sources)
 
-srcdir_doc_info_dir_inputs = \
+endef
+
+$(foreach lang,$(DOCLANGS),$(eval $(call set_texi_misc,$(lang))))
+
+## For the default language, depend on the actual sources reported by
+## doc/misc (echo-sources): .org files for the org-based manuals and
+## .texi files for the rest.  Deriving foo.texi names from INFO_COMMON
+## would break in a fresh checkout, because the .texi files of the
+## org-based manuals (e.g. modus-themes.texi) are generated and there
+## is no rule to build them at this level.  make-info-dir extracts dir
+## entries from both formats.  The first three are not gated by
+## DOCLANGS, because MANDATORY_DOC_DIRS always builds them.
+srcdir_doc_info_dir_inputs := \
   ${srcdir}/doc/emacs/emacs.texi \
   ${srcdir}/doc/lispintro/emacs-lisp-intro.texi \
   ${srcdir}/doc/lispref/elisp.texi \
-  $(addprefix ${srcdir}/doc/misc/,${texi_misc})
+  $(addprefix ${srcdir}/doc/misc/,${texi_misc_default})
+TRANSLATED_DIRS:=misc
+# $(1) = dir
+# $(2) = lang
+define GET_DOC_SRC
+-include ${srcdir}/doc/translations/$(2)/$(1)/info_common.mk
+INFO_COMMON:=$$(subst ccmode,cc-mode,$$(INFO_COMMON))
+srcdir_doc_info_dir_inputs:=$$(srcdir_doc_info_dir_inputs) $$(patsubst %,${srcdir}/doc/translations/$(2)/$(1)/%-$(2).texi,$$(INFO_COMMON))
+endef
+$(foreach dir,$(TRANSLATED_DIRS),$(foreach lang,$(filter-out default,$(DOCLANGS)),$(eval $(call GET_DOC_SRC,$(dir),$(lang)))))
+
 info_dir_inputs = \
   ../build-aux/dir_top \
   $(subst ${srcdir}/doc/,,${srcdir_doc_info_dir_inputs})

@@ -25,13 +25,13 @@ General Public License for more details.
 
 @dircategory Emacs misc features
 @direntry
-* Transient: (transient). Transient Commands.
+* Transient: (transient).       Transient Commands.
 @end direntry
 
 @finalout
 @titlepage
 @title Transient User and Developer Manual
-@subtitle for version 0.13.3
+@subtitle for version 0.13.9
 @author Jonas Bernoulli
 @page
 @vskip 0pt plus 1filll
@@ -53,7 +53,7 @@ resource to get over that hurdle is Psionic K's interactive tutorial,
 available at @uref{https://github.com/positron-solutions/transient-showcase}.
 
 @noindent
-This manual is for Transient version 0.13.3.
+This manual is for Transient version 0.13.9.
 
 @insertcopying
 @end ifnottex
@@ -385,7 +385,7 @@ than outlined above and even customizable.}
 If the user does not save the value and just exits using a regular
 suffix command, then the value is merely saved to the transient's
 history.  That value won't be used when the transient is next invoked,
-but it is easily accessible (see @ref{Using History}).
+but it is easily accessible (@pxref{Using History}).
 
 Option @code{transient-common-command-prefix} controls the prefix key used
 in the following bindings.  For simplicity's sake the default, @kbd{C-x},
@@ -454,8 +454,8 @@ previously used values.  Usually the same keys as those mentioned
 above are bound to those commands.
 
 Authors of transients should arrange for different infix commands that
-read the same kind of value to also use the same history key (see
-@ref{Suffix Slots}).
+read the same kind of value to also use the same history key
+(@pxref{Suffix Slots}).
 
 Both kinds of history are saved to a file when Emacs is exited.
 
@@ -511,43 +511,50 @@ string, for non-infix suffixes this is usually appropriate.
 @cindex enabling suffixes
 @cindex disabling suffixes
 
-The user base of a package that uses transients can be very diverse.
-This is certainly the case for Magit; some users have been using it and
-Git for a decade, while others are just getting started now.
+The user base of a package that uses transient menus can be diverse.
+This is certainly the case for Magit.  Some users have been using it
+and Git for a decade or more, while others are just getting started
+now.
 
 @cindex levels
-For that reason a mechanism is needed that authors can use to classify a
-transient's infixes and suffixes along the essentials@dots{}everything
-spectrum.  We use the term @dfn{levels} to describe that mechanism.
+For that reason a mechanism is needed, that enables authors to control
+which infix and suffix commands are shown to which group of users, and
+for users to override those choices.  We use the term @dfn{levels} to
+describe that mechanism.
 
-@cindex transient-level
-Each suffix command is placed on a level and each transient has a
-level (called @dfn{transient-level}), which controls which suffix commands
-are available.  Integers between 1 and 7 (inclusive) are valid levels.
-For suffixes, 0 is also valid; it means that the suffix is not
-displayed at any level.
+Each suffix command is placed on a level and each menu has a level.
+A suffix commands is available if its (non-zero) level is smaller or
+equal to the level of the menu.  Valid levels are integers between 1
+and 7.  As a special case, the level of a suffix can be 0, in which
+case it is never shown, regardless of the menu's level.  The default
+level for suffix commands is 1.
 
-The levels of individual transients and/or their individual suffixes
-can be changed interactively, by invoking the menu and entering its
-``edit'' mode using the command @code{transient-set-level}, as described below.
+The default level for menus is controlled using the option
+@code{transient-default-level}, which defaults to 4.  To show more
+suffix commands increase the value of this option or the level of
+an individual menu.  To show fewer suffixes increase such a value.
+Changing the value of this option affects the menus of all packages,
+so you might want to only change the value of individual menus.
 
-The default level for both transients and their suffixes is 4.  The
-@code{transient-default-level} option only controls the default for
-transients.  The default suffix level is always 4.  The authors of
-transients should place certain suffixes on a higher level, if they
-expect that it won't be of use to most users, and they should place
-very important suffixes on a lower level, so that they remain
-available even if the user lowers the transient level.
+To control which commands are shown for some menu, invoke it as usual,
+and then press @kbd{C-x l}.  You will be guided through the process.  This
+allows you to change the level of the menu itself, and/or the levels
+of individual suffix commands for even finer control.
+
+The function @code{transient-set-default-level} can be used to change the
+level of an individual suffix command across all menus, which feature
+that command and provided no local value is specified.  This does not
+work for all suffix commands, and is thus discouraged.
 
 @defopt transient-default-level
 This option controls which suffix levels are made available by
-default.  It sets the transient-level for transients for which the
-user has not set that individually.
+default.  It specifies the level for menus for which the user has
+not set a local value.  The default is 4.
 @end defopt
 
 @defopt transient-levels-file
 This option names the file that is used to persist the levels of
-transients and their suffixes between Emacs sessions.
+menus and their suffix commands between Emacs sessions.
 @end defopt
 
 Option @code{transient-common-command-prefix} controls the prefix key used
@@ -590,8 +597,43 @@ the level specified by @code{transient-default-level} are temporarily
 available anyway.
 @end table
 
-@defun transient-set-default-level suffix level
+@defun transient-set-default-level command level
 This function sets the default level of the suffix COMMAND to LEVEL@.
+
+(The use of this function is currently discouraged, because it does
+not work for all commands and because even for commands, which would
+support it, it does not always have an effect.)
+
+A suffix command is made available if its level is smaller than or
+equal to the level of the menu.  The level of a suffix command is
+determined as follows:
+
+@enumerate
+@item
+The default level for all suffix commands, which is always 1.
+
+@item
+The level set when the suffix command was defined using
+@code{transient-define-suffix}, @code{transient-define-infix} or
+@code{transient-define-argument}.
+
+@item
+The level set using this function.  Use this to override the
+value set using (2) or the default from (1).  (4) and (5)
+override the value set here.  This function can only be used for
+commands defined using the functions mentioned in (2); else you
+have to use (5).  Unless a command appears in multiple menus, it
+is better to use (5).
+
+@item
+The level set when binding the suffix command in a specific menu.
+Package authors should avoid this, and prefer (2); unless they
+want to place a command on different levels in different menus.
+
+@item
+The level interactively set for an individual suffix command in an
+individual menu, using  @kbd{C-x l}.
+@end enumerate
 
 If a suffix command appears in multiple menus, it may make sense to
 consistently change its level in all those menus at once.  For
@@ -599,7 +641,7 @@ example, the @code{--gpg-sign} argument (which is implemented using the
 command @code{magit:--gpg-sign}), is bound in all of Magit's menu which
 create commits.  Users who sometimes sign their commits would want
 that argument to be available in all of these menus, while for users
-who never sign it is just unnecessary noise in any menus.
+who never sign, it is just unnecessary noise in any menus.
 
 To always make @code{--gpg-sign} available, use:
 
@@ -612,24 +654,6 @@ To never make @code{--gpg-sign} available, use:
 @lisp
 (transient-set-default-level 'magit:--gpg-sign 0)
 @end lisp
-
-This sets the level in the suffix prototype object for this command.
-Commands only have a suffix prototype if they were defined using one
-of @code{transient-define-argument}, @code{transient-define-infix} and
-@code{transient-define-suffix}.  For all other commands this would signal
-an error.  (This is one of the reasons why package authors should
-use one of these functions to define shared suffix commands, and
-especially shared arguments.)
-
-If the user changes the level of a suffix in a particular menu,
-using @kbd{C-x l} as shown above, then that obviously shadows the default.
-
-It is also possible to set the level of a suffix binding in a
-particular menu, either when defining the menu using
-@code{transient-define-prefix,} or later using @code{transient-insert-suffix}.  If
-such bindings specify a level, then that also overrides the default.
-(Per-suffix default levels is a new feature, so you might encounter
-this quite often.)
 @end defun
 
 @node Other Commands
@@ -795,7 +819,7 @@ menu buffer.  The menu buffer is displayed in a window using
 The value of this option has the form @code{(@var{FUNCTION} . @var{ALIST})},
 where @var{FUNCTION} is a function or a list of functions.  Each such
 function should accept two arguments: a buffer to display and an
-alist of the same form as @var{ALIST}.  See @ref{Choosing Window,,,elisp,},
+alist of the same form as @var{ALIST}.  @xref{Choosing Window,,,elisp,},
 for details.
 
 The default is:
@@ -862,7 +886,7 @@ text at point, to be run when a transient menu is active, for example:
 @end lisp
 
 @defopt transient-enable-menu-navigation
-This option is documented in the previous node (@ref{Essential Options}).  You might want to change the value from @code{verbose} to
+This option is documented in the previous node (@pxref{Essential Options}).  You might want to change the value from @code{verbose} to
 @code{force-verbose}, which causes information to be shown in the echo
 area, even if it is identical to information already displayed in
 the menu buffer.  Whether that is useful to you depends on whether
@@ -1007,7 +1031,7 @@ used to draw the line.
 This user option may be overridden if @code{:mode-line-format} is passed
 when creating a new prefix with @code{transient-define-prefix}.
 
-Otherwise this can be any mode-line format.  See @ref{Mode Line Format,,,elisp,}, for details.
+Otherwise this can be any mode-line format.  @xref{Mode Line Format,,,elisp,}, for details.
 @end defopt
 
 @defopt transient-semantic-coloring
@@ -1175,10 +1199,10 @@ which can be included in multiple prefixes.  See TODO@.
 as expected by @code{transient-define-prefix}.  Note that an infix is a
 special kind of suffix.  Depending on context ``suffixes'' means
 ``suffixes (including infixes)'' or ``non-infix suffixes''.  Here it
-means the former.  See @ref{Suffix Specifications}.
+means the former.  @xref{Suffix Specifications}.
 
 @var{SUFFIX} may also be a group in the same form as expected by
-@code{transient-define-prefix}.  See @ref{Group Specifications}.
+@code{transient-define-prefix}.  @xref{Group Specifications}.
 
 @item
 @var{LOC} is a key description (a string as returned by @code{key-description}
@@ -1351,14 +1375,14 @@ enabled.  One benefit of the Transient interface is that it remembers
 history not only on a global level (``this command was invoked using
 these arguments, and previously it was invoked using those other
 arguments''), but also remembers the values of individual arguments
-independently.  See @ref{Using History}.
+independently.  @xref{Using History}.
 
 After a transient prefix command is invoked, @kbd{C-h @var{KEY}} can be used to
 show the documentation for the infix or suffix command that @kbd{@var{KEY}} is
-bound to (see @ref{Getting Help for Suffix Commands}), and infixes and
+bound to (@pxref{Getting Help for Suffix Commands}), and infixes and
 suffixes can be removed from the transient using @kbd{C-x l @var{KEY}}.  Infixes
 and suffixes that are disabled by default can be enabled the same way.
-See @ref{Enabling and Disabling Suffixes}.
+@xref{Enabling and Disabling Suffixes}.
 
 Transient ships with support for a few different types of specialized
 infix commands.  A command that sets a command line option, for example,
@@ -1409,7 +1433,7 @@ explicitly.
 
 @var{GROUP}s add key bindings for infix and suffix commands and specify
 how these bindings are presented in the menu buffer.  At least one
-@var{GROUP} has to be specified.  See @ref{Binding Suffix and Infix Commands}.
+@var{GROUP} has to be specified.  @xref{Binding Suffix and Infix Commands}.
 
 The @var{BODY} is optional.  If it is omitted, then @var{ARGLIST} is ignored and
 the function definition becomes:
@@ -1460,11 +1484,11 @@ GROUPs have the same form as for @code{transient-define-prefix}.
 @section Binding Suffix and Infix Commands
 
 The macro @code{transient-define-prefix} is used to define a transient.
-This defines the actual transient prefix command (see @ref{Defining Transients}) and adds the transient's infix and suffix bindings, as
+This defines the actual transient prefix command (@pxref{Defining Transients}) and adds the transient's infix and suffix bindings, as
 described below.
 
 Users and third-party packages can add additional bindings using
-functions such as @code{transient-insert-suffix} (see @ref{Modifying Existing Transients}).  These functions take a ``suffix specification'' as one of
+functions such as @code{transient-insert-suffix} (@pxref{Modifying Existing Transients}).  These functions take a ``suffix specification'' as one of
 their arguments, which has the same form as the specifications used in
 @code{transient-define-prefix}.
 
@@ -1490,10 +1514,10 @@ brackets to do the latter.
 Group specifications then have this form:
 
 @lisp
-[@{LEVEL@} @{DESCRIPTION@} @{KEYWORD VALUE@}... ELEMENT...]
+[@{@var{LEVEL}@} @{@var{DESCRIPTION}@} @{@var{KEYWORD} @var{VALUE}@}... @var{ELEMENT}...]
 @end lisp
 
-The @var{LEVEL} is optional and defaults to 4.  See @ref{Enabling and Disabling Suffixes}.
+The @var{LEVEL} is optional and defaults to 4.  @xref{Enabling and Disabling Suffixes}.
 
 The @var{DESCRIPTION} is optional.  If present, it is used as the heading of
 the group.
@@ -1567,6 +1591,8 @@ is used and a warning is displayed.  This warning will eventually
 be replaced with an error.
 
 @lisp
+;; -*- lexical-binding:t -*-
+;; Before evaluating this example, make sure `lexical-binding' is t.
 (transient-define-prefix my-finder-by-keyword ()
   "Select a keyword and list matching packages."
   ;; The real `finder-by-keyword' is more convenient
@@ -1644,7 +1670,7 @@ suffixes''.  Here it means the former.
 Suffix specifications have this form:
 
 @lisp
-([LEVEL] [KEY [DESCRIPTION]] COMMAND|ARGUMENT [KEYWORD VALUE]...)
+([@var{LEVEL}] [@var{KEY} [@var{DESCRIPTION}]] @var{COMMAND}|@var{ARGUMENT} [@var{KEYWORD} @var{VALUE}]...)
 @end lisp
 
 @var{LEVEL}, @var{KEY} and @var{DESCRIPTION} can also be specified using the @var{KEYWORD}s
@@ -1655,8 +1681,8 @@ the object's values just for the binding inside this transient.
 
 @itemize
 @item
-@var{LEVEL} is the suffix level, an integer between 1 and 7.  See
-@ref{Enabling and Disabling Suffixes}.
+@var{LEVEL} is the suffix level, an integer between 1 and 7.
+@xref{Enabling and Disabling Suffixes}.
 
 @item
 KEY is the key binding, a string in the format returned by
@@ -1730,7 +1756,7 @@ guessed based on the long argument.  If the argument ends with @samp{=}
 
 Finally, details can be specified using optional @var{KEYWORD}-@var{VALUE} pairs.
 Each keyword has to be a keyword symbol, either @code{:class} or a keyword
-argument supported by the constructor of that class.  See @ref{Suffix Slots}.
+argument supported by the constructor of that class.  @xref{Suffix Slots}.
 
 If a keyword argument accepts a function as value, you an use a @code{lambda}
 expression.  As a special case, the @code{##} macro (which returns a @code{lambda}
@@ -2080,8 +2106,8 @@ means that all outer prefixes are exited at once.
 @item
 The behavior for non-suffixes can be set for a particular prefix,
 by the prefix's @code{transient-non-suffix} slot to a boolean, a suitable
-pre-command function, or a shorthand for such a function.  See
-@ref{Pre-commands for Non-Suffixes}.
+pre-command function, or a shorthand for such a function.
+@xref{Pre-commands for Non-Suffixes}.
 
 @item
 The common behavior for the suffixes of a particular prefix can be
@@ -2406,7 +2432,7 @@ Transient itself provides a single class for prefix commands,
 @code{transient-prefix}, but package authors may wish to define specialized
 classes.  Doing so makes it possible to change the behavior of the set
 of prefix commands that use that class, by implementing specialized
-methods for certain generic functions (see @ref{Prefix Methods}).
+methods for certain generic functions (@pxref{Prefix Methods}).
 
 A transient prefix command's object is stored in the @code{transient--prefix}
 property of the command symbol.  While a transient is active, a clone
@@ -2421,7 +2447,7 @@ object should not affect later invocations.
 @item
 All suffix and infix classes derive from @code{transient-suffix}, which in
 turn derives from @code{transient-child}, from which @code{transient-group} also
-derives (see @ref{Group Classes}).
+derives (@pxref{Group Classes}).
 
 @item
 All infix classes derive from the abstract @code{transient-infix} class,
@@ -2429,13 +2455,13 @@ which in turn derives from the @code{transient-suffix} class.
 
 Infixes are a special type of suffixes.  The primary difference is
 that infixes always use the @code{transient--do-stay} pre-command, while
-non-infix suffixes use a variety of pre-commands (see @ref{Transient State}).  Doing that is most easily achieved by using this class,
+non-infix suffixes use a variety of pre-commands (@pxref{Transient State}).  Doing that is most easily achieved by using this class,
 though theoretically it would be possible to define an infix class
 that does not do so.  If you do that then you get to implement many
 methods.
 
 Also, infixes and non-infix suffixes are usually defined using
-different macros (see @ref{Defining Suffix and Infix Commands}).
+different macros (@pxref{Defining Suffix and Infix Commands}).
 
 @item
 Classes used for infix commands that represent arguments should
@@ -2845,7 +2871,7 @@ secondary value, called a ``scope''.  See @code{transient-define-prefix}.
 @code{transient-suffix}, @code{transient-non-suffix} and @code{transient-switch-frame}
 play a part when determining whether the currently active transient
 prefix command remains active/transient when a suffix or arbitrary
-non-suffix command is invoked.  See @ref{Transient State}.
+non-suffix command is invoked.  @xref{Transient State}.
 
 @item
 @code{refresh-suffixes} Normally suffix objects and keymaps are only setup
@@ -2933,7 +2959,7 @@ of the same symbol.
 
 @item
 @code{level} The level of the prefix commands.  The suffix commands whose
-layer is equal or lower are displayed.  See @ref{Enabling and Disabling Suffixes}.
+layer is equal or lower are displayed.  @xref{Enabling and Disabling Suffixes}.
 
 @item
 @code{value} The likely outdated value of the prefix.  Instead of accessing
@@ -2957,15 +2983,15 @@ Here we document most of the slots that are only available for suffix
 objects.  Some slots are shared by suffix and group objects, they are
 documented in @ref{Predicate Slots}.
 
-Also see @ref{Suffix Classes}.
+See also @ref{Suffix Classes}.
 
 @anchor{Slots of @code{transient-child}}
 @subheading Slots of @code{transient-child}
 
 This is the abstract superclass of @code{transient-suffix} and
 @code{transient-group}.  In addition to the slots listed below, this class
-is also where the @code{if*} and @code{inapt-if*} slots (see @ref{Predicate Slots}) and
-the @code{level} slot (see @ref{Enabling and Disabling Suffixes}) are defined.
+is also where the @code{if*} and @code{inapt-if*} slots (@pxref{Predicate Slots}) and
+the @code{level} slot (@pxref{Enabling and Disabling Suffixes}) are defined.
 
 @itemize
 @item
@@ -3018,7 +3044,7 @@ which is useful for alignment purposes.
 @code{command} The command, a symbol.
 
 @item
-@code{transient} Whether to stay transient.  See @ref{Transient State}.
+@code{transient} Whether to stay transient.  @xref{Transient State}.
 
 @item
 @code{format} The format used to display the suffix in the menu buffer.
@@ -3078,6 +3104,15 @@ They are defined here anyway to allow sharing certain methods.
 
 @item
 @code{shortarg} The short argument, e.g., @code{-v}.
+
+@item
+@code{claim-argument} Whether to claim matched arguments exclusively, i.e.,
+whether to prevent other "overlapping" infixes from also matching.
+
+For example, consider the suffix arguments @code{--push-option=known=<val>}
+and @code{--push-option=<arbitrary>}.  Unless the former claims any matched
+value exclusively (and appears before the latter in the menu), the
+latter also matches, which would lead to undesirable behavior.
 
 @item
 @code{value} The value.  Should not be accessed directly.
@@ -3231,14 +3266,14 @@ currently cannot be invoked.
 
 By default these predicates run when the prefix command is invoked,
 but this can be changes, using the @code{refresh-suffixes} prefix slot.
-See @ref{Prefix Slots}.
+@xref{Prefix Slots}.
 
 One more slot is shared between group and suffix classes, @code{level}.  Like
 the slots documented above, it is a predicate, but it is used for a
 different purpose.  The value has to be an integer between 1
 and 7.  @code{level} controls whether a suffix or a group should be
 available depending on user preference.
-See @ref{Enabling and Disabling Suffixes}.
+@xref{Enabling and Disabling Suffixes}.
 
 @node FAQ
 @appendix FAQ

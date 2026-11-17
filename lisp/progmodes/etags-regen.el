@@ -236,8 +236,9 @@ is used in buffers that have no alternative completion configured."
                ;; this mode, skip all functionality.
                (not (or tags-file-name
                         tags-table-list))
-               (file-exists-p (etags-regen--choose-tags-file
-                               (setq proj (project-current)))))
+               (prog1 (setq proj (project-current))
+                 (unless proj (message "No project found")))
+               (file-exists-p (etags-regen--choose-tags-file proj)))
       (message "Found existing tags table, refreshing...")
       (etags-regen--refresh proj))
     (when (and (not (or tags-file-name
@@ -331,7 +332,7 @@ is used in buffers that have no alternative completion configured."
                                      " ")
                           ;; ctags's etags requires '-L' for stdin input.
                           (if ctags-p "-L" "")
-                          (shell-quote-argument (file-local-name tags-file)))))
+                          (shell-quote-argument (funcall fun tags-file)))))
     (with-temp-buffer
       (mapc (lambda (f)
               (insert (funcall fun f) "\n"))

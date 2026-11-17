@@ -1112,6 +1112,18 @@ frame_parm_handler ns_frame_parm_handlers[] =
   ns_set_appearance,
   ns_set_transparent_titlebar,
 #endif
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
+  NULL,
 };
 
 
@@ -1168,7 +1180,7 @@ get_geometry_from_preferences (struct ns_display_info *dpyinfo,
   };
 
   int i;
-  for (i = 0; i < ARRAYELTS (r); ++i)
+  for (i = 0; i < countof (r); ++i)
     {
       if (NILP (Fassq (r[i].tem, parms)))
         {
@@ -2768,7 +2780,7 @@ Internal use only, use `display-monitor-attributes-list' instead.  */)
   if (n_monitors == 0)
     return Qnil;
 
-  monitors = xzalloc (n_monitors * sizeof *monitors);
+  monitors = xcalloc (n_monitors, sizeof *monitors);
 
   for (i = 0; i < [screens count]; ++i)
     {
@@ -3940,8 +3952,6 @@ or nil if the block fails.  */)
     activity_id = [[NSProcessInfo processInfo]
 			     beginActivityWithOptions: activity_options
 					       reason: reason];
-  unblock_input ();
-
   if (!sleep_block_map)
     sleep_block_map = [[NSMutableDictionary alloc] initWithCapacity: 25];
 
@@ -3949,10 +3959,14 @@ or nil if the block fails.  */)
     {
       [sleep_block_map setObject: activity_id
 			  forKey: [NSNumber numberWithInt: ++sleep_block_id]];
+      unblock_input ();
       return make_fixnum (sleep_block_id);
     }
   else
-    return Qnil;
+    {
+      unblock_input ();
+      return Qnil;
+    }
 }
 
 DEFUN ("ns-unblock-system-sleep",

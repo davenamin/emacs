@@ -61,7 +61,8 @@
 		 ("--no-unicode-normalization" "--dir-cache-time" "0s"))
 		(tramp-copyto-args nil)
 		(tramp-moveto-args nil)
-		(tramp-about-args ("--full"))))
+		(tramp-about-args ("--full"))
+		(tramp-connection-timeout 10)))
 
  (add-to-list 'tramp-default-host-alist `(,tramp-rclone-method nil ""))
 
@@ -85,7 +86,6 @@
     (directory-files . tramp-fuse-handle-directory-files)
     (directory-files-and-attributes
      . tramp-handle-directory-files-and-attributes)
-    (dired-compress-file . ignore)
     (dired-uncache . tramp-handle-dired-uncache)
     (exec-path . ignore)
     (expand-file-name . tramp-handle-expand-file-name)
@@ -131,7 +131,6 @@
     (lock-file . tramp-handle-lock-file)
     (make-auto-save-file-name . tramp-handle-make-auto-save-file-name)
     (make-directory . tramp-fuse-handle-make-directory)
-    (make-directory-internal . ignore)
     (make-lock-file-name . tramp-handle-make-lock-file-name)
     (make-nearby-temp-file . tramp-handle-make-nearby-temp-file)
     (make-process . ignore)
@@ -190,9 +189,9 @@ arguments to pass to the OPERATION."
 (defun tramp-rclone-parse-device-names (_ignore)
   "Return a list of (nil host) tuples allowed to access."
   (with-tramp-connection-property nil "rclone-device-names"
-    (tramp-compat-seq-keep
+    (seq-keep
      (lambda (line)
-       (when (string-match (rx bol (group (+ (not blank))) ":" eol) line)
+       (when (string-match (rx bos (group (+ (not blank))) ":" eos) line)
 	 `(nil ,(match-string 1 line))))
      (tramp-process-lines nil tramp-rclone-program "listremotes"))))
 
@@ -366,7 +365,7 @@ file names."
 	  (tramp-rclone-maybe-open-connection v)
 	  ;; TODO: This shall be handled by `expand-file-name'.
 	  (setq localname
-		(replace-regexp-in-string (rx bol ".") "" (or localname "")))
+		(replace-regexp-in-string (rx bos ".") "" (or localname "")))
 	  (format "%s%s" (tramp-fuse-mounted-p v) localname)))
     ;; It is a local file name.
     filename))
@@ -401,17 +400,25 @@ connection if a previous connection has died for some reason."
       (unless (file-directory-p (tramp-fuse-mount-point vec))
 	(make-directory (tramp-fuse-mount-point vec) 'parents))
 
-      ;; Mount.  This command does not return, so we use 0 as
-      ;; DESTINATION of `tramp-call-process'.
+      ;; Mount.  This command does not return, so we run it
+      ;; asynchronously, and kill it if the mount doesn't appear.
       (unless (tramp-fuse-mounted-p vec)
-	(apply
-	 #'tramp-call-process
-	 vec tramp-rclone-program nil 0 nil
-	 "mount" (tramp-fuse-mount-spec vec)
-	 (tramp-fuse-mount-point vec)
-	 (tramp-get-method-parameter vec 'tramp-mount-args))
-	(while (not (file-exists-p (tramp-make-tramp-file-name vec 'noloc)))
-	  (tramp-cleanup-connection vec 'keep-debug 'keep-password))
+	(let ((p (apply
+		  #'tramp-start-process
+		  vec (tramp-get-connection-name vec) nil tramp-rclone-program
+		  "mount" (tramp-fuse-mount-spec vec)
+		  (tramp-fuse-mount-point vec)
+		  (tramp-get-method-parameter vec 'tramp-mount-args))))
+	  ;; We must wait, until the mount is applied.
+	  (with-timeout
+	      ((tramp-get-method-parameter
+		vec 'tramp-connection-timeout tramp-connection-timeout)
+	       (delete-process p)
+	       (tramp-error
+		vec 'remote-file-error
+		"Timeout reached mounting %s using %s" host tramp-rclone-method))
+	    (while (not (tramp-fuse-mounted-p vec))
+	      (sleep-for 0.1))))
 	(add-to-list 'tramp-fuse-mount-points (tramp-file-name-unify vec)))
 
       ;; Mark it as connected.

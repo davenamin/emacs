@@ -315,7 +315,7 @@ get_composition_id (ptrdiff_t charpos, ptrdiff_t bytepos, ptrdiff_t nchars,
 	       : ASIZE (key));
 
   if (GLYPH_LEN_MAX < glyph_len)
-    memory_full (SIZE_MAX);
+    memory_full_up ();
 
   /* Register the composition in composition_table.  */
   cmp = xmalloc (sizeof *cmp);
@@ -1535,12 +1535,21 @@ composition_update_it (struct composition_it *cmp_it, ptrdiff_t charpos, ptrdiff
       glyph = LGSTRING_GLYPH (gstring, cmp_it->from);
       cmp_it->nchars = LGLYPH_TO (glyph) + 1 - from;
       cmp_it->nbytes = 0;
-      cmp_it->width = 0;
+      int column_width = 1;
+      /* Compute column width for GUI frames.  */
+      if (FONT_OBJECT_P (LGSTRING_FONT (gstring))
+	  && cmp_it->parent_it
+	  && cmp_it->parent_it->f)
+	column_width = FRAME_COLUMN_WIDTH (cmp_it->parent_it->f);
+      cmp_it->width = composition_gstring_width (gstring, cmp_it->from,
+						 cmp_it->to, NULL);
+      /* We need width in column units!  */
+      cmp_it->width /= column_width;
+
       for (i = cmp_it->nchars - 1; i >= 0; i--)
 	{
 	  c = XFIXNUM (LGSTRING_CHAR (gstring, from + i));
 	  cmp_it->nbytes += CHAR_BYTES (c);
-	  cmp_it->width += CHARACTER_WIDTH (c);
 	}
     }
   return c;
@@ -1873,8 +1882,7 @@ composition_adjust_point (ptrdiff_t last_pt, ptrdiff_t new_pt)
     return new_pt;
 
   /* Next check the automatic composition.  */
-  if (! find_automatic_composition (new_pt, (ptrdiff_t) -1, (ptrdiff_t) -1,
-				    &beg, &end, &val, Qnil)
+  if (! find_automatic_composition (new_pt, -1, -1, &beg, &end, &val, Qnil)
       || beg == new_pt)
     return new_pt;
   for (i = 0; i < LGSTRING_GLYPH_LEN (val); i++)
@@ -2074,7 +2082,7 @@ See `find-composition' for more details.  */)
 	    && !NILP (BVAR (current_buffer, enable_multibyte_characters)))
 	   || (!NILP (string) && STRING_MULTIBYTE (string)))
 	  && ! inhibit_auto_composition ()
-	  && find_automatic_composition (from, to, (ptrdiff_t) -1,
+	  && find_automatic_composition (from, to, -1,
 					 &start, &end, &gstring, string))
 	return list3 (make_fixnum (start), make_fixnum (end), gstring);
       return Qnil;
@@ -2083,7 +2091,7 @@ See `find-composition' for more details.  */)
     {
       ptrdiff_t s, e;
 
-      if (find_automatic_composition (from, to, (ptrdiff_t) -1,
+      if (find_automatic_composition (from, to, -1,
 				      &s, &e, &gstring, string)
 	  && (e <= fixed_pos ? e > end : s < start))
 	return list3 (make_fixnum (s), make_fixnum (e), gstring);

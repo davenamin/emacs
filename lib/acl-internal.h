@@ -156,14 +156,14 @@ extern int acl_default_nontrivial (acl_t);
 
 /* Return 1 if the given ACL is non-trivial.
    Return 0 if it is trivial, i.e. equivalent to a simple stat() mode.  */
-extern int acl_nontrivial (int count, aclent_t *entries) _GL_ATTRIBUTE_PURE;
+extern int acl_nontrivial (int count, aclent_t const *entries) _GL_ATTRIBUTE_PURE;
 
 #  ifdef ACE_GETACL /* Solaris 10 */
 
 /* Test an ACL retrieved with ACE_GETACL.
    Return 1 if the given ACL, consisting of COUNT entries, is non-trivial.
    Return 0 if it is trivial, i.e. equivalent to a simple stat() mode.  */
-extern int acl_ace_nontrivial (int count, ace_t *entries) _GL_ATTRIBUTE_PURE;
+extern int acl_ace_nontrivial (int count, ace_t const *entries) _GL_ATTRIBUTE_PURE;
 
 /* Definitions for when the built executable is executed on Solaris 10
    (newer version) or Solaris 11.  */
@@ -202,13 +202,13 @@ extern int acl_ace_nontrivial (int count, ace_t *entries) _GL_ATTRIBUTE_PURE;
 
 /* Return 1 if the given ACL is non-trivial.
    Return 0 if it is trivial, i.e. equivalent to a simple stat() mode.  */
-extern int acl_nontrivial (int count, struct acl_entry *entries);
+extern int acl_nontrivial (int count, struct acl_entry const *entries);
 
 #  if HAVE_ACLV_H /* HP-UX >= 11.11 */
 
 /* Return 1 if the given ACL is non-trivial.
    Return 0 if it is trivial, i.e. equivalent to a simple stat() mode.  */
-extern int aclv_nontrivial (int count, struct acl *entries);
+extern int aclv_nontrivial (int count, struct acl const *entries);
 
 #  endif
 
@@ -226,7 +226,7 @@ extern int acl_nontrivial (struct acl *a);
 
 /* Return 1 if the given ACL is non-trivial.
    Return 0 if it is trivial, i.e. equivalent to a simple stat() mode.  */
-extern int acl_nontrivial (int count, struct acl *entries);
+extern int acl_nontrivial (int count, struct acl const *entries);
 
 # endif
 
@@ -249,17 +249,19 @@ struct permission_context {
 
 # elif defined GETACL /* Solaris, Cygwin < 2.5 */
   int count;
-  aclent_t *entries;
+  aclent_t *entries
+    _GL_ATTRIBUTE_COUNTED_BY (count);
 #  ifdef ACE_GETACL
   int ace_count;
-  ace_t *ace_entries;
+  ace_t *ace_entries
+    _GL_ATTRIBUTE_COUNTED_BY (ace_count);
 #  endif
 
 # elif HAVE_GETACL /* HP-UX */
-  struct acl_entry entries[NACLENTRIES];
+  struct acl_entry entries[NACLENTRIES] /* COUNTED_BY (count) */;
   int count;
 #  if HAVE_ACLV_H
-  struct acl aclv_entries[NACLVENTRIES];
+  struct acl aclv_entries[NACLVENTRIES] /* COUNTED_BY (aclv_count) */;
   int aclv_count;
 #  endif
 
@@ -268,7 +270,7 @@ struct permission_context {
   bool have_u;
 
 # elif HAVE_ACLSORT /* NonStop Kernel */
-  struct acl entries[NACLENTRIES];
+  struct acl entries[NACLENTRIES] /* COUNTED_BY (count) */;
   int count;
 
 # endif

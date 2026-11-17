@@ -110,6 +110,22 @@ static unsigned long image_alloc_image_color (struct frame *, struct image *,
 # define DONT_CREATE_TRANSFORMED_IMAGEMAGICK_IMAGE
 #endif
 
+struct canvas
+{
+  /* Linked list of canvases, see `canvas_list'.  */
+  struct canvas *next;
+  /* Memory buffer in ARGB32 format.  The same format on all platforms!  */
+  uint32_t *data;
+  /* Incremented if the canvas should be redrawn.  The value is always
+     greater than 0.  */
+  uint32_t refresh;
+  /* Dimension of the canvas.  */
+  int width, height;
+};
+
+static void canvas_prepare_for_display (struct frame *f, struct image *img);
+static void canvas_free_unused (void);
+
 #ifdef HAVE_NTGUI
 
 /* We need (or want) w32.h only when we're _not_ compiling for Cygwin.  */
@@ -247,6 +263,7 @@ static unsigned long *colors_in_color_table (int *n);
 
 #ifdef HAVE_NTGUI
 static HBITMAP w32_create_pixmap_from_bitmap_data (int, int, char *);
+static void XPutPixel (XImage *, int, int, COLORREF);
 
 #endif
 
@@ -461,7 +478,8 @@ x_bitmap_stipple (struct frame *f, Pixmap pixmap)
 ptrdiff_t
 image_bitmap_pixmap (struct frame *f, ptrdiff_t id)
 {
-  /* HAVE_NTGUI needs the explicit cast here.  */
+  /* HAVE_NTGUI needs the explicit cast here because .pixmap is a handle,
+     i.e., a pointer to a struct (see w32gui.h), not an integer.  */
   return (ptrdiff_t) FRAME_DISPLAY_INFO (f)->bitmaps[id - 1].pixmap;
 }
 #endif
@@ -1903,6 +1921,13 @@ prepare_image_for_display (struct frame *f, struct image *img)
       unblock_input ();
     }
 #endif
+
+  /* Update image pixmap from canvas pixel buffer if refresh counter has
+     been updated.  For canvases the refresh counter is always >= 1.  */
+  if (img->refresh
+      && EQ (image_spec_value (img->spec, QCtype, NULL), Qcanvas)
+      && img->refresh != ((struct canvas *) XFIXNUMPTR (img->lisp_data))->refresh)
+    canvas_prepare_for_display (f, img);
 }
 
 
@@ -2286,6 +2311,8 @@ filter_image_spec (Lisp_Object spec)
 {
   Lisp_Object out = Qnil;
 
+  bool is_canvas = EQ (image_spec_value (spec, QCtype, NULL), Qcanvas);
+
   /* Skip past the `image' element.  */
   if (CONSP (spec))
     spec = XCDR (spec);
@@ -2300,10 +2327,14 @@ filter_image_spec (Lisp_Object spec)
 	  spec = XCDR (spec);
 
 	  /* Some animation-related data doesn't affect display, but
-	     breaks the image cache.  Filter those out.  */
-	  if (!(EQ (key, QCanimate_buffer)
-		|| EQ (key, QCanimate_tardiness)
-		|| EQ (key, QCanimate_position)))
+	     breaks the image cache.  Furthermore for canvases do not
+	     check the data for equality, such that data can be changed
+	     via mutation to refresh the canvas.  Filter these keys out.
+	  */
+	  if (!(is_canvas ? EQ (key, QCdata) :
+		(EQ (key, QCanimate_buffer)
+		 || EQ (key, QCanimate_tardiness)
+		 || EQ (key, QCanimate_position))))
 	    {
 	      out = Fcons (value, out);
 	      out = Fcons (key, out);
@@ -2494,6 +2525,8 @@ but the image is still displayed.  */)
   /* Also clear the animation caches.  */
   image_prune_animation_caches (true);
 
+  canvas_free_unused ();
+
   return Qnil;
 }
 
@@ -2505,23 +2538,23 @@ image_size_in_bytes (struct image *img)
 #if defined USE_CAIRO
   Emacs_Pixmap pm = img->pixmap;
   if (pm)
-    size += pm->height * pm->bytes_per_line;
+    size += pm->height * (ptrdiff_t) {pm->bytes_per_line};
   Emacs_Pixmap msk = img->mask;
   if (msk)
-    size += msk->height * msk->bytes_per_line;
+    size += msk->height * (ptrdiff_t) {msk->bytes_per_line};
 
 #elif defined HAVE_X_WINDOWS || defined HAVE_ANDROID
   /* Use a nominal depth of 24 and a bpp of 32 for pixmap and 1 bpp
      for mask, to avoid having to query the server. */
   if (img->pixmap != NO_PIXMAP)
-    size += img->width * img->height * 4;
+    size += img->width * (ptrdiff_t) {img->height} * 4;
   if (img->mask != NO_PIXMAP)
-    size += img->width * img->height / 8;
+    size += img->width * (ptrdiff_t) {img->height} / 8;
 
   if (img->ximg && img->ximg->data)
-    size += img->ximg->bytes_per_line * img->ximg->height;
+    size += img->ximg->bytes_per_line * (ptrdiff_t) {img->ximg->height};
   if (img->mask_img && img->mask_img->data)
-    size += img->mask_img->bytes_per_line * img->mask_img->height;
+    size += img->mask_img->bytes_per_line * (ptrdiff_t) {img->mask_img->height};
 
 #elif defined HAVE_NS
   if (img->pixmap)
@@ -3059,8 +3092,6 @@ image_set_transform (struct frame *f, struct image *img)
     { 0, 0, 1 },
   };
 
-  img->original_width = img->width;
-  img->original_height = img->height;
   img->use_bilinear_filtering = false;
 
   memcpy (&img->transform, identity, sizeof identity);
@@ -3084,10 +3115,6 @@ image_set_transform (struct frame *f, struct image *img)
 # if !defined USE_CAIRO && defined HAVE_XRENDER
   if (!img->picture)
     return;
-
-  /* Store the original dimensions as we'll overwrite them later.  */
-  img->original_width = img->width;
-  img->original_height = img->height;
 # endif
 
   /* Determine size.  */
@@ -3390,8 +3417,16 @@ image_set_transform (struct frame *f, struct image *img)
 			      matrix[1][1], matrix[2][0], matrix[2][1]};
   cairo_pattern_t *pattern = cairo_pattern_create_rgb (0, 0, 0);
   cairo_pattern_set_matrix (pattern, &cr_matrix);
-  cairo_pattern_set_filter (pattern, smoothing
-                            ? CAIRO_FILTER_BEST : CAIRO_FILTER_NEAREST);
+
+  /* Performance degrades with CAIRO_FILTER_BEST when using canvas, and possibly
+     we get HW acceleration from CAIRO_FILTER_GOOD */
+  int cairo_filter;
+  if (EQ (image_spec_value (img->spec, QCtype, NULL), Qcanvas))
+    cairo_filter = smoothing ? CAIRO_FILTER_GOOD : CAIRO_FILTER_NEAREST;
+  else
+    cairo_filter = smoothing ? CAIRO_FILTER_BEST : CAIRO_FILTER_NEAREST;
+  cairo_pattern_set_filter (pattern, cairo_filter);
+
   /* Dummy solid color pattern just to record pattern matrix.  */
   img->cr_data = pattern;
 # elif defined (HAVE_XRENDER)
@@ -3588,7 +3623,7 @@ lookup_image (struct frame *f, Lisp_Object spec, int face_id)
       img->face_font_size = font_size;
       img->face_font_height = face->font->height;
       img->face_font_width = face->font->average_width;
-      size_t len = strlen (font_family) + 1;
+      ptrdiff_t len = strlen (font_family) + 1;
       img->face_font_family = xmalloc (len);
       memcpy (img->face_font_family, font_family, len);
       img->load_failed_p = ! img->type->load_img (f, img);
@@ -3649,6 +3684,10 @@ lookup_image (struct frame *f, Lisp_Object spec, int face_id)
 		  img->background_valid = 1;
 		}
 	    }
+
+	  /* Store the original width and height before transforming the image.  */
+	  img->original_width = img->width;
+	  img->original_height = img->height;
 
 	  /* Do image transformations and compute masks, unless we
 	     don't have the image yet.  */
@@ -4175,16 +4214,16 @@ image_create_x_image_and_pixmap_1 (struct frame *f, int width, int height, int d
       /* bmiColors is a variable-length array declared by w32api
 	 headers as bmiColors[1], which triggers a warning under
 	 -Warray-bounds; shut that up.  */
-#     if GNUC_PREREQ (4, 4, 0)
-#      pragma GCC push_options
+#     if GNUC_PREREQ (4, 6, 0)
+#      pragma GCC diagnostic push
 #      pragma GCC diagnostic ignored "-Warray-bounds"
 #     endif
       (*pimg)->info.bmiColors[1].rgbBlue = 255;
       (*pimg)->info.bmiColors[1].rgbGreen = 255;
       (*pimg)->info.bmiColors[1].rgbRed = 255;
       (*pimg)->info.bmiColors[1].rgbReserved = 0;
-#     if GNUC_PREREQ (4, 4, 0)
-#      pragma GCC pop_options
+#     if GNUC_PREREQ (4, 6, 0)
+#      pragma GCC diagnostic pop
 #     endif
     }
 
@@ -4997,7 +5036,7 @@ Create_Pixmap_From_Bitmap_Data (struct frame *f, struct image *img, char *data,
 {
 #ifdef USE_CAIRO
   Emacs_Color fgbg[] = {{.pixel = fg}, {.pixel = bg}};
-  FRAME_TERMINAL (f)->query_colors (f, fgbg, ARRAYELTS (fgbg));
+  FRAME_TERMINAL (f)->query_colors (f, fgbg, countof (fgbg));
   fg = lookup_rgb_color (f, fgbg[0].red, fgbg[0].green, fgbg[0].blue);
   bg = lookup_rgb_color (f, fgbg[1].red, fgbg[1].green, fgbg[1].blue);
   img->pixmap
@@ -5436,7 +5475,461 @@ xbm_load (struct frame *f, struct image *img)
 
   return success_p;
 }
+
+/***********************************************************************
+			      Canvas
+ ***********************************************************************/
 
+/* Indices of image specification fields in canvas_format, below.  */
+
+enum canvas_keyword_index
+{
+  CANVAS_TYPE,
+  CANVAS_ID,
+  CANVAS_FILE,
+  CANVAS_DATA,
+  CANVAS_WIDTH,
+  CANVAS_HEIGHT,
+  CANVAS_ASCENT,
+  CANVAS_MARGIN,
+  CANVAS_RELIEF,
+  CANVAS_LAST
+};
+
+/* Vector of image_keyword structures describing the format
+   of valid user-defined image specifications.  */
+
+static const struct image_keyword canvas_format[CANVAS_LAST] =
+{
+  {":type",		IMAGE_SYMBOL_VALUE,			1},
+  {":id",		IMAGE_SYMBOL_VALUE,			1},
+  {":file",		IMAGE_STRING_VALUE,			0},
+  {":data",		IMAGE_DONT_CHECK_VALUE_TYPE,		0},
+  {":data-width",	IMAGE_POSITIVE_INTEGER_VALUE,		1},
+  {":data-height",	IMAGE_POSITIVE_INTEGER_VALUE,		1},
+  {":ascent",		IMAGE_ASCENT_VALUE,			0},
+  {":margin",		IMAGE_NON_NEGATIVE_INTEGER_VALUE_OR_PAIR, 0},
+  {":relief",		IMAGE_INTEGER_VALUE,			0},
+};
+
+/* Weak hash map associating canvas image specs with the canvas objects.
+
+   As long as a canvas image spec object is alive, the canvas object
+   backing it, will stay alive.  As soon as the GC runs and frees
+   unreferenced canvas image specs, the specs are are also removed from
+   the weak canvas_map.  Then canvas_free_unused will check the
+   canvas_map and free the backing canvas objects.   */
+
+static Lisp_Object canvas_map;
+
+/* Linked list of all canvas objects.  */
+
+static struct canvas* canvas_list = 0;
+
+/* Parse canvas specification OBJECT and return true if valid.  */
+
+static bool
+canvas_parse (Lisp_Object object, struct image_keyword *fmt)
+{
+  memcpy (fmt, canvas_format, sizeof canvas_format);
+
+  /* Check that only one of :data or :file is present.  */
+  if (!parse_image_spec (object, fmt, CANVAS_LAST, Qcanvas)
+      || fmt[CANVAS_FILE].count + fmt[CANVAS_DATA].count > 1)
+    return false;
+
+  ptrdiff_t w = XFIXNAT (fmt[CANVAS_WIDTH].value);
+  ptrdiff_t h = XFIXNAT (fmt[CANVAS_HEIGHT].value);
+
+  /* Check that w*h*4 does not overflow */
+  return w <= INT_MAX / 4 / h;
+}
+
+/* Return true if OBJECT is a valid canvas image specification.  */
+
+static bool
+canvas_image_p (Lisp_Object object)
+{
+  struct image_keyword fmt[CANVAS_LAST];
+  return canvas_parse (object, fmt);
+}
+
+/* Clear canvas list.  All canvases which are not referenced anymore in
+   the weak hash table canvas_map are freed.  */
+
+static void
+canvas_free_unused (void)
+{
+  /* Mark all referenced canvases as used (negative width).  */
+  DOHASH (XHASH_TABLE (canvas_map), k, v)
+    ((struct canvas *)XFIXNUMPTR (v))->width *= -1;
+
+  /* Free unreferenced canvases and remove them from the list.  */
+  struct canvas **p = &canvas_list;
+  while (*p)
+    {
+      struct canvas *c = *p;
+      if (c->width < 0)
+        {
+	  p = &c->next;
+	  c->width *= -1;
+	}
+      else
+	{
+	  *p = c->next;
+	  xfree (c->data);
+	  xfree (c);
+        }
+    }
+}
+
+/* Copy pixel data into canvas C from a parsed image keyword array FMT.
+
+   :data must be an unibyte string of exactly 4*WIDTH*HEIGHT bytes, or a
+   vector of size WIDTH*HEIGHT in row-major order, where each element is
+   a 32 bit integer.  :file names a binary file with size 4*WIDTH*HEIGHT
+   bytes.  */
+
+static void
+canvas_apply_data (struct canvas *c, struct image_keyword *fmt)
+{
+  ptrdiff_t expected_size = (ptrdiff_t) {c->width} * c->height;
+
+  Lisp_Object data = fmt[CANVAS_DATA].value;
+  Lisp_Object file = fmt[CANVAS_FILE].value;
+
+  if (STRINGP (data)) /* Unibyte string data in ARGB32 format.  */
+    {
+      if (STRING_MULTIBYTE (data))
+	{
+          image_error ("Canvas :data string must be unibyte");
+	  return;
+	}
+
+      if (SBYTES (data) != 4 * expected_size)
+	{
+          image_error ("Canvas :data size mismatch");
+	  return;
+	}
+
+      const uint32_t *buf = (const uint32_t *) SDATA (data);
+#ifdef WORDS_BIGENDIAN
+      for (ptrdiff_t i = 0; i < expected_size; ++i)
+	c->data[i] = bswap_32 (buf[i]);
+#else
+      for (ptrdiff_t i = 0; i < expected_size; ++i)
+	c->data[i] = buf[i];
+#endif
+    }
+  else if (VECTORP (data)) /* Vector of ARGB32 integers.  */
+    {
+      if (ASIZE (data) != expected_size)
+	{
+	  image_error ("Canvas :data size mismatch");
+	  return;
+	}
+
+      for (ptrdiff_t i = 0; i < expected_size; ++i)
+	{
+          Lisp_Object pixel = AREF (data, i);
+	  uint32_t pix;
+	  intmax_t bigpix;
+	  if (FIXNUMP (pixel)
+	      ? ckd_add (&pix, XFIXNUM (pixel), 0)
+	      : (UINT32_MAX <= MOST_POSITIVE_FIXNUM || !BIGNUMP (pixel)
+		 || ! (bigpix = bignum_to_intmax (pixel))
+		 || ckd_add (&pix, bigpix, 0)))
+	    {
+	      image_error ("Expected 0 <= datum < 2**32 "
+			   "in the canvas :data vector");
+	      return;
+	    }
+	  c->data[i] = pix;
+	}
+    }
+  else if (STRINGP (file)) /* Binary file with ARGB32 data.  */
+    {
+      image_fd fd;
+      Lisp_Object found = image_find_image_fd (file, &fd);
+      if (!STRINGP (found))
+	{
+	  image_error ("Cannot open image :file for canvas %s", file);
+	  return;
+	}
+
+      ptrdiff_t nbytes;
+      uint32_t *buf = (uint32_t *) slurp_file (fd, &nbytes);
+      if (!buf)
+	{
+	  image_error ("Cannot read image :file for canvas %s", file);
+	  return;
+	}
+
+      if (nbytes != 4 * expected_size)
+	{
+	  image_error ("Canvas :file size mismatch for %s", file);
+	  xfree (buf);
+	  return;
+	}
+
+#ifdef WORDS_BIGENDIAN
+      for (ptrdiff_t i = 0; i < expected_size; ++i)
+	c->data[i] = bswap_32 (buf[i]);
+#else
+      for (ptrdiff_t i = 0; i < expected_size; ++i)
+	c->data[i] = buf[i];
+#endif
+
+      xfree (buf);
+    }
+}
+
+/* Get canvas object for IMAGE specification.  Returns NULL on error.  */
+
+static struct canvas*
+canvas_get (Lisp_Object image, struct image_keyword *fmt)
+{
+  if (!canvas_parse (image, fmt))
+    {
+      image_error ("Not a canvas image specification");
+      return NULL;
+    }
+
+  Lisp_Object canvas_ptr = Fgethash (image, canvas_map, Qnil);
+  struct canvas* c = NILP (canvas_ptr) ? 0 : XFIXNUMPTR (canvas_ptr);
+  int width = XFIXNAT (fmt[CANVAS_WIDTH].value),
+      height = XFIXNAT (fmt[CANVAS_HEIGHT].value);
+
+  if (!c)
+    {
+      /* Free old canvases now, when allocating a new one, to keep
+         memory usage low.  */
+      canvas_free_unused ();
+
+      c = xzalloc (sizeof (struct canvas));
+      c->refresh = 2; /* 2 in order to enforce first refresh.  */
+      c->width = width;
+      c->height = height;
+      c->data = xzalloc (4 * width * height);
+
+      /* Register the canvas in the list and the map.  */
+      c->next = canvas_list;
+      canvas_list = c;
+      Fputhash (image, make_pointer_integer (c), canvas_map);
+
+      /* Initialize pixel buffer from :data or :file if supplied.  */
+      canvas_apply_data (c, fmt);
+    }
+  else if (c->width != width || c->height != height)
+    {
+      /* Resize canvas.  */
+      c->width = width;
+      c->height = height;
+      c->data = xrealloc (c->data, 4 * width * height);
+      memset (c->data, 0, 4 * width * height);
+
+      /* Initialize pixel buffer from :data or :file if supplied.  */
+      canvas_apply_data (c, fmt);
+    }
+
+  return c;
+}
+
+/* Create canvas IMG in frame F.  Value is true if successful.  */
+
+static bool
+canvas_load (struct frame *f, struct image *img)
+{
+  struct image_keyword fmt[CANVAS_LAST];
+  struct canvas* c = canvas_get (img->spec, fmt);
+
+  if (!c)
+    return false;
+
+  img->lisp_data = make_pointer_integer (c);
+  img->refresh = 1; /* refresh is always > 0 for canvas images */
+  img->width = c->width;
+  img->height = c->height;
+  img->background_valid = 1;
+  img->background_transparent_valid = 1;
+
+  Emacs_Pix_Container ximg;
+  if (!image_create_x_image_and_pixmap (f, img, c->width, c->height, 0, &ximg, 0))
+    return false;
+
+  image_put_x_image (f, img, ximg, 0);
+
+  return true;
+}
+
+/* Prepare image IMG from canvas for display.  */
+
+static void
+canvas_prepare_for_display (struct frame *f, struct image *img)
+{
+  struct canvas *c = XFIXNUMPTR (img->lisp_data);
+  img->refresh = c->refresh;
+  uint32_t *src = c->data;
+  int width = c->width, height = c->height;
+
+  /* If canvas has been resized in the meantime and the image is stale,
+     mark frame as garbaged and wait for redisplay.  See also
+     uncache_image which handles stale images.  */
+  if (width != img->original_width || height != img->original_height)
+    {
+      SET_FRAME_GARBAGED (f);
+      return;
+    }
+
+  block_input ();
+
+#ifdef USE_CAIRO
+  /* Cairo: Optimized canvas reloading.  Reuse the existing Cairo surface.  */
+  cairo_surface_t* surface;
+  if (img->cr_data
+      /* prepare_image_for_display ensures that cr_data is a surface pattern */
+      && cairo_pattern_get_type (img->cr_data) == CAIRO_PATTERN_TYPE_SURFACE
+      && !cairo_pattern_get_surface (img->cr_data, &surface))
+    {
+      cairo_surface_flush (surface);
+      int stride = cairo_image_surface_get_stride (surface);
+      unsigned char *dst = cairo_image_surface_get_data (surface);
+      /* Alpha channel is preserved here.  Potentially preserve it when
+	 drawing the image in x_draw_image_glyph_string?  */
+      if (stride == 4 * width) /* Fast path */
+	{
+	  memcpy (dst, src, stride * height);
+	}
+      else
+	{
+	  for (int y = 0; y < height; ++y)
+	    memcpy (dst + (y * stride), src + (y * width), 4 * width);
+	}
+      cairo_surface_mark_dirty (surface);
+    }
+#elif defined HAVE_X_WINDOWS
+  /* X11: Optimized canvas reloading.  Reuse the existing pixmap.  */
+  int depth = FRAME_DISPLAY_INFO (f)->n_planes;
+  XImage *ximg = XCreateImage (FRAME_X_DISPLAY (f), FRAME_X_VISUAL (f),
+			       depth, ZPixmap, 0, NULL, width, height,
+			       depth > 16 ? 32 : depth > 8 ? 16 : 8, 0);
+  if (ximg)
+    {
+      ximg->data = xmalloc (ximg->bytes_per_line * height);
+      for (int y = 0; y < height; ++y)
+	{
+	  for (int x = 0; x < width; ++x)
+	    {
+	      uint32_t c = src[y * width + x],
+		       r = (c >> 16) & 255,
+		       g = (c >>  8) & 255,
+		       b = c         & 255;
+	      PUT_PIXEL (ximg, x, y, lookup_rgb_color (f, r << 8, g << 8, b << 8));
+	    }
+	}
+      gui_put_x_image (f, ximg, img->pixmap, width, height);
+      x_destroy_x_image (ximg);
+    }
+#elif defined HAVE_ANDROID
+  /* Android: Optimized canvas reloading.  Reuse the existing pixmap.  */
+  struct android_image *ximg = android_create_image (FRAME_DISPLAY_INFO (f)->n_planes,
+						     ANDROID_Z_PIXMAP, NULL, width, height);
+  if (ximg)
+    {
+      ximg->data = xmalloc (ximg->bytes_per_line * height);
+      for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+          PUT_PIXEL (ximg, x, y, src[y * width + x] & 0x00FFFFFF);
+      gui_put_x_image (f, ximg, img->pixmap, width, height);
+      image_destroy_x_image (ximg);
+    }
+#elif defined HAVE_NS
+  /* NS: Recreates and fills the pixmap.  This is a workaround, ideally
+     we'd like to recache the NSImage instead.  */
+  img->pixmap = ns_image_reset(img->pixmap, width, height);
+  for (int y = 0; y < height; ++y)
+    for (int x = 0; x < width; ++x)
+      PUT_PIXEL (img->pixmap, x, y, src[y * width + x]);
+#else
+  /* Platform independent canvas reloading.  Less efficient, since it
+     recreates images and pixmaps.  */
+  FRAME_TERMINAL (f)->free_pixmap (f, img->pixmap);
+  img->pixmap = NO_PIXMAP;
+  Emacs_Pix_Container ximg;
+  if (image_create_x_image_and_pixmap (f, img, width, height, 0, &ximg, 0))
+    {
+      for (int y = 0; y < height; ++y)
+        for (int x = 0; x < width; ++x)
+          {
+            uint32_t c = src[y * width + x],
+		     r = (c >> 16) & 255,
+		     g = (c >>  8) & 255,
+		     b = c        & 255;
+            PUT_PIXEL (ximg, x, y, lookup_rgb_color (f, r << 8, g << 8, b << 8));
+          }
+      image_put_x_image (f, img, ximg, 0);
+    }
+#endif
+
+  unblock_input ();
+}
+
+/* Access canvas buffer.  Note that the pixel buffer
+ is valid only as long as its dimensions have not been changed.*/
+
+uint32_t *
+canvas_data (Lisp_Object image)
+{
+  struct image_keyword fmt[CANVAS_LAST];
+  struct canvas* c = canvas_get (image, fmt);
+
+  if (!c)
+    error ("Not a canvas");
+
+  return c->data;
+}
+
+DEFUN ("canvas-refresh", Fcanvas_refresh, Scanvas_refresh, 1, 2, 0,
+       doc: /* Refresh canvas IMAGE and update it on screen.
+
+If RELOAD-DATA is non-nil, reload the :data or :file from the image
+specification before redrawing the canvas.
+
+When `canvas-refresh' is called from a timer or a command, `redisplay'
+will be called implicitly after the timer or command.  `redisplay' must
+be called explicitly after `canvas-refresh' only when the redraw should
+happen from a loop.  See Info node `(elisp) Canvas Images' for
+examples.  */)
+  (Lisp_Object image, Lisp_Object reload_data)
+{
+  struct image_keyword fmt[CANVAS_LAST];
+  struct canvas* c = canvas_get (image, fmt);
+
+  if (!c)
+    error ("Not a canvas");
+
+  /* Reload :data or :file from the image specification.  */
+  if (!NILP (reload_data))
+    canvas_apply_data (c, fmt);
+
+  /* Increment refresh counter; reset to one on overflow, since the
+     refresh counter must always be greater than zero.  */
+  if (++c->refresh == 0)
+    c->refresh = 1;
+
+#ifdef HAVE_WINDOW_SYSTEM
+  /* Redraw all image glyphs.  */
+  block_input ();
+  redraw_image_glyphs (image);
+  /* We do not call `redisplay' or `flush_frame' here.  This means the
+     canvas images are not updated immediately on screen, since the
+     double buffer won't be flipped immediately.  The next call to
+     `redisplay' will flip the double buffer.  */
+  unblock_input ();
+#endif
+
+  return Qnil;
+}
 
 
 /***********************************************************************
@@ -5564,7 +6057,7 @@ static struct xpm_cached_color **xpm_color_cache;
 static void
 xpm_init_color_cache (struct frame *f, XpmAttributes *attrs)
 {
-  size_t nbytes = XPM_COLOR_CACHE_BUCKETS * sizeof *xpm_color_cache;
+  ptrdiff_t nbytes = XPM_COLOR_CACHE_BUCKETS * sizeof *xpm_color_cache;
   xpm_color_cache = xzalloc (nbytes);
   init_color_table ();
 
@@ -5624,8 +6117,8 @@ xpm_cache_color (struct frame *f, char *color_name, XColor *color, int bucket)
   if (bucket < 0)
     bucket = xpm_color_bucket (color_name);
 
-  size_t len = strlen (color_name) + 1;
-  size_t nbytes = FLEXSIZEOF (struct xpm_cached_color, name, len);
+  ptrdiff_t len = strlen (color_name) + 1;
+  ptrdiff_t nbytes = FLEXSIZEOF (struct xpm_cached_color, name, len);
   struct xpm_cached_color *p = xmalloc (nbytes);
   memcpy (p->name, color_name, len);
   p->color = *color;
@@ -6324,7 +6817,7 @@ static const char xpm_color_key_strings[][4] = {"s", "m", "g4", "g", "c"};
 static int
 xpm_str_to_color_key (const char *s)
 {
-  for (int i = 0; i < ARRAYELTS (xpm_color_key_strings); i++)
+  for (int i = 0; i < countof (xpm_color_key_strings); i++)
     if (strcmp (xpm_color_key_strings[i], s) == 0)
       return i;
   return -1;
@@ -6976,7 +7469,7 @@ image_to_emacs_colors (struct frame *f, struct image *img, bool rgb_p)
   if (ckd_mul (&nbytes, sizeof *colors, img->width)
       || ckd_mul (&nbytes, nbytes, img->height)
       || SIZE_MAX < nbytes)
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   colors = xmalloc (nbytes);
 
   /* Get the X image or create a memory device context for IMG. */
@@ -7126,7 +7619,7 @@ image_detect_edges (struct frame *f, struct image *img,
 
   if (ckd_mul (&nbytes, sizeof *new, img->width)
       || ckd_mul (&nbytes, nbytes, img->height))
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   new = xmalloc (nbytes);
 
   for (y = 0; y < img->height; ++y)
@@ -7761,7 +8254,7 @@ pbm_load (struct frame *f, struct image *img)
 #ifdef USE_CAIRO
       {
 	Emacs_Color fgbg[] = {{.pixel = fg}, {.pixel = bg}};
-	FRAME_TERMINAL (f)->query_colors (f, fgbg, ARRAYELTS (fgbg));
+	FRAME_TERMINAL (f)->query_colors (f, fgbg, countof (fgbg));
 	fg = lookup_rgb_color (f, fgbg[0].red, fgbg[0].green, fgbg[0].blue);
 	bg = lookup_rgb_color (f, fgbg[1].red, fgbg[1].green, fgbg[1].blue);
       }
@@ -7804,19 +8297,22 @@ pbm_load (struct frame *f, struct image *img)
     }
   else
     {
-      int expected_size = height * width;
       bool two_byte = 255 < max_color_idx;
-      if (two_byte)
-	expected_size *= 2;
-      if (type == PBM_COLOR)
-	expected_size *= 3;
 
-      if (raw_p && p + expected_size > end)
+      if (raw_p)
 	{
-	  image_destroy_x_image (ximg);
-	  image_clear_image (f, img);
-	  image_error ("Invalid image size in image `%s'", img->spec);
-	  goto error;
+	  ptrdiff_t expected_size;
+	  bool bad = ckd_mul (&expected_size, height, width);
+	  bad |= ckd_mul (&expected_size, expected_size,
+			  (two_byte ? 2 : 1) * (type == PBM_COLOR ? 3 : 1));
+	  bad |= end - p < expected_size;
+	  if (bad)
+	    {
+	      image_destroy_x_image (ximg);
+	      image_clear_image (f, img);
+	      image_error ("Invalid image size in image `%s'", img->spec);
+	      goto error;
+	    }
 	}
 
       for (y = 0; y < height; ++y)
@@ -7871,7 +8367,7 @@ pbm_load (struct frame *f, struct image *img)
 
   if (NILP (image_spec_value (img->spec, QCbackground, NULL)))
     /* Casting avoids a GCC warning.  */
-    IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+    IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
   /* Put ximg into the image.  */
   image_put_x_image (f, img, ximg, 0);
@@ -8521,7 +9017,7 @@ png_load_body (struct frame *f, struct image *img, struct png_load_context *c)
   /* Allocate memory for the image.  */
   if (ckd_mul (&nbytes, row_bytes, sizeof *pixels)
       || ckd_mul (&nbytes, nbytes, height))
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   c->pixels = pixels = xmalloc (nbytes);
   c->rows = rows = xmalloc (height * sizeof *rows);
   for (i = 0; i < height; ++i)
@@ -8621,9 +9117,8 @@ png_load_body (struct frame *f, struct image *img, struct png_load_context *c)
   img->width = width;
   img->height = height;
 
-  /* Maybe fill in the background field while we have ximg handy.
-     Casting avoids a GCC warning.  */
-  IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+  /* Maybe fill in the background field while we have ximg handy.  */
+  IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
   /* Put ximg into the image.  */
   image_put_x_image (f, img, ximg, 0);
@@ -8633,7 +9128,7 @@ png_load_body (struct frame *f, struct image *img, struct png_load_context *c)
     {
       /* Fill in the background_transparent field while we have the
 	 mask handy.  Casting avoids a GCC warning.  */
-      image_background_transparent (img, f, (Emacs_Pix_Context)mask_img);
+      image_background_transparent (img, f, PIX_CONTAINER_TO_CONTEXT (mask_img));
 
       image_put_x_image (f, img, mask_img, 1);
     }
@@ -9200,8 +9695,7 @@ jpeg_load_body (struct frame *f, struct image *img,
 
   /* Maybe fill in the background field while we have ximg handy. */
   if (NILP (image_spec_value (img->spec, QCbackground, NULL)))
-    /* Casting avoids a GCC warning.  */
-    IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+    IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
   /* Put ximg into the image.  */
   image_put_x_image (f, img, ximg, 0);
@@ -9641,8 +10135,7 @@ tiff_load (struct frame *f, struct image *img)
 
   /* Maybe fill in the background field while we have ximg handy. */
   if (NILP (image_spec_value (img->spec, QCbackground, NULL)))
-    /* Casting avoids a GCC warning on W32.  */
-    IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+    IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
   /* Put ximg into the image.  */
   image_put_x_image (f, img, ximg, 0);
@@ -10364,8 +10857,7 @@ gif_load (struct frame *f, struct image *img)
 
   /* Maybe fill in the background field while we have ximg handy. */
   if (NILP (image_spec_value (img->spec, QCbackground, NULL)))
-    /* Casting avoids a GCC warning.  */
-    IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+    IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
   /* Put ximg into the image.  */
   image_put_x_image (f, img, ximg, 0);
@@ -12549,7 +13041,7 @@ svg_load_image (struct frame *f, struct image *img, char *contents,
 
     /* Maybe fill in the background field while we have ximg handy.
        Casting avoids a GCC warning.  */
-    IMAGE_BACKGROUND (img, f, (Emacs_Pix_Context)ximg);
+    IMAGE_BACKGROUND (img, f, PIX_CONTAINER_TO_CONTEXT (ximg));
 
     /* Put ximg into the image.  */
     image_put_x_image (f, img, ximg, 0);
@@ -13013,6 +13505,7 @@ static struct image_type const image_types[] =
 #endif
  { SYMBOL_INDEX (Qxbm), xbm_image_p, xbm_load, image_clear_image },
  { SYMBOL_INDEX (Qpbm), pbm_image_p, pbm_load, image_clear_image },
+ { SYMBOL_INDEX (Qcanvas), canvas_image_p, canvas_load, image_clear_image },
 };
 
 #if HAVE_NATIVE_IMAGE_API
@@ -13032,7 +13525,7 @@ lookup_image_type (Lisp_Object type)
     return &native_image_type;
 #endif
 
-  for (int i = 0; i < ARRAYELTS (image_types); i++)
+  for (int i = 0; i < countof (image_types); i++)
     {
       struct image_type const *r = &image_types[i];
       if (EQ (type, builtin_lisp_symbol (r->type)))
@@ -13162,6 +13655,13 @@ non-numeric, there is no explicit limit on the size of images.  */);
 #endif
 	);
 #endif
+
+  DEFSYM (Qcanvas, "canvas");
+  add_image_type (Qcanvas);
+
+  canvas_map = make_hash_table (&hashtest_eq, DEFAULT_HASH_SIZE, Weak_Key);
+  staticpro (&canvas_map);
+  defsubr (&Scanvas_refresh);
 
   DEFSYM (Qpbm, "pbm");
   add_image_type (Qpbm);

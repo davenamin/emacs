@@ -710,9 +710,9 @@ the {...} holes that appear within f-strings."
 
 (defvar python-font-lock-keywords-level-1
   `((,(python-rx symbol-start "def" (1+ space) (group symbol-name))
-     (1 font-lock-function-name-face))
+     (1 'font-lock-function-name-face))
     (,(python-rx symbol-start "class" (1+ space) (group symbol-name))
-     (1 font-lock-type-face)))
+     (1 'font-lock-type-face)))
   "Font lock keywords to use in `python-mode' for level 1 decoration.
 
 This is the minimum decoration level, including function and
@@ -778,7 +778,8 @@ class declarations.")
                           (or ,@(append python-font-lock-builtin-types
                                         python-font-lock-builtins
                                         python-font-lock-special-attributes))
-                          symbol-end)) . font-lock-builtin-face))
+                          symbol-end))
+     (0 'font-lock-builtin-face)))
   "Font lock keywords to use in `python-mode' for level 2 decoration.
 
 This is the medium decoration level, including everything in
@@ -850,11 +851,12 @@ sign in chained assignment."
     ;; Decorators.
     (,(rx line-start (* (any " \t")) (group "@" (1+ (or word ?_))
                                             (0+ "." (1+ (or word ?_)))))
-     (1 font-lock-type-face))
+     (1 'font-lock-type-face))
     ;; Builtin Exceptions
     (,(rx-to-string `(seq symbol-start
                           (or ,@python-font-lock-builtin-exceptions)
-                          symbol-end)) . font-lock-type-face)
+                          symbol-end))
+     (0 'font-lock-type-face))
     ;; single assignment with/without type hints, e.g.
     ;;   a: int = 5
     ;;   b: Tuple[Optional[int], Union[Sequence[str], str]] = (None, 'foo')
@@ -864,7 +866,7 @@ sign in chained assignment."
        (python-rx grouped-assignment-target (* space)
                   (? ?: (* space) (group (+ not-simple-operator)) (* space))
                   (group assignment-operator)))
-     (1 font-lock-variable-name-face)
+     (1 'font-lock-variable-name-face)
      (3 'font-lock-operator-face)
      (,(python-rx symbol-name)
       (progn
@@ -872,7 +874,7 @@ sign in chained assignment."
           (goto-char type-start))
         (match-end 0))
       nil
-      (0 font-lock-type-face)))
+      (0 'font-lock-type-face)))
     ;; multiple assignment
     ;; (note that type hints are not allowed for multiple assignments)
     ;;   a, b, c = 1, 2, 3
@@ -897,14 +899,14 @@ sign in chained assignment."
                    (? ?, (* space))
                    (? (or ")" "]") (* space))
                    (group assignment-operator)))
-     (1 font-lock-variable-name-face)
+     (1 'font-lock-variable-name-face)
      (2 'font-lock-operator-face)
      (,(python-rx grouped-assignment-target)
       (progn
         (goto-char (match-end 1))       ; go back after the first symbol
         (match-beginning 2))            ; limit the search until the assignment
       nil
-      (1 font-lock-variable-name-face)))
+      (1 'font-lock-variable-name-face)))
     ;; special cases
     ;;   (a) = 5
     ;;   [a] = 5,
@@ -915,7 +917,7 @@ sign in chained assignment."
                   grouped-assignment-target (* space)
                   (or ")" "]") (* space)
                   (group assignment-operator)))
-     (1 font-lock-variable-name-face)
+     (1 'font-lock-variable-name-face)
      (2 'font-lock-operator-face))
     ;; Operators.
     (,(python-rx operator) . 'font-lock-operator-face)
@@ -926,7 +928,7 @@ sign in chained assignment."
     (,(python--string-bytes-literal-matcher
        (python-rx bytes-escape-sequence)
        python--not-raw-bytes-literal-start-regexp)
-     (1 font-lock-constant-face t))
+     (1 'font-lock-constant-face t))
     ;; escape sequences within string literals, the same as appear in bytes
     ;; literals in addition to:
     ;;   "\uxxxx" Character with 16-bit hex value xxxx
@@ -5745,14 +5747,24 @@ def __FFAP_get_module_path(objstr):
 ;;; Code check
 
 (defcustom python-check-command
-  (cond ((executable-find "pyflakes") "pyflakes")
-        ((executable-find "ruff") "ruff")
-        ((executable-find "flake8") "flake8")
-        ((executable-find "epylint") "epylint")
-        (t "pyflakes"))
+  (cond*
+   ((executable-find "pyflakes") "pyflakes")
+   ((bind* (have-ruff (executable-find "ruff"))))
+   ((bind-and* have-ruff
+               (output (car (ignore-errors
+                              (process-lines "ruff" "--version"))))
+               (_ (string-match "^ruff \\([0-9]+\\.[0-9]+\\.[0-9]+\\)"
+                                output))
+               (version (match-string 1 output))
+               (_ (version<= "0.3.0" version)))
+    "ruff check")
+   (have-ruff "ruff")
+   ((executable-find "flake8") "flake8")
+   ((executable-find "epylint") "epylint")
+   (t "pyflakes"))
   "Command used to check a Python file."
   :type 'string
-  :version "30.1")
+  :version "31.2")
 
 (defcustom python-check-buffer-name
   "*Python check: %s*"
@@ -7056,6 +7068,10 @@ REPORT-FN is Flymake's callback function."
 
 ;;; Import management
 (defconst python--list-imports "\
+import sys
+
+sys.path = [p for p in sys.path if p]
+
 from sys import argv, exit, stdin
 
 try:
@@ -7164,6 +7180,17 @@ PROMPT string, is made unless there is a single candidate."
     (unless (string-empty-p statement)
       statement)))
 
+(defconst python--run-module "\
+import runpy, sys
+
+sys.path = [p for p in sys.path if p]
+
+runpy.run_module(sys.argv.pop(1), run_name='__main__', alter_sys=True)
+"
+  "Script to run a Python module.
+It removes the leading empty string from `sys.path' before executing the
+module.")
+
 (defun python--do-isort (&rest args)
   "Edit the current buffer using isort called with ARGS.
 Return non-nil if the buffer was actually modified."
@@ -7178,7 +7205,7 @@ Return non-nil if the buffer was actually modified."
                                (append
                                  (split-string-shell-command
                                   python-interpreter-args)
-                                 '("-m" "isort" "-")
+                                 `("-c" ,python--run-module "isort" "-")
                                  args)))
                 (tick (buffer-chars-modified-tick)))
             (unless (eq 0 status)
@@ -7272,7 +7299,7 @@ and may appear to hang."
                   (append
                    (split-string-shell-command
                     python-interpreter-args)
-                   '("-m" "pyflakes"))))
+                   `("-c" ,python--run-module "pyflakes"))))
         (goto-char (point-min))
         (when (looking-at-p ".* No module named pyflakes$")
           (error "%s couldn't find pyflakes" python-interpreter))
@@ -7340,9 +7367,11 @@ concrete implementations.  Currently there are two concrete
 implementations: `python-mode' and `python-ts-mode'."
   (setq-local tab-width 8)
   (setq-local indent-tabs-mode nil)
+  (setq-local editorconfig-indent-size-vars '(python-indent-offset))
 
   (setq-local comment-start "# ")
   (setq-local comment-start-skip "#+\\s-*")
+  (setq-local comment-start-line-regexp comment-start-skip)
 
   (setq-local parse-sexp-lookup-properties t)
   (setq-local parse-sexp-ignore-comments t)
@@ -7477,9 +7506,11 @@ implementations: `python-mode' and `python-ts-mode'."
 
 \\{python-ts-mode-map}"
   :syntax-table python-mode-syntax-table
-  (when (if (fboundp 'treesit-ensure-installed) ; Emacs 31
-            (treesit-ensure-installed 'python)
-          (treesit-ready-p 'python))
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (if (fboundp 'treesit-ensure-installed) ; Emacs 31
+                 (treesit-ensure-installed 'python)
+               t)
+             (treesit-ready-p 'python))
     (setq treesit-primary-parser (treesit-parser-create 'python))
     (setq-local treesit-font-lock-feature-list
                 '(( comment definition)

@@ -558,7 +558,7 @@ Format used is given by `calendar-time-display-form'."
          (12-hours (format "%d" (1+ (% (+ 24-hours 11) 12))))
          (am-pm (if (>= 24-hours 12) "pm" "am"))
          (24-hours (format "%02d" 24-hours)))
-      (mapconcat #'eval calendar-time-display-form ""))))
+      (mapconcat #'eval calendar-time-display-form))))
 
 (defun solar-daylight (time)
   "Printable form for TIME expressed in hours."
@@ -646,9 +646,9 @@ Corresponding value is nil if there is no sunrise/sunset."
              (calendar-latitude)
              (calendar-longitude) -0.61)))
          (rise-time (car rise-set))
-         (adj-rise (if rise-time (dst-adjust-time date rise-time)))
+         (adj-rise (if rise-time (dst-adjust-time (car exact-local-noon) rise-time)))
          (set-time (cadr rise-set))
-         (adj-set (if set-time (dst-adjust-time date set-time)))
+         (adj-set (if set-time (dst-adjust-time (car exact-local-noon) set-time)))
          (length (nth 2 rise-set)))
     (list
      (and rise-time (calendar-date-equal date (car adj-rise)) (cdr adj-rise))

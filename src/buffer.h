@@ -239,7 +239,7 @@ struct ts_linecol
 
 struct buffer_text
   {
-    /* Actual address of buffer contents.  If REL_ALLOC is defined,
+    /* Actual address of buffer contents.  If GMALLOC_REL_ALLOC is defined,
        this address might change when blocks are relocated which can
        e.g. happen when malloc is called.  So, don't pass a pointer
        into a buffer's text to functions that malloc.  */
@@ -743,7 +743,7 @@ struct buffer
      struct buffer_text because local variables have to be right in
      the struct buffer. So we copy it around in set_buffer_internal.  */
   Lisp_Object undo_list_;
-};
+} GCALIGNED_STRUCT;
 
 struct sortvec
 {

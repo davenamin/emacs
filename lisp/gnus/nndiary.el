@@ -345,7 +345,8 @@ all.  This may very well take some time.")
   ;; The list of time zone values is obsolescent, and new code should
   ;; not rely on it.  Many of the time zone abbreviations are wrong;
   ;; in particular, all single-letter abbreviations other than "Z" have
-  ;; been wrong since Internet RFC 2822 (2001).  However, the
+  ;; been wrong since Internet RFC 2822 (2001), and abbreviations like "PST"
+  ;; do not match current practice in some locations.  However, the
   ;; abbreviations have not been changed due to backward compatibility
   ;; concerns.
   )
@@ -1200,7 +1201,7 @@ all.  This may very well take some time.")
   ;; Parse the cron-like value of header X-Diary-HEAD in current buffer.
   ;; - Returns nil if `*'
   ;; - Otherwise returns a list of integers and/or ranges (BEG . END)
-  ;; The exception is the Timze-Zone value which is always of the form (STR).
+  ;; The exception is the Time-Zone value which is always of the form (STR).
   ;; Signals are caught by `nndiary-schedule'.
   (let ((header (format "^X-Diary-%s: \\(.*\\)$" head)))
     (goto-char (point-min))

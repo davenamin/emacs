@@ -25,6 +25,7 @@
 #if HAVE_SETMNTENT
 # include <mntent.h>
 #endif
+#include <stdcountof.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
@@ -60,8 +61,6 @@
 #include "c-ctype.h"
 
 #include "minmax.h"
-
-#define ARRAY_SIZE(a) (sizeof (a) / sizeof ((a)[0]))
 
 #define NPROC_MINIMUM 1
 
@@ -335,9 +334,9 @@ num_processors_available (enum nproc_query query)
 # endif
       { CTL_HW, HW_NCPU }
     };
-    for (int i = 0; i < ARRAY_SIZE (mib); i++)
+    for (int i = 0; i < countof (mib); i++)
       {
-        if (sysctl (mib[i], ARRAY_SIZE (mib[i]), &nprocs, &len, NULL, 0) == 0
+        if (sysctl (mib[i], countof (mib[i]), &nprocs, &len, NULL, 0) == 0
             && len == sizeof (nprocs)
             && 0 < nprocs)
           return nprocs;
@@ -438,12 +437,14 @@ get_cgroup2_cpu_quota (void)
          is not enabled for that part of the hierarchy.  */
 
       char cpu_max_file[PATH_MAX];
-      snprintf (cpu_max_file, sizeof (cpu_max_file),
-                "%s%s/cpu.max", mount, cgroup);
+      int n = snprintf (cpu_max_file, sizeof (cpu_max_file),
+                        "%s%s/cpu.max", mount, cgroup);
 
-      if ((fp = fopen (cpu_max_file, "r"))
-          && getline (&quota_str, &quota_size, fp) != -1
-          && strncmp (quota_str, "max", 3) != 0)
+      if (n < 0 || sizeof cpu_max_file <= n)
+        fp = NULL;
+      else if ((fp = fopen (cpu_max_file, "r"))
+               && getline (&quota_str, &quota_size, fp) != -1
+               && strncmp (quota_str, "max", 3) != 0)
         {
           long quota, period;
           if (sscanf (quota_str, "%ld %ld", &quota, &period) == 2 && period)

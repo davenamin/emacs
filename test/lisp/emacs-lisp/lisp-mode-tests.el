@@ -24,6 +24,19 @@
 (require 'lisp-mode)
 (require 'faceup)
 
+(ert-deftest lisp-mode-syntax-propertize ()
+  "Verify behavior of `lisp-mode-syntax-propertize'."
+  (with-temp-buffer
+    (lisp-mode)
+    (insert "foo| bar \\| #|baz")
+    (should (equal (scan-sexps (point-min) 1) (point)))
+    (erase-buffer)
+    (insert "``,@,.#.#0a#3()")
+    (goto-char (scan-sexps (point-max) -1))
+    (backward-prefix-chars)
+    (should (equal (point) (point-min)))
+    (should-not (scan-sexps (point-min) 2))))
+
 
 ;;; Indentation
 
@@ -304,6 +317,26 @@ Expected initialization file: `%s'\"
 		  stuff)))
   (print (quote (thingy great
 			stuff))))"))
+      (insert orig)
+      (indent-region (point-min) (point-max))
+      (should (equal (buffer-string) orig)))))
+
+(ert-deftest lisp-indent-local-overrides ()
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (let ((lisp-indent-local-overrides
+           '((prog1 . nil)
+             (cons . 1)
+             (list . defun)))
+          (orig "\
+(prog1
+ (list
+   (cons
+       1
+     2))
+ t)"))
+      (should (safe-local-variable-p 'lisp-indent-local-overrides
+                                     lisp-indent-local-overrides))
       (insert orig)
       (indent-region (point-min) (point-max))
       (should (equal (buffer-string) orig)))))

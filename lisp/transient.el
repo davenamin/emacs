@@ -5,7 +5,7 @@
 ;; Author: Jonas Bernoulli <jonas@bernoul.li>
 ;; URL: https://github.com/magit/transient
 ;; Keywords: extensions
-;; Version: 0.13.3
+;; Version: 0.13.9
 
 ;; SPDX-License-Identifier: GPL-3.0-or-later
 
@@ -39,17 +39,14 @@
 ;;; Code:
 ;;;; Frontmatter
 
-(defconst transient-version "v0.13.3-10-g87d0ca08-builtin")
+(defconst transient-version "v0.13.9-11-gc851a68-builtin")
 
 (require 'cl-lib)
 (require 'eieio)
 (require 'edmacro)
-(require 'format-spec)
 (require 'pcase)
 (require 'pp)
 (require 'seq)
-
-(eval-when-compile (require 'subr-x))
 
 (declare-function info "info" (&optional file-or-node buffer))
 (declare-function Man-find-section "man" (section))
@@ -518,7 +515,7 @@ See also `transient-align-variable-pitch'."
   "Whether to force use of a single column to display suffixes.
 
 This might be useful for users with low vision who use large text
-and might otherwise have to scroll in two dimensions. This is also
+and might otherwise have to scroll in two dimensions.  This is also
 useful for blind users, because it causes suffixes to be navigated
 in a more natural order."
   :package-version '(transient . "0.3.6")
@@ -588,26 +585,30 @@ Also consider enabling `transient-use-accessible-values'."
 (defcustom transient-default-level transient--default-prefix-level
   "Control what suffix levels are made available by default.
 
-Each suffix command is placed on a level and each prefix command
-has a level, which controls which suffix commands are available.
-Integers between 1 and 7 (inclusive) are valid levels.
+Each suffix command is placed on a level and each menu has a level.
+A suffix commands is available if its (non-zero) level is smaller or
+equal to the level of the menu.  Valid levels are integers between 1
+and 7.  As a special case, the level of a suffix can be 0, in which
+case it is never shown, regardless of the menu's level.  The default
+level for suffix commands is 1.
 
-The levels of individual transients and/or their individual
-suffixes can be changed individually, by invoking the prefix and
-then pressing \\<transient--docstr-hint-2>\\[transient-set-level].
+The default level for menus is controlled by this option and defaults
+to 4.  To show more suffix commands increase the value of this option
+or the level of an individual menu.  To show fewer suffixes increase
+such a value.  Changing the value of this option affects the menus of
+all packages, so you might want to only change the value of individual
+menus.
 
-The default level for both transients and their suffixes is 4.
-This option only controls the default for transients.  The default
-suffix level is always 4.  The author of a transient should place
-certain suffixes on a higher level if they expect that it won't be
-of use to most users, and they should place very important suffixes
-on a lower level so that they remain available even if the user
-lowers the transient level.
+To control which commands are shown for some menu, invoke it as usual,
+and then press \\<transient--docstr-hint-2>\\[transient-set-level]. \
+You will be guided through the process.  This
+allows you to change the level of the menu itself, and/or the levels
+of individual suffix commands for even finer control.
 
-\(Magit currently places nearly all suffixes on level 4 and lower
-levels are not used at all yet.  So for the time being you should
-not set a lower level here and using a higher level might not
-give you as many additional suffixes as you hoped.)"
+The function `transient-set-default-level' can be used to change the
+level of an individual suffix command across all menus, which feature
+that command and provided no local value is specified.  This does not
+work for all suffix commands, and is thus discouraged."
   :package-version '(transient . "0.1.0")
   :group 'transient
   :type '(choice (const :tag "1 - fewest suffixes" 1)
@@ -1037,6 +1038,8 @@ Technically a suffix object with no associated command.")
   ((transient                         :initform t)
    (argument    :initarg :argument)
    (shortarg    :initarg :shortarg)
+   (claim-argument
+    :initarg :claim-argument          :initform nil)
    (value                             :initform nil)
    (init-value  :initarg :init-value)
    (unsavable   :initarg :unsavable   :initform nil)
@@ -1482,7 +1485,7 @@ commands are aliases for."
                (sym (intern
                      (format
                       "transient:%s:%s:%d" prefix
-                      (replace-regexp-in-string (plist-get args :key) " " "")
+                      (string-replace (plist-get args :key) " " "")
                       (prog1 gensym-counter (incf gensym-counter))))))
            (use :command
                 `(prog1 ',sym
@@ -1654,7 +1657,7 @@ SUFFIXES is a list of suffix command or a group specification
 Intended for use in a group's `:setup-children' function."
   (when (cl-typep prefix 'transient-prefix)
     (setq prefix (oref prefix command)))
-  (mapcar (apply-partially #'transient-parse-suffix prefix) suffixes))
+  (mapcar (lambda (s) (transient-parse-suffix prefix s)) suffixes))
 
 ;;;; Edit
 
@@ -1863,13 +1866,31 @@ See info node `(transient)Modifying Existing Transients'."
 (defun transient-set-default-level (command level)
   "Set the default level of suffix COMMAND to LEVEL.
 
-The default level is shadowed if the binding of the suffix in a
-prefix menu specifies a level, and also if the user changes the
-level of such a binding.
+See `transient-default-level' for an introduction to how levels work.
 
-The default level can only be set for commands that were defined
-using `transient-define-suffix', `transient-define-infix' or
-`transient-define-argument'."
+A suffix command is made available if its level is smaller than or
+equal to the level of the menu.  The level of a suffix command is
+determined as follows:
+
+1. The default level for all suffix commands, which is always 1.
+
+2. The level set when the suffix command was defined using
+   `transient-define-suffix', `transient-define-infix' or
+   `transient-define-argument'.
+
+3. The level set using this function.  Use this to override the
+   value set using (2) or the default from (1).  (4) and (5)
+   override the value set here.  This function can only be used for
+   commands defined using the functions mentioned in (2); else you
+   have to use (5).  Unless a command appears in multiple menus, it
+   is better to use (5).
+
+4. The level set when binding the suffix command in a specific menu.
+   Package authors should avoid this, and prefer (2); unless they
+   want to place a command on different levels in different menus.
+
+5. The level interactively set for an individual suffix command in an
+   individual menu, using \\<transient--docstr-hint-2>\\[transient-set-level]."
   (if-let* ((proto (transient--suffix-prototype command)))
       (oset proto level level)
     (user-error "Cannot set level for `%s'; no prototype object exists"
@@ -1897,7 +1918,7 @@ variable instead.")
 (defvar transient-exit-hook nil
   "Hook run after exiting a transient menu.
 Unlike `transient-post-exit-hook', this runs even if another transient
-menu becomes active at the same time. ")
+menu becomes active at the same time.")
 
 (defvar transient-post-exit-hook nil
   "Hook run after exiting all transient menus.
@@ -2111,8 +2132,8 @@ probably use this instead:
          ;; It is legitimate to use this function as a predicate of sorts.
          ;; `transient--pre-command' and `transient-help' are examples.
          (t nil))))
-    ((bind-and* (obj (transient--suffix-prototype (or command this-command)))
-                (obj (clone obj)))
+    ((bind-and* (proto (transient--suffix-prototype (or command this-command)))
+                (obj (clone proto)))
      (transient-init-scope obj)
      (transient-init-value obj)
      obj)))
@@ -2236,6 +2257,8 @@ For historic reasons \\`C-x' is used by default, but users are
 encouraged to pick another key, preferably one that is not commonly used
 in Emacs but is still convenient to them.  See info node `(transient)
 Common Suffix Commands'."
+  :package-version '(transient . "0.8.8")
+  :group 'transient
   :type 'key
   :initialize (lambda (symbol exp)
                 (custom-initialize-default symbol exp)
@@ -2547,14 +2570,11 @@ value.  Otherwise return CHILDREN as is.")
     (funcall fn)))
 
 (defun transient--init-transient (&optional name layout params)
-  (unless name
-    ;; Re-init.
-    (if (eq transient--refreshp 'updated-value)
-        ;; Preserve the prefix value this once, because the
-        ;; invoked suffix indicates that it has updated that.
-        (setq transient--refreshp (oref transient--prefix refresh-suffixes))
-      ;; Otherwise update the prefix value from suffix values.
-      (oset transient--prefix value (transient--get-extended-value))))
+  ;; Set the prefix's value from suffix values, except during
+  ;; initial setup (when NAME is non-nil) or when the invoked
+  ;; suffix indicated that it just updated the prefix's value.
+  (unless (or name (eq transient--refreshp 'updated-value))
+    (oset transient--prefix value (transient--get-extended-value)))
   (transient--init-objects name layout params)
   (transient--init-keymaps))
 
@@ -2597,13 +2617,12 @@ value.  Otherwise return CHILDREN as is.")
 (defun transient--flatten-suffixes (layout)
   (nreverse
    (named-let flatten ((def layout))
-     (cond ((stringp def) nil)
-           ((cl-typep def 'transient-information) nil)
-           ((listp def) (mapcan #'flatten def))
-           ((cl-typep def 'transient-group)
-            (mapcan #'flatten (oref def suffixes)))
-           ((cl-typep def 'transient-suffix)
-            (list def))))))
+     (cl-typecase def
+       (string                nil)
+       (transient-information nil)
+       (list                  (mapcan #'flatten def))
+       (transient-group       (mapcan #'flatten (oref def suffixes)))
+       (transient-suffix      (list def))))))
 
 (defun transient--init-child (levels spec parent)
   (cl-etypecase spec
@@ -2796,6 +2815,9 @@ value.  Otherwise return CHILDREN as is.")
   (transient--init-transient)
   (transient--push-keymap 'transient--transient-map)
   (transient--push-keymap 'transient--redisplay-map)
+  (when prefix-arg
+    (transient--pop-keymap 'universal-argument-map)
+    (universal-argument--mode))
   (transient--redisplay))
 
 (defun transient--pre-command ()
@@ -3750,7 +3772,7 @@ Third-party subclasses of `transient-infix' must implement a primary
 method.")
 
 (cl-defmethod transient-init-value :around ((obj transient-prefix))
-  "If bound, use the value returned by OBJ' `init-value' function.
+  "If bound, use OBJ's `init-value' function to set the value.
 If the value of OBJ's `init-value' is non-nil, call that function to
 determine the value.  Otherwise call the primary method according to
 OBJ's class."
@@ -3759,10 +3781,10 @@ OBJ's class."
     (cl-call-next-method obj)))
 
 (cl-defmethod transient-init-value :around ((obj transient-infix))
-  "If bound, use the value returned by OBJ's `init-value' function.
-If the value of OBJ's `init-value' is non-nil, call that function to
-determine the value.  Otherwise call the primary method according to
-OBJ's class."
+  "If bound, use OBJ's `init-value' function to set the value.
+If the value of OBJ's `init-value' slot is non-nil, call that function
+to set the value.  Otherwise call the primary method according to OBJ's
+class."
   (if (slot-boundp obj 'init-value)
       (funcall (oref obj init-value) obj)
     (cl-call-next-method obj)))
@@ -3787,32 +3809,41 @@ Call `transient-default-value' but because that is a noop for
     (unless (eq value eieio--unbound)
       (oset obj value value))))
 
-(cl-defmethod transient-init-value ((obj transient-argument))
-  "Extract OBJ's value from the value of the prefix object."
-  (oset obj value
-        (let ((value (oref transient--prefix value))
-              (argument (and (slot-boundp obj 'argument)
-                             (oref obj argument)))
-              (multi-value (oref obj multi-value))
-              (case-fold-search nil)
-              (regexp (if (slot-exists-p obj 'argument-regexp)
-                          (oref obj argument-regexp)
-                        (format "\\`%s\\([^z-a]*\\)\\'" (oref obj argument)))))
-          (if (memq multi-value '(t rest))
-              (cdr (assoc argument value))
-            (let ((match (lambda (v)
-                           (and (stringp v)
-                                (string-match regexp v)
-                                (match-string 1 v)))))
-              (if multi-value
-                  (delq nil (mapcar match value))
-                (seq-some match value)))))))
-
 (cl-defmethod transient-init-value ((obj transient-switch))
   "Extract OBJ's value from the value of the prefix object."
   (oset obj value
         (car (member (oref obj argument)
                      (oref transient--prefix value)))))
+
+(cl-defmethod transient-init-value ((obj transient-argument))
+  "Extract OBJ's value from the value of the prefix object."
+  (let* ((args (oref transient--prefix value))
+         (value
+          (pcase-exhaustive (oref obj multi-value)
+            ((or 't 'rest) (cdr (assoc (oref obj argument) args)))
+            ('repeat       (seq-keep (transient--extract-value obj) args))
+            ('nil          (seq-some (transient--extract-value obj) args)))))
+    (oset obj value value)
+    (when (and value (oref obj claim-argument))
+      (oset transient--prefix value
+            (seq-difference args (transient--get-wrapped-value obj))))))
+
+(defun transient--extract-value (obj)
+  (cond*
+    ((bind-and*
+       (_(slot-exists-p obj 'argument-regexp))
+       (regexp (oref obj argument-regexp)))
+     (lambda (arg)
+       (and (stringp arg)
+            (let ((case-fold-search nil))
+              (string-match regexp arg))
+            (match-string 1 arg))))
+    ((bind-and*
+       (argument (oref obj argument)))
+     (lambda (arg)
+       (and (stringp arg)
+            (string-prefix-p argument arg)
+            (substring arg (length argument)))))))
 
 ;;;;; Default
 
@@ -4078,14 +4109,14 @@ prompt."
               (arg (if (slot-boundp obj 'argument)
                        (oref obj argument)
                      (oref obj argument-format)))
-              (spec (oref transient--prefix incompatible))
-              (filter (lambda (x rule)
-                        (and (member x rule)
-                             (remove x rule))))
-              (incomp (nconc
-                       (mapcan (apply-partially filter arg) spec)
-                       (and (not (equal val arg))
-                            (mapcan (apply-partially filter val) spec)))))
+              (incomp (oref transient--prefix incompatible))
+              (incomp
+               (nconc
+                (mapcan (lambda (i) (and (member arg i) (remove arg i)))
+                        incomp)
+                (and (not (equal val arg))
+                     (mapcan (lambda (i) (and (member val i) (remove val i)))
+                             incomp)))))
     (dolist (obj transient--suffixes)
       (when-let* ((_(cl-typep obj 'transient-argument))
                   (val (transient-infix-value obj))
@@ -4248,7 +4279,7 @@ Unlike `transient-get-value' also include the values of inactive and
 inapt arguments.  This function is mainly intended for internal use.
 It is used to preserve the full value when a menu is being refreshed,
 including the presently ineffective parts."
-  (transient--with-emergency-exit :get-value
+  (transient--with-emergency-exit :get-extended-value
     (mapcan #'transient--get-wrapped-value transient--suffixes)))
 
 (defun transient--get-savable-value ()
@@ -4514,8 +4545,7 @@ have a history of their own.")
                             'display-buffer-full-frame
                             'transient-display-buffer-action))
                (transient-display-buffer-action))))
-    (when (and (assq 'pop-up-frame-parameters (cdr action))
-               (fboundp 'buffer-line-statistics)) ; since Emacs 28.1
+    (when (assq 'pop-up-frame-parameters (cdr action))
       (setq action (copy-tree action))
       (pcase-let ((`(,height ,width)
                    (buffer-line-statistics transient--buffer))
@@ -4681,9 +4711,10 @@ have a history of their own.")
                                  (list group))))
                         transient--layout)))
     (while-let ((group (pop groups)))
-      (transient--insert-group group)
-      (when groups
-        (insert ?\n)))))
+      (when (transient--active-suffixes group)
+        (transient--insert-group group)
+        (when groups
+          (insert ?\n))))))
 
 (defun transient--active-suffixes (group)
   (seq-remove (lambda (suffix)
@@ -5100,9 +5131,10 @@ apply the face `transient-unreachable' to the complete string."
 (defun transient--column-stops (columns)
   (let* ((var-pitch (or transient-align-variable-pitch
                         (oref transient--prefix variable-pitch)))
-         (char-width (and var-pitch (string-pixel-width " "))))
+         (char-width (and var-pitch (string-pixel-width " ")))
+         (gap (* 2 (if var-pitch char-width 1))))
     (transient--seq-reductions-from
-     (apply-partially #'+ (* 2 (if var-pitch char-width 1)))
+     (lambda (acc elt) (+ acc gap elt))
      (transient--mapn
       (lambda (cells min)
         (apply #'max
@@ -5674,7 +5706,24 @@ as stand-in for elements of exhausted lists."
       "unset")))
 
 ;;;; _
+
+(add-to-list 'customize-package-emacs-version-alist
+             '(transient
+               ("0.1.0"  . "28.1")
+               ("0.2.0"  . "28.1")
+               ("0.3.6"  . "28.1")
+               ("0.4.0"  . "29.1")
+               ("0.5.0"  . "30.1")
+               ("0.7.5"  . "31.1")
+               ("0.7.8"  . "31.1")
+               ("0.8.0"  . "31.1")
+               ("0.8.1"  . "31.1")
+               ("0.8.4"  . "31.1")
+               ("0.8.8"  . "31.1")
+               ("0.13.0" . "31.1")))
+
 (provide 'transient)
+
 ;; Local Variables:
 ;; checkdoc-symbol-words: ("command-line" "edit-mode" "help-mode")
 ;; indent-tabs-mode: nil

@@ -628,6 +628,29 @@
   (should (equal (string-chop-newline "foo\nbar\n") "foo\nbar"))
   (should (equal (string-chop-newline "foo\nbar") "foo\nbar")))
 
+
+;; Roman numeral tests
+
+(defconst roman-number-mappings
+  '((1 . "I") (2 . "II") (3 . "III") (4 . "IV") (5 . "V")
+    (6 . "VI") (7 . "VII") (8 . "VIII") (9 . "IX") (10 . "X")
+    (20 . "XX") (42 . "XLII") (55 . "LV") (99 . "XCIX")
+    (123 . "CXXIII") (456 . "CDLVI") (789 . "DCCLXXXIX")
+    (999 . "CMXCIX") (2026 . "MMXXVI")))
+
+(ert-deftest subr-number-to-roman ()
+  (dolist (case roman-number-mappings)
+    (should (equal (number-to-roman (car case)) (cdr case))))
+  (should-error (number-to-roman ""))
+  (should-error (number-to-roman 0)))
+
+(ert-deftest subr-roman-to-number ()
+  (dolist (case roman-number-mappings)
+    (should (equal (roman-to-number (cdr case)) (car case))))
+  (should-error (roman-to-number 123))
+  (should-error (roman-to-number ""))
+  (should-error (roman-to-number "MMDextra")))
+
 (ert-deftest subr-ensure-empty-lines ()
   (should
    (equal
@@ -814,6 +837,20 @@
   (should (equal (string-truncate-left "band" 3) "...d"))
   (should (equal (string-truncate-left "band" 2) "...d"))
   (should (equal (string-truncate-left "longstring" 8) "...tring")))
+
+(ert-deftest subr-x-with-work-buffer-locals-killed ()
+  (let (b)
+    (with-work-buffer
+      (setq b (current-buffer))
+      (setq-local test-buffer-local 123)
+      (setq mark-active t)
+      (setq buffer-read-only t))
+    (with-work-buffer
+      ;; Sanity check `with-work-buffer' yields the same buffer.
+      (should (eq b (current-buffer)))
+      (should-not (buffer-local-boundp 'test-buffer-local (current-buffer)))
+      (should-not mark-active)
+      (should-not buffer-read-only))))
 
 (provide 'subr-x-tests)
 ;;; subr-x-tests.el ends here

@@ -25,6 +25,7 @@
 ;;; Code:
 
 (require 'ert-x)
+(require 'log-edit)
 (require 'vc)
 (require 'vc-dir)
 (require 'vc-git)
@@ -96,10 +97,14 @@ allow `git commit' to determine identities for authors and committers."
   (declare (indent 1))
   `(ert-with-temp-directory ,name
      (let ((default-directory ,name)
-           (process-environment (append '("EMAIL=john.doe@example.com"
-                                          "GIT_AUTHOR_NAME=A"
-                                          "GIT_COMMITTER_NAME=C")
-                                        process-environment)))
+           ;; Use GIT_*_EMAIL instead of EMAIL in case the Git config
+           ;; contains user.useConfigOnly=true, which disables EMAIL.
+           (process-environment
+            (append '("GIT_AUTHOR_NAME=A"
+                      "GIT_COMMITTER_NAME=C"
+                      "GIT_AUTHOR_EMAIL=a@example.com"
+                      "GIT_COMMITTER_EMAIL=c@example.com")
+                    process-environment)))
        (vc-create-repo 'Git)
        ,@body)))
 
@@ -232,7 +237,6 @@ is absent."
 (ert-deftest vc-git-test-checkin-patch-staged-diff ()
   "Checking in a patch that matches staged changes should not error."
   (skip-unless (executable-find vc-git-program))
-  (require 'log-edit)
   (vc-git-test--with-repo repo
     (vc-git-test--start-branch)
     (write-region "Hello\n" nil "README")
@@ -241,5 +245,42 @@ is absent."
       (vc-git--checkin "Second" nil patch))
     (should (equal (string-trim (vc-git-test--run "log" "-1" "--pretty=%s"))
                    "Second"))))
+
+(ert-deftest vc-git-test-checkin-patch-sparse-checkout ()
+  "Check in a single-file patch in a sparse checkout.
+The patch should be committed and the user's index left untouched, even
+when an untracked file lies outside the sparse-checkout cone.
+Regression test for bug#80951."
+  (skip-unless (executable-find vc-git-program))
+  ;; `sparse-checkout' was introduced in Git 2.25.
+  (skip-unless (version<= "2.25" (vc-git--program-version)))
+  (vc-git-test--with-repo repo
+    (write-region "1\n" nil "tracked.txt")
+    (write-region "a\n" nil "other.txt")
+    (vc-git-test--run "add" "tracked.txt" "other.txt")
+    (vc-git-test--run "commit" "-m" "Initial")
+    ;; Restrict the sparse checkout to the two committed files, so that
+    ;; any other path is "outside the cone".
+    (vc-git-test--run "sparse-checkout" "init" "--no-cone")
+    (vc-git-test--run "sparse-checkout" "set" "/tracked.txt" "/other.txt")
+    ;; scratch.txt is untracked and outside the cone: this is what makes
+    ;; `git add --all' exit non-zero.
+    (write-region "do not add me\n" nil "scratch.txt")
+    ;; Modify both in-cone files, but only check in tracked.txt.
+    (write-region "2\n" nil "tracked.txt")
+    (write-region "b\n" nil "other.txt")
+    (let ((patch (vc-git-test--run "diff" "--" "tracked.txt"))
+          vc-async-checkin)
+      ;; Before the fix, this signaled an error from `git add --all'.
+      (vc-git--checkin "Update tracked" nil patch))
+    ;; Check that the selected patch was committed.
+    (should (equal (string-trim (vc-git-test--run "log" "-1" "--pretty=%s"))
+                   "Update tracked"))
+    ;; Check that nothing was left staged in the user's index.
+    (should (zerop (vc-git-command nil t nil "diff" "--cached" "--quiet")))
+    ;; Check that other.txt remains modified in the worktree, while
+    ;; scratch.txt is untracked.
+    (should (equal (vc-git-test--run "status" "--short")
+                   " M other.txt\n?? scratch.txt\n"))))
 
 ;;; vc-git-tests.el ends here

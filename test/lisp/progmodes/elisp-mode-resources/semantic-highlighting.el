@@ -15,6 +15,16 @@
 ;;                  ^ elisp-bound-variable
   )
 
+(pulse-momentary-highlight-region (point) (point-max)
+;; ^ elisp-function
+;;                                 ^ elisp-function
+;;                                         ^ elisp-function
+                                  (or (and t '(bold success))
+;;                                             ^ elisp-face
+;;                                                  ^ elisp-face
+                                      'warning))
+;;                                     ^ elisp-face
+
 (add-face-text-property
 ;; ^ elisp-function
  (point) (mark)
@@ -33,6 +43,24 @@
 (require 'cl-lib)
 ;; ^ (elisp-function font-lock-keyword-face)
 ;;        ^ (elisp-feature font-lock-constant-face)
+
+(cl-loop for sym being the symbols
+;; ^ (elisp-macro font-lock-keyword-face)
+;;           ^ elisp-binding-variable
+         and k being the hash-keys of definition-prefixes
+;;           ^ elisp-binding-variable
+;;                                    ^ elisp-free-variable
+         using (hash-value v)
+;;                         ^ elisp-binding-variable
+         for g being each overlay from (point-min) to (point)
+;;           ^ elisp-binding-variable
+;;                                      ^              ^ elisp-function
+         for ((x . y) nil ((z))) = v
+;;             ^   ^        ^ elisp-binding-variable
+;;                                 ^ elisp-bound-variable
+         collecting (list sym k v g x y z))
+;;                   ^ elisp-function
+;;                        ^   ^ ^ ^ ^ ^ ^ elisp-bound-variable
 
 ;; Taken from `completion-shorthand-try-completion' in minibuffer.el:
 (defun foobaz (string table pred point)
@@ -163,10 +191,12 @@
 ;;                  ^ elisp-function
 
 (defface foobar
-  '((default :inherit font-lock-function-call-face)
+  '((default :inherit (font-lock-function-call-face error))
 ;;            ^ (elisp-constant font-lock-builtin-face)
-;;                    ^ elisp-face
-    (((background light)) :foreground "#00008b")
+;;                     ^ elisp-face
+;;                                                  ^ elisp-face
+    (((background light)) :foreground "#00008b" :inherit bold)
+;;                                                       ^ elisp-face
     (((background dark))  :foreground "#5c9cff"))
   "Face for highlighting symbol role names in Emacs Lisp code."
   :version "31.1")

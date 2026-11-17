@@ -185,11 +185,8 @@ union u_sockaddr
 static bool
 would_block (int errnum)
 {
-#ifdef EWOULDBLOCK
-  if (EWOULDBLOCK != EAGAIN && errnum == EWOULDBLOCK)
-    return true;
-#endif
-  return errnum == EAGAIN;
+  return errnum == EAGAIN
+    || (EWOULDBLOCK != EAGAIN && errnum == EWOULDBLOCK);
 }
 
 #ifndef HAVE_ACCEPT4
@@ -841,7 +838,15 @@ status_message (struct Lisp_Process *p)
 	  c1 = STRING_CHAR (SDATA (string));
 	  c2 = downcase (c1);
 	  if (c1 != c2)
-	    Faset (string, make_fixnum (0), make_fixnum (c2));
+	    {
+	      if (ASCII_CHAR_P (c1) && ASCII_CHAR_P (c2))
+		Faset (string, make_fixnum (0), make_fixnum (c2));
+	      else
+		string = concat2 (Fdowncase (Fsubstring (string,
+							 make_fixnum (0),
+							 make_fixnum (1))),
+				  Fsubstring (string, make_fixnum (1), Qnil));
+	    }
 	}
       AUTO_STRING (suffix, coredump ? " (core dumped)\n" : "\n");
       return concat2 (string, suffix);
@@ -2073,7 +2078,7 @@ usage: (make-process &rest ARGS)  */)
 	       && IS_DEVICE_SEP (SREF (program, 1))))
 	{
 	  tem = Qnil;
-	  openp (Vexec_path, program, Vexec_suffixes, &tem,
+	  openp (Vexec_path, program, Fdefault_value (Qexec_suffixes), &tem,
 		 make_fixnum (X_OK), false, false, NULL);
 	  if (NILP (tem))
 	    report_file_error ("Searching for program", program);
@@ -2881,7 +2886,7 @@ static const struct socket_options {
   /* Option number SO_...  */
   int optnum;
   enum { SOPT_UNKNOWN, SOPT_BOOL, SOPT_INT, SOPT_IFNAME, SOPT_LINGER } opttype;
-  enum { OPIX_NONE = 0, OPIX_MISC = 1, OPIX_REUSEADDR = 2 } optbit;
+  enum { OPIX_NONE = 0, OPIX_MISC = 1, OPIX_REUSEADDR = 2, OPIX_KEEPALIVE = 3 } optbit;
 } socket_options[] =
   {
 #ifdef SO_BINDTODEVICE
@@ -2894,7 +2899,19 @@ static const struct socket_options {
     { ":dontroute", SOL_SOCKET, SO_DONTROUTE, SOPT_BOOL, OPIX_MISC },
 #endif
 #ifdef SO_KEEPALIVE
-    { ":keepalive", SOL_SOCKET, SO_KEEPALIVE, SOPT_BOOL, OPIX_MISC },
+    { ":keepalive", SOL_SOCKET, SO_KEEPALIVE, SOPT_BOOL, OPIX_KEEPALIVE },
+#endif
+#ifdef TCP_KEEPIDLE
+    { ":keepalive-idle", IPPROTO_TCP, TCP_KEEPIDLE, SOPT_INT, OPIX_KEEPALIVE },
+#elif defined (TCP_KEEPALIVE)
+    /* macOS.  */
+    { ":keepalive-idle", IPPROTO_TCP, TCP_KEEPALIVE, SOPT_INT, OPIX_KEEPALIVE },
+#endif
+#ifdef TCP_KEEPINTVL
+    { ":keepalive-interval", IPPROTO_TCP, TCP_KEEPINTVL, SOPT_INT, OPIX_KEEPALIVE },
+#endif
+#ifdef TCP_KEEPCNT
+    { ":keepalive-count", IPPROTO_TCP, TCP_KEEPCNT, SOPT_INT, OPIX_KEEPALIVE },
 #endif
 #ifdef SO_LINGER
     { ":linger", SOL_SOCKET, SO_LINGER, SOPT_LINGER, OPIX_MISC },
@@ -3943,8 +3960,11 @@ The following network options can be specified for this connection:
 
 :broadcast BOOL    -- Allow send and receive of datagram broadcasts.
 :dontroute BOOL    -- Only send to directly connected hosts.
-:keepalive BOOL    -- Send keep-alive messages on network stream.
 :nodelay BOOL      -- Set TCP_NODELAY on the network socket.
+:keepalive BOOL         -- Send keep-alive messages on network stream.
+:keepalive-idle INT     -- Set keep-alive idle time.
+:keepalive-interval INT -- Set keep-alive message interval.
+:keepalive-count INT    -- Set keep-alive probe count.
 :linger BOOL or TIMEOUT -- Send queued messages before closing.
 :oobinline BOOL    -- Place out-of-band data in receive data stream.
 :priority INT      -- Set protocol defined priority for sent packets.
@@ -5597,7 +5617,9 @@ wait_reading_process_output (intmax_t time_limit, int nsecs, int read_kbd,
 		  rarely_quit (++count);
 		  if (nread < 0)
 		    {
-		      if (errno != EINTR)
+		      if (errno != EINTR
+			  /* In case a process filter deletes the process.  */
+			  || wait_proc->infd < 0)
 			break;
 		    }
 		  else
@@ -5607,6 +5629,9 @@ wait_reading_process_output (intmax_t time_limit, int nsecs, int read_kbd,
 		      if (nread == 0)
 			break;
 		      read_some_bytes = true;
+		      /* In case a process filter deletes the process.  */
+		      if (wait_proc->infd < 0)
+			break;
 		    }
 		}
 	    }
@@ -6490,6 +6515,11 @@ read_and_insert_process_output (struct Lisp_Process *p, char *buf,
 				     &before, &before_byte, &opoint,
 				     &opoint_byte);
 
+  /* Record the current buffer before restoring the process state, so
+     that we restore the saved state to the right buffer (bug#81677).  */
+  specpdl_ref count = SPECPDL_INDEX ();
+  record_unwind_current_buffer ();
+
   /* Adapted from call_process.  */
   prepare_to_modify_buffer (PT, PT, NULL);
 
@@ -6530,6 +6560,7 @@ read_and_insert_process_output (struct Lisp_Process *p, char *buf,
 
   read_process_output_after_insert (p, &old_read_only, old_begv, old_zv,
 				    before, before_byte, opoint, opoint_byte);
+  unbind_to (count, Qnil);
 }
 
 static void
@@ -6630,6 +6661,12 @@ Otherwise it discards the output.  */)
 	text = (STRING_MULTIBYTE (text)
 		? Fstring_as_unibyte (text)
 		: Fstring_to_multibyte (text));
+
+      /* Record the current buffer because insert_from_string_before_markers
+	 may run a user hook that changes it (bug#81677).  */
+      specpdl_ref count = SPECPDL_INDEX ();
+      record_unwind_current_buffer ();
+
       /* Insert before markers in case we are inserting where
 	 the buffer's mark is, and the user's next command is Meta-y.  */
       insert_from_string_before_markers (text, 0, 0,
@@ -6637,6 +6674,7 @@ Otherwise it discards the output.  */)
 
       read_process_output_after_insert (p, &old_read_only, old_begv, old_zv,
 					before, before_byte, opoint, opoint_byte);
+      unbind_to (count, Qnil);
     }
   return Qnil;
 }
@@ -7661,6 +7699,12 @@ child_signal_notify (void)
 
 static void dummy_handler (int sig) {}
 static signal_handler_t volatile lib_child_handler;
+
+/* True if Glib installs its own SIGCHLD handler that Emacs must work
+   around.  Determined once in init_process_emacs; consulted elsewhere
+   (e.g. xwidget.c) to decide whether the about:blank load workaround
+   is needed.  */
+bool glib_installs_sigchld_handler;
 
 /* Handle a SIGCHLD signal by looking for known child processes of
    Emacs whose status have changed.  For each one found, record its
@@ -8724,6 +8768,7 @@ init_process_emacs (int sockfd)
   if (lib_child_handler != dummy_handler)
     {
       /* The hacky workaround is needed on this platform.  */
+      glib_installs_sigchld_handler = true;
       signal_handler_t lib_child_handler_glib = lib_child_handler;
       catch_child_signal ();
       eassert (lib_child_handler == dummy_handler);

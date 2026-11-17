@@ -937,7 +937,7 @@ Interactively, CLONE and INHIBIT-BUFFER-HOOKS are nil.  */)
     }
   else
     {
-      struct buffer *old_b = current_buffer;
+      specpdl_ref count = SPECPDL_INDEX ();
 
       clone_per_buffer_values (b->base_buffer, b);
       bset_filename (b, Qnil);
@@ -946,6 +946,7 @@ Interactively, CLONE and INHIBIT-BUFFER-HOOKS are nil.  */)
       bset_backed_up (b, Qnil);
       bset_local_minor_modes (b, Qnil);
       bset_auto_save_file_name (b, Qnil);
+      record_unwind_current_buffer ();
       set_buffer_internal_1 (b);
       Fset (Qbuffer_save_without_query, Qnil);
       Fset (Qbuffer_file_number, Qnil);
@@ -955,7 +956,7 @@ Interactively, CLONE and INHIBIT-BUFFER-HOOKS are nil.  */)
 	 variable copies for list variables that might be mangled due
 	 to destructive operations in the indirect buffer. */
       run_hook (Qclone_indirect_buffer_hook);
-      set_buffer_internal_1 (old_b);
+      unbind_to (count, Qnil);
     }
 
   run_buffer_list_update_hook (b);
@@ -980,7 +981,8 @@ drop_overlay (struct Lisp_Overlay *ov)
   if (! ov->buffer)
     return;
 
-  modify_overlay (ov->buffer, overlay_start (ov), overlay_end (ov));
+  if (!NILP (ov->plist))
+    modify_overlay (ov->buffer, overlay_start (ov), overlay_end (ov));
   remove_buffer_overlay (ov->buffer, ov);
 }
 
@@ -1135,6 +1137,9 @@ static void
 reset_buffer_local_variables (struct buffer *b, int permanent_too)
 {
   int offset, i;
+  Lisp_Object tmp = Qnil;
+  Lisp_Object buffer;
+  XSETBUFFER (buffer, b);
 
   /* Reset the major mode to Fundamental, together with all the
      things that depend on the major mode.
@@ -1159,13 +1164,22 @@ reset_buffer_local_variables (struct buffer *b, int permanent_too)
 
   /* Reset all (or most) per-buffer variables to their defaults.  */
   if (permanent_too == 1)
-    bset_local_var_alist (b, Qnil);
+    {
+      for (tmp = BVAR (b, local_var_alist); CONSP (tmp); tmp = XCDR (tmp))
+        {
+          Lisp_Object sym = XCAR (XCAR (tmp));
+          if (BASE_EQ (SYMBOL_BLV (XSYMBOL (sym))->where, buffer))
+            {
+              /* Symbol is set up for this buffer's old local value:
+                 swap it out!  */
+              swap_in_global_binding (XSYMBOL (sym));
+            }
+        }
+      bset_local_var_alist (b, Qnil);
+    }
   else
     {
-      Lisp_Object tmp, last = Qnil;
-      Lisp_Object buffer;
-      XSETBUFFER (buffer, b);
-
+      Lisp_Object last = Qnil;
       for (tmp = BVAR (b, local_var_alist); CONSP (tmp); tmp = XCDR (tmp))
         {
           Lisp_Object local_var = XCAR (XCAR (tmp));
@@ -1318,7 +1332,7 @@ immediately before it was killed.  */)
 }
 
 DEFUN ("buffer-file-name", Fbuffer_file_name, Sbuffer_file_name, 0, 1, 0,
-       doc: /* Return name of file BUFFER is visiting, or nil if none.
+       doc: /* Return absolute name of file BUFFER is visiting, or nil if none.
 No argument or nil as argument means use the current buffer.  */)
   (register Lisp_Object buffer)
 {
@@ -2604,12 +2618,12 @@ results, see Info node `(elisp)Swapping Text'.  */)
   swapfield (own_text, struct buffer_text);
   eassert (current_buffer->text == &current_buffer->own_text);
   eassert (other_buffer->text == &other_buffer->own_text);
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
   r_alloc_reset_variable ((void **) &current_buffer->own_text.beg,
 			  (void **) &other_buffer->own_text.beg);
   r_alloc_reset_variable ((void **) &other_buffer->own_text.beg,
 			  (void **) &current_buffer->own_text.beg);
-#endif /* REL_ALLOC */
+#endif
 
   swapfield (pt, ptrdiff_t);
   swapfield (pt_byte, ptrdiff_t);
@@ -3031,15 +3045,33 @@ As a special exception, local variables whose names have a non-nil
 the optional KILL-PERMANENT argument is non-nil, clear out these local
 variables, too.
 
+If KILL-PERMANENT is the symbol `permanent-local', kill local variables
+and ignore variable watchers.  If KILL-PERMANENT is the symbol `reset',
+ignore variable watchers and reset the buffer as if newly created.  Use
+these with caution.  For example, `reset' sets buffer variables such as
+`default-directory' to nil and may result in unexpected behavior.
+
 The first thing this function does is run
 the normal hook `change-major-mode-hook'.  */)
   (Lisp_Object kill_permanent)
 {
   run_hook (Qchange_major_mode_hook);
 
-  /* Actually eliminate all local bindings of this buffer.  */
+  int permanent_too = 0;
+  if (!NILP (kill_permanent))
+    {
+      permanent_too = 2;
+      if (EQ (kill_permanent, Qpermanent_local))
+        permanent_too = 1;
+      else if (EQ (kill_permanent, Qreset))
+        {
+          permanent_too = 1;
+          reset_buffer (current_buffer);
+        }
+    }
 
-  reset_buffer_local_variables (current_buffer, !NILP (kill_permanent) ? 2 : 0);
+  /* Actually eliminate all local bindings of this buffer.  */
+  reset_buffer_local_variables (current_buffer, permanent_too);
 
   /* Force mode-line redisplay.  Useful here because all major mode
      commands call this function.  */
@@ -3413,7 +3445,7 @@ record_overlay_string (struct sortstrlist *ssl, Lisp_Object str,
     nbytes = SBYTES (str);
 
   if (ckd_add (&nbytes, nbytes, ssl->bytes))
-    memory_full (SIZE_MAX);
+    memory_full_up ();
   ssl->bytes = nbytes;
 
   if (STRINGP (str2))
@@ -3427,7 +3459,7 @@ record_overlay_string (struct sortstrlist *ssl, Lisp_Object str,
 	nbytes = SBYTES (str2);
 
       if (ckd_add (&nbytes, nbytes, ssl->bytes))
-	memory_full (SIZE_MAX);
+	memory_full_up ();
       ssl->bytes = nbytes;
     }
 }
@@ -3499,7 +3531,7 @@ overlay_strings (ptrdiff_t pos, struct window *w, unsigned char **pstr)
       ptrdiff_t total;
 
       if (ckd_add (&total, overlay_heads.bytes, overlay_tails.bytes))
-	memory_full (SIZE_MAX);
+	memory_full_up ();
       if (total > overlay_str_len)
 	overlay_str_buf = xpalloc (overlay_str_buf, &overlay_str_len,
 				   total - overlay_str_len, -1, 1);
@@ -3745,7 +3777,9 @@ buffer.  */)
                               n_beg, n_end);
 
   /* If the overlay has changed buffers, do a thorough redisplay.  */
-  if (!BASE_EQ (buffer, obuffer))
+  if (NILP (OVERLAY_PLIST (overlay)))
+    ; /* No props so the overlay doesn't affect the display.  */
+  else if (!BASE_EQ (buffer, obuffer))
     {
       /* Redisplay where the overlay was.  */
       if (ob)
@@ -4602,7 +4636,7 @@ alloc_buffer_text (struct buffer *b, ptrdiff_t nbytes)
   block_input ();
 #if defined USE_MMAP_FOR_BUFFERS
   p = mmap_alloc ((void **) &b->text->beg, nbytes);
-#elif defined REL_ALLOC
+#elif defined GMALLOC_REL_ALLOC
   p = r_alloc ((void **) &b->text->beg, nbytes);
 #else
   p = xmalloc (nbytes);
@@ -4638,7 +4672,7 @@ enlarge_buffer_text (struct buffer *b, ptrdiff_t delta)
 
 #if defined USE_MMAP_FOR_BUFFERS
   p = mmap_realloc ((void **) &b->text->beg, new_nbytes);
-#elif defined REL_ALLOC
+#elif defined GMALLOC_REL_ALLOC
   p = r_re_alloc ((void **) &b->text->beg, new_nbytes);
 #else
   p = xrealloc (b->text->beg, new_nbytes);
@@ -4672,7 +4706,7 @@ free_buffer_text (struct buffer *b)
     {
 #if defined USE_MMAP_FOR_BUFFERS
       mmap_free ((void **) &b->text->beg);
-#elif defined REL_ALLOC
+#elif defined GMALLOC_REL_ALLOC
       r_alloc_free ((void **) &b->text->beg);
 #else
       xfree (b->text->beg);
@@ -4812,11 +4846,13 @@ init_buffer_once (void)
 
   /* Make sure all markable slots in buffer_defaults
      are initialized reasonably, so mark_buffer won't choke.  */
+  BUFFER_PVEC_INIT (&buffer_defaults);
   reset_buffer (&buffer_defaults);
   eassert (NILP (BVAR (&buffer_defaults, name)));
   reset_buffer_local_variables (&buffer_defaults, 1);
-  eassert (NILP (BVAR (&buffer_local_symbols, name)));
+  BUFFER_PVEC_INIT (&buffer_local_symbols);
   reset_buffer (&buffer_local_symbols);
+  eassert (NILP (BVAR (&buffer_local_symbols, name)));
   reset_buffer_local_variables (&buffer_local_symbols, 1);
   /* Prevent GC from getting confused.  */
   buffer_defaults.text = &buffer_defaults.own_text;
@@ -4832,8 +4868,6 @@ init_buffer_once (void)
   /* This is not strictly necessary, but let's make them initialized.  */
   bset_name (&buffer_defaults, build_string (" *buffer-defaults*"));
   bset_name (&buffer_local_symbols, build_string (" *buffer-local-symbols*"));
-  BUFFER_PVEC_INIT (&buffer_defaults);
-  BUFFER_PVEC_INIT (&buffer_local_symbols);
 
   /* Set up the default values of various buffer slots.  */
   /* Must do these before making the first buffer! */
@@ -5739,6 +5773,12 @@ An entry (apply DELTA BEG END FUN-NAME . ARGS) supports selective undo
 in the active region.  BEG and END is the range affected by this entry
 and DELTA is the number of characters added or deleted in that range by
 this change.
+
+An entry (apply DELTA (BEG . END) FUN-NAME . ARGS) is similar to the
+previous kind.  The difference is that Emacs invokes FUN-NAME with
+\(apply FUN-NAME BEG2 END2 ARGS), where BEG2 and END2 are the adjusted
+values of BEG and END.  The function can use those arguments to compute
+positions relative to the adjusted region.
 
 An entry (MARKER . DISTANCE) indicates that the marker MARKER
 was adjusted in position by the offset DISTANCE (an integer).

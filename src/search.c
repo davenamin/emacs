@@ -83,7 +83,7 @@ matcher_overflow (void)
 static void
 freeze_buffer_relocation (void)
 {
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
   /* Prevent ralloc.c from relocating the current buffer while
      searching it.  */
   r_alloc_inhibit_buffer_relocation (1);
@@ -2029,7 +2029,7 @@ boyer_moore (EMACS_INT n, unsigned char *base_pat,
 	      if (i + direction == 0)
 		{
 		  ptrdiff_t position, start, end;
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
 		  ptrdiff_t cursor_off;
 #endif
 
@@ -2037,14 +2037,14 @@ boyer_moore (EMACS_INT n, unsigned char *base_pat,
 
 		  position = pos_byte + cursor - p2 + ((direction > 0)
 						       ? 1 - len_byte : 0);
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
 		  /* set_search_regs might call malloc, which could
 		     cause ralloc.c relocate buffer text.  We need to
 		     update pointers into buffer text due to that.  */
 		  cursor_off = cursor - p2;
 #endif
 		  set_search_regs (position, len_byte);
-#ifdef REL_ALLOC
+#ifdef GMALLOC_REL_ALLOC
 		  p_limit = BYTE_POS_ADDR (limit);
 		  p2 = BYTE_POS_ADDR (pos_byte);
 		  cursor = p2 + cursor_off;
@@ -2801,7 +2801,7 @@ Return value is undefined if the last search failed.  */)
 DEFUN ("match-end", Fmatch_end, Smatch_end, 1, 1, 0,
        doc: /* Return position of end of text matched by last search.
 SUBEXP, a number, specifies the parenthesized subexpression in the last
-  regexp for which to return the start position.
+  regexp for which to return the end position.
 Value is nil if SUBEXPth subexpression didn't match, or there were fewer
   than SUBEXP subexpressions.
 SUBEXP zero means the entire text matched by the whole regexp or whole

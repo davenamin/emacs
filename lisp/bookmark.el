@@ -286,7 +286,7 @@ described below.  An entry with a key but null value means the entry
 is not used.
 
  (filename . FILENAME)
- (buf . BUFFER-OR-NAME)
+ (buffer . BUFFER-OR-NAME)
  (position . POS)
  (front-context-string . STR-AFTER-POS)
  (rear-context-string  . STR-BEFORE-POS)
@@ -1838,8 +1838,6 @@ unique numeric suffixes \"<2>\", \"<3>\", etc."
 
 ;;; Code supporting the dired-like bookmark list.
 ;; Prefix is "bookmark-bmenu" for "buffer-menu":
-
-(defvar bookmark-bmenu-hidden-bookmarks ())
 
 (defvar-keymap bookmark-bmenu-mode-map
   :doc "Keymap for `bookmark-bmenu-mode'."

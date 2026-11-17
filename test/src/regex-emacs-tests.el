@@ -105,7 +105,8 @@ are known failures, and are skipped."
 
   `(with-temp-buffer
     (modify-syntax-entry ?_ "w;; ") ; tests expect _ to be a word
-    (insert-file-contents (concat regex-tests--resources-dir ,test-file))
+    (let ((coding-system-for-read 'utf-8-unix))
+      (insert-file-contents (concat regex-tests--resources-dir ,test-file)))
     (let ((case-fold-search nil)
           (line-number 1)
           (whitelist-idx 0))
@@ -252,7 +253,8 @@ on success"
 
 
 
-(defun regex-tests-match (pattern string bounds-ref &optional substring-ref)
+(defun regex-tests-match ( pattern string bounds-ref
+                           &optional substring-ref posix)
   "I match the given STRING against PATTERN.  I compare the
 beginning/end of each group with their expected values.
 BOUNDS-REF is a sequence [start-ref0 end-ref0 start-ref1 end-ref1
@@ -272,7 +274,9 @@ on success"
     (regex-tests-compare
      string
      (condition-case nil
-         (if (string-match pattern string) nil 'search-failed)
+         (or (if posix (posix-string-match pattern string)
+               (string-match pattern string))
+             'search-failed)
        (invalid-regexp 'compilation-failed))
      bounds-ref substring-ref)))
 
@@ -633,7 +637,7 @@ known/benign differences in behavior.")
 ;;   | 0 | successful match      |
 ;;   | 1 | failed match          |
 ;;   | 2 | regcomp() should fail |
-(defun regex-tests-TESTS ()
+(defun regex-tests-TESTS (&optional posix)
   (let (failures)
     (regex-tests-generic-line
      ?# "TESTS" regex-tests-TESTS-whitelist
@@ -647,7 +651,8 @@ known/benign differences in behavior.")
                 (string  (match-string 3))
                 (pattern (regex-tests-unextend (match-string 2))))
 
-           (let ((msg (regex-tests-match pattern string nil (list what-failed))))
+           (let ((msg (regex-tests-match pattern string nil
+                                         (list what-failed) posix)))
              (when msg
                (setq failures
                      (cons (format "line number %d: Regex '%s': %s"
@@ -676,6 +681,11 @@ This evaluates the PTESTS test cases from glibc."
   "Tests of the regular expression engine.
 This evaluates the TESTS test cases from glibc."
   (should-not (regex-tests-TESTS)))
+
+(ert-deftest regex-tests-posix ()
+  "Tests of the posix option of the regular expression engine.
+This evaluates the TESTS test cases from glibc using posix matching."
+  (should-not (regex-tests-TESTS 'posix)))
 
 (ert-deftest regex-repeat-limit ()
   "Test the #xFFFF repeat limit."
@@ -997,5 +1007,64 @@ This evaluates the TESTS test cases from glibc."
   ;; Regression test for bug#65726, where this crashed Emacs.
   ;; relint suppression: Repetition of expression matching an empty string
   (should (equal (string-match "a*\\(?:c\\|b*\\)*" "a") 0)))
+
+(ert-deftest regexp-memoization-adaptive ()
+  ;; This tests whether matching is still performed correctly once
+  ;; memoization kicks in.
+  (cl-flet ((match (lambda (re string)
+                     (and (string-match re string)
+                          (match-string 1 string)))))
+    (let ((str (concat "url(\\" (make-string 33 ?\\))))
+      (should (equal
+               (match
+                (concat
+                 ;; Use a single `re_match' since memoization decisions are
+                 ;; forgotten between calls to `re_match' (even within the
+                 ;; same search).
+                 "\\`.*?\\("
+                 ;; Taken from `css--uri-re'.
+                 "url\\((\\)[[:space:]]*\\(?:\\\\.\\|[^()[:space:]\n'\"]\\)+"
+                 "[[:space:]]*\\()\\)"
+                 "\\)")
+                ;; The `url(...' in STR needs memoization, so the second
+                ;; `url(..)' is then matched with memoization activated.
+                (concat "with " str " and url(a) in text"))
+               "url(a)")))))
+
+(ert-deftest regexp-memoization-backref ()
+  ;; This tests a corner case of backrefs:
+  ;; On the first pass through "b", we have group-1 == "aa",
+  ;; we try to match "c" which fails, so we mark that state+pos
+  ;; in the memo table on the assumption that if we come back
+  ;; it means we failed and we should fail again.  Now, indeed,
+  ;; the \1 test we do right afterwards fails, but the next time
+  ;; we come back to that same state+pos, group-1 has changed
+  ;; and \1 would not fail again!
+  ;; We've set `memo.inhibit' in the mean time, but the memotable was
+  ;; set beforehand, so we risk mistakenly failing unless:
+  ;; - we check memo.inhibit in the "has_failed_p" test as well.
+  ;; - we clear the pre-existing entries in the memotable when we set
+  ;;   memo.inhibit.
+  (cl-flet ((match (lambda (re string)
+                     (and (string-match re string)
+                          (match-string 0 string)))))
+   (should (equal (match "\\(a*\\)a*bc*\\1d"
+                   "aabad")
+                  "aabad"))))
+
+(ert-deftest regexp-memoization-works ()
+  (cl-flet* ((tmatch (re string)
+               (let ((start (float-time)))
+                 (and (string-match re string)
+                      (- (float-time) start))))
+             (tmatchmin (re string)
+               (let ((tmin (tmatch re string)))
+                 (dotimes (_ 5)
+                   (setq tmin (min tmin (tmatch re string))))
+                 tmin)))
+    ;; Precompile the regexp.
+    (tmatch "\\(?:a\\|a\\)*b\\|a" (make-string 1 ?a))
+    (should (> (* 2 (tmatchmin "\\(?:a\\|a\\)*b\\|a" (make-string 6 ?a)))
+               (tmatchmin "\\(?:a\\|a\\)*b\\|a" (make-string 9 ?a))))))
 
 ;;; regex-emacs-tests.el ends here

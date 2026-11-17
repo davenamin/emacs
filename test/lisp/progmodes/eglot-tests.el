@@ -295,12 +295,19 @@ directory hierarchy."
   (define-derived-mode typescript-mode prog-mode "TypeScript")
   (add-to-list 'auto-mode-alist '("\\.ts\\'" . typescript-mode)))
 
+;; `zig-ts-mode' is not a part of Emacs, so we define these two
+;; shims which should be more than enough for testing.
+(unless (functionp 'zig-ts-mode)
+  (define-derived-mode zig-ts-mode prog-mode "ZigTS")
+  (add-to-list 'auto-mode-alist '("\\.zig\\'" . zig-ts-mode)))
+
 (cl-defun eglot--tests-connect (&key timeout server)
   (let* ((timeout (or timeout 10))
          (eglot-sync-connect t)
          (eglot-connect-timeout timeout)
          (eglot-server-programs
-          (if server `((,major-mode . ,(split-string server)))
+          (if server `((,major-mode . ,(if (consp server) server
+                                         (split-string server))))
             eglot-server-programs)))
     (apply #'eglot--connect (eglot--guess-contact))))
 
@@ -357,6 +364,25 @@ directory hierarchy."
   (skip-unless (executable-find "clangd"))
   (eglot-tests--auto-detect-running-server-1))
 
+(defun eglot--tests-end-command ()
+  "Run what Eglot deferred to the end of the current command."
+  (run-hooks 'post-command-hook)
+  (accept-process-output nil 0.01))
+
+(defun eglot--tests-check-async-shutdown (server &optional timeout)
+  "Check SERVER is forgotten after this command, gone within TIMEOUT."
+  ;; Don't use `jsonrpc-events-buffer', which would recreate a killed one.
+  (let ((buffers (list (jsonrpc--events-buffer server)
+                       (jsonrpc-stderr-buffer server)
+                       (process-buffer (jsonrpc--process server)))))
+    (eglot--tests-end-command)
+    (should-not (memq server (gethash (eglot--project server)
+                                      eglot--servers-by-project)))
+    (eglot--with-timeout (or timeout 5)
+      (while (or (jsonrpc-running-p server)
+                 (cl-some #'buffer-live-p buffers))
+        (accept-process-output nil 0.05)))))
+
 (ert-deftest eglot-test-auto-shutdown ()
   "Visit a file and \\[eglot], then kill buffer."
   (skip-unless (executable-find "clangd"))
@@ -374,7 +400,139 @@ directory hierarchy."
         (setq buffer (eglot--find-file-noselect (buffer-file-name buffer)))
         ;; ;; but now kill it with `eglot-autoshutdown' set to t
         (let ((eglot-autoshutdown t)) (kill-buffer buffer))
-        (should (not (jsonrpc-running-p server)))))))
+        (eglot--tests-check-async-shutdown server)))))
+
+(ert-deftest eglot-test-auto-shutdown-unresponsive ()
+  "Kill last buffer of a server that never answers `shutdown'."
+  (skip-unless (executable-find "python3"))
+  (skip-unless (file-exists-p (ert-resource-file "server-slow-shutdown.py")))
+  (let (server
+        buffer)
+    (eglot--with-fixture
+        `(("project" . (("thingy.txt" . "bla"))))
+      (with-current-buffer
+          (setq buffer (eglot--find-file-noselect "project/thingy.txt"))
+        (prog-mode)
+        (should (setq server
+                      (eglot--tests-connect
+                       :server `("python3"
+                                 ,(ert-resource-file "server-slow-shutdown.py")
+                                 "--ignore-shutdown"))))
+        (should (eglot-current-server))
+        ;; The buffer dies at once, the server after `shutdown' times
+        ;; out.
+        (let ((eglot-autoshutdown t)) (kill-buffer buffer))
+        (should-not (buffer-live-p buffer))
+        (eglot--tests-check-async-shutdown server)))))
+
+(ert-deftest eglot-test-auto-shutdown-find-alternate ()
+  "\\[find-alternate-file] away from last managed buffer keeps server."
+  (skip-unless (executable-find "python3"))
+  (skip-unless (file-exists-p (ert-resource-file "server-slow-shutdown.py")))
+  (let ((auto-mode-alist '(("\\.toy\\'" . prog-mode)))
+        (eglot-autoshutdown t)
+        server)
+    (eglot--with-fixture
+        `(("project" . (("thingy.toy" . "bla") ("thingy2.toy" . "bla"))))
+      (with-current-buffer (eglot--find-file-noselect "project/thingy.toy")
+        (should (setq server
+                      (eglot--tests-connect
+                       :server `("python3"
+                                 ,(ert-resource-file "server-slow-shutdown.py"))))))
+      ;; Once as a command, once from Lisp.
+      (dolist (this-command '(find-alternate-file nil))
+        (with-current-buffer (car (eglot--managed-buffers server))
+          (find-alternate-file
+           (if (string-suffix-p "thingy.toy" buffer-file-name)
+               "thingy2.toy" "thingy.toy")))
+        (eglot--tests-end-command)
+        (should (jsonrpc-running-p server))
+        (should (memq server (gethash (eglot--project server)
+                                      eglot--servers-by-project)))
+        (should (= 1 (length (eglot--managed-buffers server))))
+        (with-current-buffer (car (eglot--managed-buffers server))
+          (should eglot--managed-mode))))))
+
+(ert-deftest eglot-test-auto-shutdown-async ()
+  "Kill last buffer of a slow-to-shutdown server, then revisit."
+  (skip-unless (executable-find "python3"))
+  (let ((contact `("python3" ,(ert-resource-file "server-slow-shutdown.py")
+                   "--shutdown-delay" "1"))
+        server buffer start)
+    (eglot--with-fixture
+        `(("project" . (("thingy.txt" . "bla"))))
+      (with-current-buffer
+          (setq buffer (eglot--find-file-noselect "project/thingy.txt"))
+        (prog-mode)
+        (should (setq server (eglot--tests-connect :server contact))))
+      ;; Killing the last buffer doesn't wait for the server...
+      (setq start (float-time))
+      (let ((eglot-autoshutdown t)) (kill-buffer buffer))
+      (should (< (- (float-time) start) 0.5))
+      (eglot--tests-end-command)
+      (should (jsonrpc-running-p server))
+      ;; ...but revisiting in the next command doesn't pick it up again.
+      (with-current-buffer
+          (setq buffer (eglot--find-file-noselect "project/thingy.txt"))
+        (prog-mode)
+        (should-not eglot--managed-mode)
+        (should-not (eglot-current-server))
+        (let ((new (eglot--tests-connect :server contact)))
+          (should new)
+          (should-not (eq new server))
+          (eglot--tests-check-async-shutdown server)
+          ;; Old server's demise doesn't affect new one.
+          (should (jsonrpc-running-p new))
+          (should eglot--managed-mode)
+          (should (eq (eglot-current-server) new)))))))
+
+(ert-deftest eglot-test-auto-shutdown-revert ()
+  "Revert last managed buffer with `eglot-autoshutdown'."
+  (skip-unless (executable-find "python3"))
+  (let ((auto-mode-alist '(("\\.toy\\'" . prog-mode)))
+        (eglot-autoshutdown t)
+        server)
+    (eglot--with-fixture
+        `(("project" . (("thingy.toy" . "bla"))))
+      (with-current-buffer (eglot--find-file-noselect "project/thingy.toy")
+        (should (setq server
+                      (eglot--tests-connect
+                       :server `("python3"
+                                 ,(ert-resource-file "server-slow-shutdown.py")))))
+        (dolist (preserve-modes '(t nil))
+          (revert-buffer t t preserve-modes)
+          (accept-process-output nil 0.5)
+          (should (jsonrpc-running-p server))
+          (should eglot--managed-mode)
+          (should (eq (eglot-current-server) server))
+          (should (eq (car (eglot--managed-buffers server))
+                      (current-buffer))))))))
+
+(ert-deftest eglot-test-shutdown-unresponsive ()
+  "\[eglot-shutdown] a server that never answers `shutdown'."
+  (skip-unless (executable-find "python3"))
+  (skip-unless (file-exists-p (ert-resource-file "server-slow-shutdown.py")))
+  (let (server buffers)
+    (eglot--with-fixture
+        `(("project" . (("thingy.txt" . "bla"))))
+      (with-current-buffer (eglot--find-file-noselect "project/thingy.txt")
+        (prog-mode)
+        (should (setq server
+                      (eglot--tests-connect
+                       :server `("python3"
+                                 ,(ert-resource-file "server-slow-shutdown.py")
+                                 "--ignore-shutdown"))))
+        (setq buffers (list (jsonrpc-events-buffer server)
+                            (jsonrpc-stderr-buffer server)))
+        ;; A timeout is a `jsonrpc-error', not some random error...
+        (should-error (eglot--request server :shutdown nil :timeout 0.1)
+                      :type 'jsonrpc-error)
+        ;; ...which `eglot-shutdown' demotes, shutting down anyway.
+        (eglot-shutdown server nil 0.2)
+        (should-not (jsonrpc-running-p server))
+        (should-not (memq server (gethash (eglot--project server)
+                                          eglot--servers-by-project)))
+        (should-not (cl-some #'buffer-live-p buffers))))))
 
 (ert-deftest eglot-test-auto-reconnect ()
   "Start a server.  Kill it.  Watch it reconnect."
@@ -647,7 +805,7 @@ directory hierarchy."
         (eglot--find-file-noselect "rename-project/main.c")
       (eglot--tests-connect)
       (goto-char (point-min)) (search-forward "foo")
-      (eglot-rename "bar")
+      (refactor-rename "bar" 'eglot)
       (should (equal (buffer-string)
                      "int bar() {return 42;} int main() {return bar();}")))))
 
@@ -766,6 +924,10 @@ directory hierarchy."
         (eglot--find-file-noselect "project/coiso.c")
       (eglot--wait-for-clangd)
       (goto-char (- (point-max) 3))
+      ;; clangd >= 23 sends InsertReplaceEdit, whose replace range would
+      ;; delete the "123" suffix.  This test was originally for clang22,
+      ;; which has insert semantics (bug#81912).
+      (setq-local eglot-completion-replace-semantics nil)
       (completion-at-point)
       (should (looking-back "foobar"))
       (should (looking-at "123")))))
@@ -776,7 +938,6 @@ directory hierarchy."
   ;; This originally appeared in github#1339
   (skip-unless (executable-find "rust-analyzer"))
   (skip-unless (executable-find "cargo"))
-  (skip-unless (not (getenv "EMACS_EMBA_CI")))
   (eglot--with-fixture
       '(("cmpl-project" .
          (("main.rs" .
@@ -786,6 +947,9 @@ directory hierarchy."
       (should (zerop (shell-command "cargo init")))
       (search-forward "v.count_on")
       (eglot--wait-for-rust-analyzer)
+      ;; Apply the replace range of rust-analyzer's InsertReplaceEdit,
+      ;; which deletes the "1234" suffix (bug#81912).
+      (setq-local eglot-completion-replace-semantics t)
       (completion-at-point)
       (should
        (equal
@@ -796,7 +960,7 @@ directory hierarchy."
 
 (ert-deftest eglot-test-zig-insert-replace-completion ()
   "Test zls's use of 'InsertReplaceEdit'."
-  (skip-unless (functionp 'zig-ts-mode))
+  (skip-unless (executable-find "zls"))
   (eglot--with-fixture
       `(("project" .
          (("main.zig" .
@@ -806,8 +970,12 @@ directory hierarchy."
         (eglot--find-file-noselect "project/main.zig")
       (should (eglot--tests-connect))
       (search-forward "foo.correc")
+      ;; Apply the replace range, which deletes the "_name" suffix
+      ;; (bug#81912).
+      (setq-local eglot-completion-replace-semantics t)
       (completion-at-point)
-      (should (looking-back "correct_name")))))
+      (should (looking-back "correct_name"))
+      (should (looking-at "; ")))))
 
 (ert-deftest eglot-test-basic-xref ()
   "Test basic xref functionality in a clangd LSP."
@@ -1492,7 +1660,11 @@ GUESSED-MAJOR-MODES-SYM are bound to the useful return values of
   (should (eglot--glob-match "prefix/{**/*.js,**/foo.[0-9]}.suffix"
                              "prefix/a/b/c/d/foo.5.suffix"))
   (should (eglot--glob-match "prefix/{**/*.js,**/foo.[0-9]}.suffix"
-                             "prefix/a/b/c/d/foo.js.suffix")))
+                             "prefix/a/b/c/d/foo.js.suffix"))
+  ;; bug#81425
+  (should (eglot--glob-match "foo/**/notes,extra.py" "foo/bar/notes,extra.py"))
+  (should (eglot--glob-match "foo,bar.txt" "foo,bar.txt"))
+  (should (eglot--glob-match "example.[a,b]" "example.,")))
 
 (defvar tramp-histfile-override)
 (defun eglot--call-with-tramp-test (fn)

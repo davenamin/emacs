@@ -127,7 +127,9 @@ This requires either the macOS \"open\" command, or the freedesktop
                  (goto-char (point-min))
                  (if (re-search-forward (format "^%s\\s-*:\\s-+\\(.*\\)$" s)
                                         nil t)
-                     (setq os (concat os " " (match-string 1)))))))
+                     (setq os (concat os
+                                      (if os " ")
+                                      (match-string 1)))))))
            os))
         ((eq system-type 'windows-nt)
          (or report-emacs-bug--os-description
@@ -473,6 +475,7 @@ and send the mail again%s."
   ;; questions about From header validity if the user is going to
   ;; use mailclient, anyway.
   (when (or (and (derived-mode-p 'message-mode)
+                 (not message-server-alist)
 		 (eq (message-default-send-mail-function) 'sendmail-query-once))
 	    (and (not (derived-mode-p 'message-mode))
 		 (eq send-mail-function 'sendmail-query-once)))

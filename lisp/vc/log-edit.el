@@ -387,9 +387,9 @@ automatically."
   "Face for the summary in `log-edit-mode' buffers.")
 
 (defface log-edit-headers-separator
-  '((t :height 0.1 :inverse-video t :extend t))
+  '((t :inherit separator-line :extend t))
   "Face for the separator line in `log-edit-mode' buffers."
-  :version "29.1")
+  :version "32.1")
 
 (defface log-edit-header '((t :inherit font-lock-keyword-face))
   "Face for the headers in `log-edit-mode' buffers.")
@@ -466,7 +466,8 @@ The first subexpression is the actual text of the field.")
        (progn (goto-char (match-end 0)) (1+ (match-end 0))))
       nil
       (0 '( face log-edit-headers-separator
-            display-line-numbers-disable t rear-nonsticky t))))
+            display-line-numbers-disable t front-sticky t rear-nonsticky t
+            cursor-intangible t))))
     (log-edit--match-first-line (0 'log-edit-summary))))
 
 (defvar log-edit-font-lock-gnu-style nil
@@ -579,12 +580,14 @@ the \\[vc-prefix-map] prefix for VC commands, for example).
   (setq-local font-lock-defaults '(log-edit-font-lock-keywords t))
   (make-local-variable 'font-lock-extra-managed-props)
   (cl-pushnew 'display-line-numbers-disable font-lock-extra-managed-props)
+  (cl-pushnew 'cursor-intangible font-lock-extra-managed-props)
   (setq-local jit-lock-contextually t)  ;For the "first line is summary".
   (setq-local fill-paragraph-function #'log-edit-fill-entry)
   (setq-local normal-auto-fill-function #'log-edit-do-auto-fill)
   (make-local-variable 'log-edit-comment-ring-index)
   (add-hook 'kill-buffer-hook 'log-edit-remember-comment nil t)
   (hack-dir-local-variables-non-file-buffer)
+  (cursor-intangible-mode 1)
   ;; Replace the tool bar map with `log-edit-tool-bar-map'.
   (setq-local tool-bar-map log-edit-tool-bar-map))
 
@@ -1367,15 +1370,74 @@ entry."
 	  (if (setq entry (assoc key log-entries))
 	      (setcdr entry (append (cdr entry) (list file)))
 	    (push (list key file) log-entries)))))
-    ;; Now map over log-entries, and extract the strings.
-    (dolist (log-entry (nreverse log-entries))
-      (apply 'log-edit-changelog-insert-entries
-	     (append (car log-entry) (cdr log-entry)))
-      (insert "\n"))
+    ;; Check whether all log entries come from the same ChangeLog file.
+    (if (length= (seq-uniq (mapcar #'caar log-entries)) 1)
+        ;; If so, extract the commit message in toto from that file.
+        (log-edit-insert-changelog-entry (caaar log-entries))
+      ;; Otherwise, map over the entries constructed from each ChangeLog
+      ;; file used, and extract the strings.
+      (dolist (log-entry (nreverse log-entries))
+        (apply 'log-edit-changelog-insert-entries
+               (append (car log-entry) (cdr log-entry)))
+        (insert "\n")))
     ;; No newline after the last entry.
     (when log-entries
       (delete-char -1))
     log-edit-author))
+
+(declare-function vc-deduce-fileset "vc")
+
+(defun log-edit-insert-changelog-entry (buffer)
+  "Use body of ChangeLog entry in BUFFER as commit message.
+Insert the body of the latest entry in the ChangeLog file that BUFFER is
+visiting into the \"*vc-log*\" buffer.  If the first line of the body
+does not begin with \"* \", move it to the Summary header in the
+\"*vc-log*\" buffer, thus making is the summary line of the commit
+message.
+
+If any of the files listed in the ChangeLog entry are not in the VC
+fileset to commit, display a warning urging the user to correct this
+discrepancy before committing the changes."
+  (let (summary beg end files-in-changelog)
+    (with-current-buffer buffer
+      (save-restriction
+        (log-edit-narrow-changelog)
+        (setq summary (let ((s (buffer-substring-no-properties
+                               (pos-bol) (pos-eol))))
+                        (and (string-match "^\t\\([^*].+\\)$" s)
+                             (match-string 1 s)))
+              beg (or (and summary (forward-line)
+                           (skip-syntax-forward "\s-")
+                           (goto-char (pos-bol)))
+                      (point))
+              end (point-max))
+        ;; List of changed files according to the ChangeLog entry.
+        (save-excursion
+          (let* ((bfn (buffer-file-name buffer))
+                 (bn (buffer-name))
+                 (fnd (or (and bfn (file-name-directory bfn))
+                          ;; If ChangeLog buffer is not visiting a file,
+                          ;; extract the directory from the buffer name.
+                          (and
+                           (string-match "\\`\\*changes to \\(.+\\)\\*\\'" bn)
+                           (match-string 1 bn)))))
+            (while (re-search-forward "\t\\* \\([^ :\n]+\\)[ :\n]" nil t)
+              (let ((fn (expand-file-name
+                         (concat fnd (match-string-no-properties 1)))))
+                (when (file-exists-p fn)
+                  (push fn files-in-changelog))))))))
+    (log-edit-changelog-insert-entries buffer beg end)
+    (when summary (log-edit-set-header "Summary" summary))
+    (unless (cl-subsetp
+             files-in-changelog
+             (save-current-buffer
+               (nth 2 (vc-deduce-fileset nil nil 'state-model-only-files)))
+             :test 'equal)
+      (display-warning
+       'log-edit
+       "A file in the ChangeLog entry is not in the changeset to commit!
+Remove this discrepancy before committing the changes by adjusting as
+appropriate either the ChangeLog entry or the selection of files to commit."))))
 
 (defun log-edit-toggle-header (header value)
   "Toggle a boolean-type header in the current buffer.

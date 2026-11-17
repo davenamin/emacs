@@ -1564,6 +1564,43 @@ instead (@pxref{Mark}).  The basic replace commands replace one
 is possible to perform several replacements in parallel, using the
 command @code{expand-region-abbrevs} (@pxref{Expanding Abbrevs}).
 
+@cindex preview of replacement text
+@vindex query-replace-show-preview
+@findex replace-preview-replacement-only
+@findex replace-preview-both
+  If you set @code{query-replace-show-preview} to a non-@code{nil}
+value, the replace commands show a preview of the replacement while you
+type it: the matches visible in the window are displayed as they would
+look after the replacement.  This tells you what back-references like
+@samp{\1} (@pxref{Regexp Replace}) expand to before you commit to the
+replacement.  The preview also appears at the prompt that reads the text
+to replace, as soon as its input holds both halves separated by an
+arrow, which is what @kbd{M-p} recalls from the history.  However,
+replacements that use @samp{\,} or @samp{\#} are not previewed.
+
+  Only the matches that the command will replace are previewed: those
+after point, or those before it when replacing backward
+(@pxref{Query Replace}).  The other ones are still highlighted, to show
+that the buffer has more of them.  When the region is active, the
+preview covers all of it, as the replacement does.
+
+  Possible values for @code{query-replace-show-preview} are
+@code{replacement-only} to display the replacement alone and @code{both}
+to display the match next to its replacement separated by an arrow.  In
+the case of @code{replacement-only}, then if the replacement is empty,
+instead of showing nothing at all, displays a thin bar to mark the place
+of the match.  You can also use a custom function that takes the match
+and the replacement and should return a string to display in place of
+the match, or @code{nil} to leave that match alone.  It may be helpful
+to reference the functions @code{replace-preview-replacement-only} and
+@code{replace-preview-both} when writing a custom function value for
+this option.
+
+@vindex query-replace-preview@r{ face}
+@vindex query-replace-preview-match@r{ face}
+  The preview uses the faces @code{query-replace-preview} and
+@code{query-replace-preview-match}.
+
 @menu
 * Unconditional Replace::   Replacing all matches for a string.
 * Regexp Replace::          Replacing all matches for a regexp.
@@ -1937,6 +1974,10 @@ case.  I.e., if you have a @code{query-replace} from @samp{foo} to
 @samp{Bar}.  Use this command to do the current replacement with exact
 case.
 
+@item d
+to show the replacement of the current match as a buffer of diffs
+between the original text and text with the match replaced.
+
 @item C-l
 to redisplay the screen.  Then you must type another character to
 specify what to do with this occurrence.
@@ -2202,24 +2243,20 @@ variable @code{isearch-lazy-highlight} to @code{nil} disables this
 highlighting.  Here are some other variables that customize the lazy
 highlighting:
 
-@table @code
+@vtable @code
 @item lazy-highlight-initial-delay
-@vindex lazy-highlight-initial-delay
 Time in seconds to wait before highlighting visible matches.
 Applies only if the search string is less than
 @code{lazy-highlight-no-delay-length} characters long.
 
 @item lazy-highlight-no-delay-length
-@vindex lazy-highlight-no-delay-length
 For search strings at least as long as the value of this variable,
 lazy highlighting of matches starts immediately.
 
 @item lazy-highlight-interval
-@vindex lazy-highlight-interval
 Time in seconds between highlighting successive matches.
 
 @item lazy-highlight-max-at-a-time
-@vindex lazy-highlight-max-at-a-time
 The maximum number of matches to highlight before checking for input.
 A large number can take some time to highlight, so if you want to
 continue searching and type @kbd{C-s} or @kbd{C-r} during that time,
@@ -2227,17 +2264,28 @@ Emacs will not respond until it finishes highlighting all those
 matches.  Thus, smaller values make Emacs more responsive.
 
 @item isearch-lazy-count
-@vindex isearch-lazy-count
 Show the current match number and the total number of matches in the
 search prompt.
 
 @item lazy-count-prefix-format
 @itemx lazy-count-suffix-format
-@vindex lazy-count-prefix-format
-@vindex lazy-count-suffix-format
 These two variables determine the format of showing the current and
 the total number of matches for @code{isearch-lazy-count}.
-@end table
+
+@item lazy-highlight-buffer
+If non-@code{nil}, lazy highlighting highlights the matches in the
+entire buffer, not only those visible on display of the current window
+(so, for example, they will also become visible in other windows showing
+the same buffer).
+
+@item lazy-highlight-buffer-max-at-a-time
+Like @code{lazy-highlight-max-at-a-time}, but used for highlighting
+matches not currently visible in the window when
+@code{lazy-highlight-buffer} is non-@code{nil}.  It defaults to 200; set
+to @code{nil} to highlight all the matches in a buffer without checking
+for input.  @strong{Warning:} this could make Emacs not responsive when
+searching large buffers.
+@end vtable
 
 @vindex search-nonincremental-instead
   Normally, entering @key{RET} within incremental search when the

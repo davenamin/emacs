@@ -143,7 +143,8 @@ point in the distant past, and is still broken in perl-mode. "
   (with-temp-buffer
     (funcall cperl-test-mode)
     (insert "package Foo::Bar;\n")
-    (insert "use Fee::Fie::Foe::Foo\n;")
+    (insert "use Fee::Fie::Foe::Foo\n;\n")
+    (insert "use require::relative;\n")  ; module name has a keyword
     (insert "my $xyzzy = 'PLUGH';\n")
     (goto-char (point-min))
     (font-lock-ensure)
@@ -153,9 +154,15 @@ point in the distant past, and is still broken in perl-mode. "
     (search-forward "use") ; This was buggy in perl-mode
     (should (equal (get-text-property (match-beginning 0) 'face)
                    'font-lock-keyword-face))
-    (search-forward "my")
-    (should (equal (get-text-property (match-beginning 0) 'face)
-                   'font-lock-keyword-face))))
+    (re-search-forward (rx(sequence(group-n 1 "use")
+                                   (1+ blank)
+                                   (group-n 2 "require"))))
+    (should (equal (get-text-property (match-beginning 1) 'face)
+                   'font-lock-keyword-face))
+    (should (equal (get-text-property (match-beginning 2) 'face)
+                   (if (eq cperl-test-mode #'cperl-mode)
+                       'font-lock-function-name-face
+                     'font-lock-constant-face)))))
 
 (ert-deftest cperl-test-fontify-attrs-and-signatures ()
   "Test fontification of the various combinations of subroutine
@@ -330,13 +337,17 @@ comments and POD they should be fontified as POD."
       (should (equal (get-text-property (match-beginning 1) 'face)
                      (if (equal cperl-test-mode 'perl-mode) nil
                        'cperl-method-call)))
-      ;; POD
+      ;; comment
       (search-forward-regexp "\\(method\\) \\(name\\)")
       (should (equal (get-text-property (match-beginning 1) 'face)
                      'font-lock-comment-face))
       (should (equal (get-text-property (match-beginning 2) 'face)
                      'font-lock-comment-face))
-      ;; comment
+      ;; false positive: $method is not a method
+      (search-forward-regexp "\\($method\\)\\(?:\n\\|\\s-\\)+\\(unless\\)")
+      (should (equal (get-text-property (match-beginning 2) 'face)
+                     'font-lock-keyword-face))
+      ;; POD
       (search-forward-regexp "\\(method\\) \\(name\\)")
       (should (equal (get-text-property (match-beginning 1) 'face)
                      'font-lock-comment-face))
@@ -622,7 +633,8 @@ Also includes valid cases with whitespace in strange places."
    "Test subroutine signatures."
    (skip-unless (eq cperl-test-mode #'cperl-mode))
    (let ((valid
-          '("()" "( )" "($self, %params)" "(@params)" "($first,$)"))
+          '("()" "( )" "($self, %params)" "(@params)" "($first,$)"
+            "($pos,:$named)"))
         (invalid
          '("$self"               ; missing paren
            "($!)"                ; globals not permitted in a signature
@@ -919,7 +931,8 @@ The minor mode `cperl-extra-paired-delimiters-mode' controls whether we
 have extra paired delimiters."
   (skip-unless (eq cperl-test-mode #'cperl-mode))
   (with-temp-buffer
-    (insert-file-contents (ert-resource-file "extra-delimiters.pl"))
+    (let ((coding-system-for-read 'utf-8))
+      (insert-file-contents (ert-resource-file "extra-delimiters.pl")))
     (funcall cperl-test-mode)
     (cperl-extra-paired-delimiters-mode t)
     (font-lock-ensure)
@@ -956,7 +969,8 @@ This test relies on the specific layout of the index alist as
 created by CPerl mode, so skip it for Perl mode."
   (skip-unless (eq cperl-test-mode #'cperl-mode))
   (with-temp-buffer
-    (insert-file-contents (ert-resource-file "grammar.pl"))
+    (let ((coding-system-for-read 'utf-8))
+      (insert-file-contents (ert-resource-file "grammar.pl")))
     (cperl-mode)
     (let ((index (cperl-imenu--create-perl-index))
           current-list)
@@ -1033,7 +1047,7 @@ under timeout control."
          (process-connection-type nil)
          runner)
     (with-temp-buffer
-      (with-timeout (2
+      (with-timeout (10
                      (delete-process runner)
                      (setq ran-out-of-time t))
         (setq runner (start-process "speedy"

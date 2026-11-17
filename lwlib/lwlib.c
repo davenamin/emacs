@@ -205,9 +205,7 @@ mark_widget_destroyed (Widget widget, XtPointer closure, XtPointer call_data)
 static widget_instance *
 allocate_widget_instance (widget_info* info, Widget parent, Boolean pop_up_p)
 {
-  widget_instance* instance =
-    (widget_instance*) xmalloc (sizeof (widget_instance));
-  memset (instance, 0, sizeof *instance);
+  widget_instance *instance = xzalloc (sizeof *instance);
   instance->parent = parent;
   instance->pop_up_p = pop_up_p;
   instance->info = info;
@@ -1050,7 +1048,7 @@ lw_get_all_values (LWLIB_ID id)
 widget_value*
 lw_get_widget_value_for_widget (widget_instance *instance, Widget w)
 {
-  char* name = XtName (w);
+  char const *name = XtName (w);
   widget_value* cur;
   for (cur = instance->info->val; cur; cur = cur->next)
     if (!strcmp (cur->name, name))
@@ -1072,7 +1070,7 @@ lw_internal_update_other_instances (Widget widget,
                                     XtPointer call_data)
 {
   widget_instance* instance = (widget_instance*)closure;
-  char* name = XtName (widget);
+  char const *name = XtName (widget);
   widget_info* info;
   widget_instance* cur;
   widget_value* val;

@@ -277,22 +277,25 @@ cover the range from the oldest annotation to the newest."
 			 (- current newest))
 	       (format "Spanned to %.1f days old" (- current oldest))))))
 
-;; Menu -- Using easymenu.el
 (easy-menu-define vc-annotate-mode-menu vc-annotate-mode-map
-  "VC Annotate Display Menu."
+  "Menu for VC-Annotate buffers."
   `("VC-Annotate"
+    :filter ,(lambda (items)
+               (let ((o-i-m (vc-annotate-oldest-in-map
+                             (default-value 'vc-annotate-color-map))))
+                 `(,(car items)
+                   ,@(mapcar (lambda (element)
+                               (let ((days (* element o-i-m)))
+                                 `[,(format "Span %.1f days" days)
+                                   (vc-annotate-display-select nil ,days)
+                                   :style toggle :selected
+                                   (eql vc-annotate-display-mode ,days) ]))
+                             vc-annotate-menu-elements)
+                   . ,(cdr items))))
     ["By Color Map Range" (unless (null vc-annotate-display-mode)
                  (setq vc-annotate-display-mode nil)
                  (vc-annotate-display-select))
      :style toggle :selected (null vc-annotate-display-mode)]
-    ,@(let ((oldest-in-map (vc-annotate-oldest-in-map vc-annotate-color-map)))
-        (mapcar (lambda (element)
-                  (let ((days (* element oldest-in-map)))
-                    `[,(format "Span %.1f days" days)
-                      (vc-annotate-display-select nil ,days)
-                      :style toggle :selected
-                      (eql vc-annotate-display-mode ,days) ]))
-                vc-annotate-menu-elements))
     ["Span ..."
      (vc-annotate-display-select
       nil (float (string-to-number (read-string "Span how many days? "))))]
@@ -582,26 +585,23 @@ the file in question, search for the log entry required and move point."
 	(let ((backend vc-annotate-backend)
 	      (log-buf (get-buffer "*vc-change-log*"))
               ;; No need to follow renames: we specify the historical file name.
-              vc-git-print-log-follow
-	      pos)
-	  (if (and
-	       log-buf
-	       ;; Look for a log buffer that already displays the correct file.
-	       (with-current-buffer log-buf
-		 (and (eq backend log-view-vc-backend)
-		      (null (cdr log-view-vc-fileset))
-		      (string= (car log-view-vc-fileset) (cdr rev-at-line))
-		      ;; Check if the entry we require can be found.
-		      (vc-call-backend
-		       backend 'show-log-entry (car rev-at-line))
-		      (setq pos (point)))))
-	      (progn
-		(pop-to-buffer log-buf)
-		(goto-char pos))
-	    ;; Ask the backend to display a single log entry.
-	    (vc-print-log-internal
-	     vc-annotate-backend (list (cdr rev-at-line))
-	     (car rev-at-line) t 1)))))))
+              vc-git-print-log-follow)
+          ;; Look for a log buffer that already displays the correct
+          ;; file.  Pop to it immediately because the backend function
+          ;; might call `recenter-top-bottom'.  If it turns out this log
+          ;; is useless and we have to call `vc-print-log-internal', the
+          ;; buffer will be reused, so it's fine that we popped to it.
+          (unless (and log-buf
+	               (with-current-buffer (pop-to-buffer log-buf)
+		         (and (eq backend log-view-vc-backend)
+		              (null (cdr log-view-vc-fileset))
+		              (equal (car log-view-vc-fileset)
+                                     (cdr rev-at-line))
+                              (vc-call-backend backend 'show-log-entry
+                                               (car rev-at-line)))))
+            (vc-print-log-internal vc-annotate-backend
+                                   (list (cdr rev-at-line))
+	                           (car rev-at-line) t 1)))))))
 
 (defun vc-annotate-show-diff-revision-at-line-internal (filediff)
   (defvar vc-allow-async-diff)

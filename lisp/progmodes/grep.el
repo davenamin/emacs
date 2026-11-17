@@ -771,6 +771,16 @@ The value depends on `grep-command', `grep-template',
 	   (cadr (or (assq setting host-defaults)
 		     (assq setting defaults)))))
 
+    ;; Solaris /usr/bin/grep lacks -E, standardized in POSIX.2-1992!
+    ;; If "grep" lacks -E, try one of the other standard Solaris greps.
+    ;; Only Solaris still has this problem, so do slow checks only there.
+    (when (and (equal grep-program "grep")
+	       (string-match-p "-solaris" system-configuration)
+	       (/= 1 (call-process "grep" nil nil nil "-E x")))
+      (let ((exec-path '("/usr/sfw/bin" "/usr/xpg4/bin")))
+	(when-let* ((g (executable-find "grep")))
+	  (setq grep-program g))))
+
     (unless (or (not grep-use-null-device) (eq grep-use-null-device t))
       (setq grep-use-null-device
 	    (with-temp-buffer
@@ -1120,6 +1130,8 @@ list is empty)."
 (defvar grep-edit-mode-hook nil
   "Hooks run when changing to Grep-Edit mode.")
 
+(defvar grep-edit-original-mode-map nil)
+
 (defun grep-edit-mode ()
   "Major mode for editing *grep* buffers.
 In this mode, changes to the *grep* buffer are applied to the
@@ -1140,6 +1152,7 @@ The only editable texts in a Grep-Edit buffer are the match results."
     (error "Not a Grep buffer"))
   (when (get-buffer-process (current-buffer))
     (error "Cannot switch when grep is running"))
+  (setq-local grep-edit-original-mode-map (current-local-map))
   (use-local-map grep-edit-mode-map)
   (grep-edit--prepare-buffer)
   (setq buffer-read-only nil)
@@ -1159,7 +1172,7 @@ The only editable texts in a Grep-Edit buffer are the match results."
   (unless (derived-mode-p 'grep-edit-mode)
     (error "Not a Grep-Edit buffer"))
   (remove-hook 'after-change-functions #'occur-after-change-function t)
-  (use-local-map grep-mode-map)
+  (use-local-map grep-edit-original-mode-map)
   (setq buffer-read-only t)
   (setq major-mode 'grep-mode)
   (setq mode-name "Grep")

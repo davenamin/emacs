@@ -203,9 +203,10 @@ LOAD and SELECTOR work as described in `native--compile-async'."
                   ;; because power users often configure their batteries
                   ;; to stop charging at less than 100% as a way to
                   ;; extend the lifetime of their battery hardware.
-                  (string= (cdr (assq ?b res)) "+")
-                  (member (cdr (assq ?B res)) '("charging" "pending-charge"))
-                  (not (string= (cdr (assq ?B res)) "discharging")))))))
+                  ;; Further discussion in bug#80922.
+                  (and (not (equal (cdr (assq ?b res)) "+"))
+                       (not (member (cdr (assq ?B res))
+                                    '("charging" "pending-charge")))))))))
 
 (defvar comp-files-queue ()
   "List of Emacs Lisp files to be compiled.")
@@ -278,14 +279,22 @@ display a message."
          do (cl-assert (string-match-p comp-valid-source-re source-file) nil
                        "`comp-files-queue' should be \".el\" files: %s"
                        source-file)
-         when (or native-comp-always-compile
-                  load ; Always compile when the compilation is
-                       ; commanded for late load.
-                  ;; Skip compilation if `comp-el-to-eln-filename' fails
-                  ;; to find a writable directory.
-                  (with-demoted-errors "Async compilation :%S"
-                    (file-newer-than-file-p
-                     source-file (comp-el-to-eln-filename source-file))))
+         when (and
+               ;; Verify that the source file still exists on disk as a
+               ;; regular file before calling `comp-el-to-eln-filename'.
+               ;; This check prevents `file-missing' errors caused by
+               ;; stale jobs in the async compilation queue.  (For
+               ;; example, this can happen when files are removed during
+               ;; a package's upgrade or deletion.)
+               (file-regular-p source-file)
+               (or native-comp-always-compile
+                   load ; Always compile when the compilation is
+                        ; commanded for late load.
+                   ;; Skip compilation if `comp-el-to-eln-filename' fails
+                   ;; to find a writable directory.
+                   (with-demoted-errors "Async compilation :%S"
+                     (file-newer-than-file-p
+                      source-file (comp-el-to-eln-filename source-file)))))
          do (let* ((expr `((require 'comp)
                            (setq comp-async-compilation t
                                  warning-fill-column most-positive-fixnum)
@@ -361,14 +370,23 @@ display a message."
                                 source-file)
                                (comp--accept-and-process-async-output process)
                                (ignore-errors (delete-file temp-file))
-                               (let ((eln-file (comp-el-to-eln-filename
-                                                source-file1)))
-                                 (when (and load1
-                                            (zerop (process-exit-status
-                                                    process))
-                                            (file-exists-p eln-file))
-                                   (native-elisp-load eln-file
-                                                      (eq load1 'late))))
+                               ;; Catch the file-missing error that
+                               ;; occurs if the original source file is
+                               ;; deleted while the asynchronous worker
+                               ;; is compiling it.  Handling this error
+                               ;; prevents the sentinel from aborting
+                               ;; and ensures the compilation queue
+                               ;; continues processing.
+                               (condition-case nil
+                                   (let ((eln-file (comp-el-to-eln-filename
+                                                    source-file1)))
+                                     (when (and load1
+                                                (zerop (process-exit-status
+                                                        process))
+                                                (file-exists-p eln-file))
+                                       (native-elisp-load eln-file
+                                                          (eq load1 'late))))
+                                 (file-missing nil))
                                (comp--run-async-workers))
                              :noquery (not native-comp-async-query-on-exit))))
               (set-process-thread process nil)

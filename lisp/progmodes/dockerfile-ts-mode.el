@@ -167,13 +167,16 @@ Return nil if there is no name or if NODE is not a stage node."
   :group 'dockerfile
   :syntax-table dockerfile-ts-mode--syntax-table
 
-  (when (treesit-ensure-installed 'dockerfile)
+  ;; `treesit-ready-p' also checks for buffer size.
+  (when (and (treesit-ensure-installed 'dockerfile)
+             (treesit-ready-p 'dockerfile))
     (setq treesit-primary-parser (treesit-parser-create 'dockerfile))
 
     ;; Comments.
     (setq-local comment-start "# ")
     (setq-local comment-end "")
     (setq-local comment-start-skip (rx "#" (* (syntax whitespace))))
+    (setq-local comment-start-line-regexp comment-start-skip)
 
     ;; Imenu.
     (setq-local treesit-simple-imenu-settings

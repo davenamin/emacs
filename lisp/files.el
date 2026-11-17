@@ -1027,64 +1027,120 @@ The path separator is colon in GNU and GNU-like systems."
         (error "No such directory found via CDPATH environment variable: %s" dir)
       (error "No such directory: %s" dir)))))
 
+(defun files--recursively (dir regexp
+                               &optional include-directories predicate
+                               follow-symlinks lessp)
+  "Recursive body of `directory-files-recursively'.
+Expects DIR to be an absolute directory (not file) name,
+and `tramp-mode' and `completion-regexp-list' to be set
+appropriately for `file-name-all-completions'."
+  (let ((result ()) ;; Subdirectories and their files, followed by...
+        (files ())  ;; ...the current directory's regular files.
+        (predfn (and (not (booleanp predicate)) predicate))
+        (comps (file-name-all-completions "" dir)))
+    ;; By returning directory names, `file-name-all-completions' is
+    ;; faster than `directory-files' followed by `file-directory-p'.
+    ;; However, the trailing slash of directory names affects sort
+    ;; order, e.g., it can put "foo-bar/" before "foo/".  Since
+    ;; `file-name-all-completions' uses `file-name-as-directory', it is
+    ;; safe, faster, and more predictable to use `substring' in place of
+    ;; `directory-file-name'.  In fact, it is faster to compute the
+    ;; `substring' twice (first as a sortkey, then for REGEXP) than to
+    ;; do it once and save the result in a temporary object.
+    (dolist (file (if (eq lessp t) comps
+                    (sort comps :in-place t :lessp lessp
+                          ;; Normalize directory names as file names.
+                          :key (lambda (f)
+                                 (if (directory-name-p f)
+                                     (substring f nil -1)
+                                   f)))))
+      (cond ((member file '("./" "../")))
+            ;; When FILE is of the form "foo/".
+            ((directory-name-p file)
+             (let* (;; Nondir part of directory file name,
+                    ;; of the form "foo".
+                    (name (substring file nil -1))
+                    ;; Absolute directory file name, of the form
+                    ;; "/dir/foo".  Cheaper than `expand-file-name', and
+                    ;; avoids pitfalls with files named, e.g., "~".
+                    (full-file (concat dir name))
+                    ;; List of subdirectory's files.
+                    (sub-files
+                     (and
+                      ;; Don't follow symlinks to other directories.
+                      (or follow-symlinks
+                          (not (file-symlink-p full-file)))
+                      ;; Allow filtering subdirectories.
+                      (or (not predfn)
+                          (funcall predfn full-file))
+                      (if (eq predicate t)
+                          (ignore-error file-error
+                            (files--recursively
+                             (file-name-as-directory full-file) regexp
+                             include-directories predicate
+                             follow-symlinks lessp))
+                        (files--recursively
+                         (file-name-as-directory full-file) regexp
+                         include-directories predicate
+                         follow-symlinks lessp))))
+                    ;; Whether to list subdirectory itself.
+                    (sub-dir (and include-directories
+                                  (string-match-p regexp name)
+                                  (list full-file))))
+               ;; Skip any no-op `nconc' traversals.
+               (when (or sub-files sub-dir)
+                 (setq result (nconc result sub-files sub-dir)))))
+            ;; When FILE is of the form "foo".
+            ((string-match-p regexp file)
+             (push (concat dir file) files))))
+    (nconc result (nreverse files))))
+
 (defun directory-files-recursively (dir regexp
                                         &optional include-directories predicate
-                                        follow-symlinks)
+                                        follow-symlinks lessp)
   "Return list of all files under directory DIR whose names match REGEXP.
-This function works recursively.  Files are returned in \"depth
-first\" order, and files from each directory are sorted in
-alphabetical order.  Each file name appears in the returned list
-in its absolute form.
+This function works recursively, with files returned in \"depth
+first\" (bottom-up) order.  Each file name whose non-directory part
+matches REGEXP appears in the returned list in its absolute form.
 
 By default, the returned list excludes directories, but if
-optional argument INCLUDE-DIRECTORIES is non-nil, they are
-included.
+optional argument INCLUDE-DIRECTORIES is non-nil, it means
+consider them for inclusion.
 
 PREDICATE can be either nil (which means that all subdirectories
 of DIR are descended into), t (which means that subdirectories that
 can't be read are ignored), or a function (which is called with
-the name of each subdirectory, and should return non-nil if the
-subdirectory is to be descended into).
+the absolute name of each subdirectory, and should return non-nil
+if the subdirectory is to be descended into).
 
 If FOLLOW-SYMLINKS is non-nil, symbolic links that point to
 directories are followed.  Note that this can lead to infinite
-recursion."
-  (let* ((result nil)
-	 (files nil)
-         (dir (directory-file-name dir))
-	 ;; When DIR is "/", remote file names like "/method:" could
-	 ;; also be offered.  We shall suppress them.
-	 (tramp-mode (and tramp-mode (file-remote-p (expand-file-name dir)))))
-    (dolist (file (sort (file-name-all-completions "" dir)
-			'string<))
-      (unless (member file '("./" "../"))
-	(if (directory-name-p file)
-	    (let* ((leaf (substring file 0 (1- (length file))))
-		   (full-file (concat dir "/" leaf)))
-	      ;; Don't follow symlinks to other directories.
-	      (when (and (or (not (file-symlink-p full-file))
-                             (and (file-symlink-p full-file)
-                                  follow-symlinks))
-                         ;; Allow filtering subdirectories.
-                         (or (eq predicate nil)
-                             (eq predicate t)
-                             (funcall predicate full-file)))
-                (let ((sub-files
-                       (if (eq predicate t)
-                           (ignore-error file-error
-                             (directory-files-recursively
-			      full-file regexp include-directories
-                              predicate follow-symlinks))
-                         (directory-files-recursively
-			  full-file regexp include-directories
-                          predicate follow-symlinks))))
-		  (setq result (nconc result sub-files))))
-	      (when (and include-directories
-			 (string-match regexp leaf))
-		(setq result (nconc result (list full-file)))))
-	  (when (string-match regexp file)
-	    (push (concat dir "/" file) files)))))
-    (nconc result (nreverse files))))
+recursion.
+
+LESSP determines the relative order of file names per directory in the
+returned list.  When nil, it defaults to lexicographic order as per
+`string-lessp'.  When t, files in each directory are not sorted, and
+their order is arbitrary.  Otherwise, it is a function suitable as the
+`:lessp' argument of `sort', that takes two arguments (the non-directory
+part of two file names) and returns non-nil if the first should precede
+the second.  For example, `string-collate-lessp' gives the
+locale-specific collation order one might see in Dired."
+  ;; Set up some (potentially expensive) invariants before recursing.
+  (let* (;; As requested by `files--recursively'.
+         (dir (if (directory-name-p dir) dir (file-name-as-directory dir)))
+         ;; Must be absolute for the `file-remote-p' that follows, and
+         ;; so that the final result comprises absolute names even when
+         ;; the input is relative.  But skip `expand-file-name' if
+         ;; possible, for speed and symmetry with the input.
+         (dir (if (file-name-absolute-p dir) dir (expand-file-name dir)))
+         ;; When DIR is "/", remote file names like "/method:" could
+         ;; also be offered.  We shall suppress them.
+         (tramp-mode (and tramp-mode (file-remote-p dir)))
+         ;; Avoid its influence on `file-name-all-completions',
+         ;; which we use in place of `directory-files' for speed.
+         (completion-regexp-list ()))
+    (files--recursively dir regexp include-directories
+                        predicate follow-symlinks lessp)))
 
 (defun directory-empty-p (dir)
   "Return t if DIR names an existing directory containing no other files.
@@ -1331,7 +1387,7 @@ remote, otherwise search locally."
     ;; Use 1 rather than file-executable-p to better match the
     ;; behavior of call-process.
     (let ((default-directory (file-name-quote default-directory 'top)))
-      (locate-file command exec-path exec-suffixes 1))))
+      (locate-file command exec-path (default-value 'exec-suffixes) 1))))
 
 (declare-function read-library-name "find-func" nil)
 
@@ -1408,7 +1464,7 @@ reuse only a connection that is already open.
 
 Return nil or a string identifying the remote connection
 \(ideally a prefix of FILE).  Return nil if FILE is a relative
-file name.
+file name.  Return nil if FILE is nil.
 
 When IDENTIFICATION is nil, the returned string is a complete
 remote identifier: with components method, user, and host.  The
@@ -1442,7 +1498,8 @@ Tip: You can use this expansion of remote identifier components
      returns a remote file name for file \"/bin/sh\" that has the
      same remote identifier as FILE but expanded; a name such as
      \"/sudo:root@myhost:/bin/sh\"."
-  (when-let* ((handler (find-file-name-handler file 'file-remote-p)))
+  (when-let* ((file)
+              (handler (find-file-name-handler file 'file-remote-p)))
     (funcall handler 'file-remote-p file identification connected)))
 
 ;; Probably this entire variable should be obsolete now, in favor of
@@ -3155,6 +3212,7 @@ since only a single case-insensitive search through the alist is made."
     ("\\.srt\\'" . srecode-template-mode)
     ("\\.prolog\\'" . prolog-mode)
     ("\\.tar\\'" . tar-mode)
+    ("\\(?:\\.rmail\\|\\(?:\\`\\|[/\\]\\)RMAIL\\)\\'" . rmail-mode)
     ;; The list of archive file extensions should be in sync with
     ;; `auto-coding-alist' with `no-conversion' coding system.
     ("\\.\\(\
@@ -3238,6 +3296,7 @@ ARC\\|ZIP\\|LZH\\|LHA\\|ZOO\\|[JEW]AR\\|XPI\\|RAR\\|CBR\\|7Z\\|SQUASHFS\\)\\'" .
     ;; e.g. in /etc/npmrc files.
     ("npmrc\\'" . conf-npmrc-mode)
     ("/\\.redshift\\.conf\\'" . conf-windows-mode)
+    ("/\\.buckconfig\\(?:\\.local\\)?\\'" . conf-mode)
     ("\\`/etc/\\(?:DIR_COLORS\\|ethers\\|.?fstab\\|.*hosts\\|lesskey\\|login\\.?de\\(?:fs\\|vperm\\)\\|magic\\|mtab\\|pam\\.d/.*\\|permissions\\(?:\\.d/.+\\)?\\|protocols\\|rpc\\|services\\)\\'" . conf-space-mode)
     ("\\`/etc/\\(?:acpid?/.+\\|aliases\\(?:\\.d/.+\\)?\\|default/.+\\|group-?\\|hosts\\..+\\|inittab\\|ksysguarddrc\\|opera6rc\\|passwd-?\\|shadow-?\\|sysconfig/.+\\)\\'" . conf-mode)
     ;; ChangeLog.old etc.  Other change-log-mode entries are above;
@@ -3506,44 +3565,42 @@ If FUNCTION is nil, then it is not called.")
   "Upper limit on `magic-mode-alist' regexp matches.
 Also applies to `magic-fallback-mode-alist'.")
 
-(defun set-auto-mode--find-matching-alist-entry (alist name case-insensitive)
+(defun set-auto-mode--from-matching-alist-entry ( alist name case-insensitive
+                                                  keep-mode-if-same dir-local)
   "Find first matching entry in ALIST for file NAME.
 
 If CASE-INSENSITIVE, the file system of file NAME is case-insensitive."
-  (let (mode)
-    (while name
-      (let ((newmode
-             (if case-insensitive
-                 ;; Filesystem is case-insensitive.
-                 (let ((case-fold-search t))
-                   (assoc-default name alist 'string-match))
-               ;; Filesystem is case-sensitive.
-               (or
-                ;; First match case-sensitively.
-                (let ((case-fold-search nil))
-                  (assoc-default name alist 'string-match))
-                ;; Fallback to case-insensitive match.
-                (and auto-mode-case-fold
-                     (let ((case-fold-search t))
-                       (assoc-default name alist 'string-match)))))))
-        (when newmode
-          (when mode
-            ;; We had already found a mode but in a (REGEXP MODE t)
-            ;; entry, so we still have to run MODE.  Let's do it now.
-            ;; FIXME: It's kind of ugly to run the function here.
-            ;; An alternative could be to return a list of functions and
-            ;; callers.
-            (set-auto-mode-0 mode t))
-          (setq mode newmode))
-        (if (and newmode
-                 (not (functionp newmode))
-                 (consp newmode)
-                 (cadr newmode))
-            ;; It's a (REGEXP MODE t): Keep looking but remember the MODE.
-            (setq mode (car newmode)
-                  name (substring name 0 (match-beginning 0)))
-          (setq name nil))))
-    mode))
+  (let (was-set)
+    (while
+        (let* ((newmode
+                (if case-insensitive
+                    ;; Filesystem is case-insensitive.
+                    (let ((case-fold-search t))
+                      (assoc-default name alist 'string-match))
+                  ;; Filesystem is case-sensitive.
+                  (or
+                   ;; First match case-sensitively.
+                   (let ((case-fold-search nil))
+                     (assoc-default name alist 'string-match))
+                   ;; Fallback to case-insensitive match.
+                   (and auto-mode-case-fold
+                        (let ((case-fold-search t))
+                          (assoc-default name alist 'string-match))))))
+               ;; Extract MODE from (REGEXP MODE t) entries.
+               (mode-t (when (and (not (functionp newmode))
+                                  (consp newmode)
+                                  (cadr newmode))
+                         (setq name (substring name 0 (match-beginning 0)))
+                         (car newmode)))
+               (mode (or mode-t newmode)))
+          (when newmode
+            (if (and dir-local
+                     (not (set-auto-mode--dir-local-valid-p mode)))
+                (message "Ignoring invalid mode `%S'" mode)
+              (set-auto-mode-0 mode keep-mode-if-same)
+              (setq was-set t))
+            mode-t)))
+    was-set))
 
 (defun set-auto-mode--apply-alist (alist keep-mode-if-same dir-local)
   "Helper function for `set-auto-mode'.
@@ -3555,8 +3612,7 @@ Return non-nil if the mode was set, nil otherwise.
 DIR-LOCAL non-nil means this call is via directory-locals, and
 extra checks should be done."
   (if buffer-file-name
-      (let (mode
-            (name buffer-file-name)
+      (let ((name buffer-file-name)
             (remote-id (file-remote-p buffer-file-name))
             (case-insensitive-p (file-name-case-insensitive-p
                                  buffer-file-name)))
@@ -3566,15 +3622,8 @@ extra checks should be done."
         (when (and (stringp remote-id)
                    (string-match (regexp-quote remote-id) name))
           (setq name (substring name (match-end 0))))
-        (setq mode (set-auto-mode--find-matching-alist-entry
-                    alist name case-insensitive-p))
-        (when (and dir-local mode
-                   (not (set-auto-mode--dir-local-valid-p mode)))
-          (message "Ignoring invalid mode `%S'" mode)
-          (setq mode nil))
-        (when mode
-          (set-auto-mode-0 mode keep-mode-if-same)
-          t))))
+        (set-auto-mode--from-matching-alist-entry
+         alist name case-insensitive-p keep-mode-if-same dir-local))))
 
 (defun set-auto-mode--dir-local-valid-p (mode)
   "Say whether MODE can be used in a .dir-local.el `auto-mode-alist'."
@@ -3633,9 +3682,11 @@ we don't actually set it to the same mode the buffer already has."
 		   (push (intern (concat (downcase (buffer-substring beg (point))) "-mode"))
 			 modes)))
 	     ;; Simple -*-MODE-*- case.
-	     (push (intern (concat (downcase (buffer-substring (point) end))
-				   "-mode"))
-		   modes))))
+             (and (< (point) end)
+	          (push (intern (concat (downcase
+                                         (buffer-substring (point) end))
+				        "-mode"))
+		        modes)))))
     (or
      ;; If we found modes to use, invoke them now, outside the save-excursion.
      ;; Presume `modes' holds a major mode followed by minor modes.
@@ -3826,6 +3877,7 @@ have no effect."
        (forward-char -3)
        (skip-chars-backward " \t")
        (setq end (point))
+       (setq beg (min beg end))
        (goto-char beg)
        end))))
 
@@ -3990,6 +4042,18 @@ variable `enable-remote-dir-locals' is non-nil."
   :risky t
   :group 'find-file)
 
+(defmacro without-local-variable-queries (&rest body)
+  "Execute BODY without querying user about local variable values.
+In some uses, this is a workaround for the problem that a command
+disables displaying new windows for its own reasons but this also breaks
+`hack-local-variables-confirm'.  See Emacs bug#80528 and bug#81233."
+  (declare (indent 0) (debug t))
+  `(let ((enable-local-variables
+          (if (memq enable-local-variables '(:safe :all nil))
+              enable-local-variables
+            :safe)))
+     ,@body))
+
 (defun hack-local-variables-confirm (all-vars unsafe-vars risky-vars dir-name)
   "Get confirmation before setting up local variable values.
 ALL-VARS is the list of all variables to be set up.
@@ -4054,6 +4118,9 @@ i  -- to ignore the local variables list, and permanently mark these
       ;; Display the buffer and read a choice.
       (save-window-excursion
 	(pop-to-buffer buf '(display-buffer--maybe-at-bottom))
+        (unless (get-buffer-window buf)
+          (error "Failed to display local variables buffer; this is a bug
+Possibly caller should use `without-local-variable-queries', which see."))
 	(let* ((exit-chars '(?y ?n ?\s))
 	       (prompt (format "Please type %s%s: "
 			       (if offer-save
@@ -4304,19 +4371,22 @@ all the specified local variables, but ignores any settings of \"mode:\"."
               (push elem file-local-variables-alist)))
           (hack-local-variables-apply))))))
 
+(defvar-local files--name-of-loading-file nil
+  "File name of the file loaded/evaluated in the buffer.")
+
 (defun internal--get-default-lexical-binding (from)
   (let ((mib (lambda (node) (buttonize node (lambda (_) (info node))
                                   nil "mouse-2: Jump to Info node"))))
     (or (and (bufferp from) (zerop (buffer-size from)))
         (and (stringp from)
              (eql 0 (file-attribute-size (file-attributes from))))
-        (let ((source
-               (if (not (and (bufferp from)
-                             (string-match-p "\\` \\*load\\*\\(-[0-9]+\\)?\\'"
-                                             (buffer-name from))
-                             load-file-name))
-                   from
-                 (abbreviate-file-name load-file-name))))
+        (let* ((fname
+                (if (bufferp from)
+                    (buffer-local-value 'files--name-of-loading-file from)))
+               (source
+                (if fname
+                    (abbreviate-file-name fname)
+                  from)))
           (condition-case nil
               (display-warning
                `(files missing-lexbind-cookie
@@ -4623,7 +4693,9 @@ already the major mode."
      ;; so it is risky to put them on with a local variable list.
      (if (stringp val)
          (set-text-properties 0 (length val) nil val))
-     (set (make-local-variable var) val))))
+     (if (custom-variable-p var)
+         (setopt--set-local var val)
+       (set (make-local-variable var) val)))))
 
 ;;; Handling directory-local variables, aka project settings.
 
@@ -4789,27 +4861,47 @@ the \".dir-locals.el\".
 
 See Info node `(elisp)Directory Local Variables' for details.")
 
+(defun dir-locals--file-names ()
+  "Return the two file names that can hold directory local variable settings.
+The returned list is sorted by increasing priority: values specified in
+the second file (e.g., \".dir-locals-2.el\" for the current value in
+\"dir-locals-file\") take precedence over those in the first file (e.g.,
+\".dir-locals.el\").
+
+Note: the returned file names are already sanitized for MS-DOS."
+  (let* ((extension (file-name-extension dir-locals-file t))
+         (file-1 (if (eq system-type 'ms-dos)
+                     (dosified-file-name dir-locals-file)
+                   dir-locals-file))
+         (file-2 (concat (file-name-sans-extension file-1) "-2" extension)))
+    (list file-1 file-2)))
+
+;;;###autoload
+(defun dir-locals-file-p (filename)
+  "Return non-nil if FILENAME appears to be a \"dir-locals\" file."
+  (seq-some
+   (lambda (elt) (string-suffix-p elt filename)) (dir-locals--file-names)))
+
 (defun dir-locals--all-files (directory &optional base-el-only)
   "Return a list of all readable dir-locals files in DIRECTORY.
 The returned list is sorted by increasing priority.  That is,
 values specified in the last file should take precedence over
-those in the first."
+those in the first.
+If optional argument BASE-EL-ONLY is non-nil, return only the first
+file name from `dir-locals--file-names'.
+
+Return nil if DIRECTORY does not exist."
   (when (file-readable-p directory)
-    (let* ((file-1 (expand-file-name (if (eq system-type 'ms-dos)
-                                         (dosified-file-name dir-locals-file)
-                                       dir-locals-file)
-                                     directory))
-           (file-2 (when (string-match "\\.el\\'" file-1)
-                     (replace-match "-2.el" t nil file-1)))
-           out)
-      (dolist (f (or (and base-el-only (list file-1))
-                     ;; The order here is important.
-                     (list file-2 file-1)))
-        (when (and f
-                   (file-readable-p f)
-                   (file-regular-p f))
-          (push f out)))
-      out)))
+    (let* ((files (dir-locals--file-names))
+           (files (if base-el-only
+                      (seq-take files 1)
+                    files))
+           (paths (mapcar (lambda (elt) (expand-file-name elt directory)) files)))
+      (seq-filter (lambda (elt)
+                    (and elt
+                         (file-readable-p elt)
+                         (file-regular-p elt)))
+                  paths))))
 
 (defun dir-locals--base-file (directory)
   "Return readable `dir-locals-file' in DIRECTORY, or nil."
@@ -6733,15 +6825,13 @@ Signal an error if unsuccessful."
 Optional arg PARENTS, if non-nil then creates parent dirs as needed.
 
 If called interactively, then PARENTS is non-nil."
-  (interactive
-   (let ((filename (read-file-name "Create empty file: ")))
-     (list filename t)))
-  (when (and (file-exists-p filename) (null parents))
-    (signal 'file-already-exists `("File exists" ,filename)))
-  (let ((paren-dir (file-name-directory filename)))
-    (when (and paren-dir (not (file-exists-p paren-dir)))
-      (make-directory paren-dir parents)))
-  (write-region "" nil filename nil 0))
+  (interactive "FCreate empty file: \np")
+  (when parents
+    (when-let* ((paren-dir (file-name-directory filename)))
+      (make-directory paren-dir :parents)))
+  ;; The `excl' is crucial, in case someone else has created the file in
+  ;; the meantime (TOCTTOU).
+  (write-region "" nil filename nil 0 nil 'excl))
 
 (defconst directory-files-no-dot-files-regexp
   "[^.]\\|\\.\\.\\."
@@ -8484,10 +8574,15 @@ normally equivalent short `-D' option is just passed on to
         ;; error.
         (when (> (file-attribute-size (file-attributes errfile)) 0)
           (defvar dired--ls-error-buffer) ; Pacify byte-compiler.
-          (let ((errbuf (get-buffer-create "*ls error*")))
+          (let ((errbuf (or (get-buffer "*ls error*")
+                            (let ((buf (generate-new-buffer "*ls error*")))
+                              (with-current-buffer buf
+                                (setq buffer-read-only t))
+                              buf))))
             (with-current-buffer errbuf
-              (erase-buffer)
-              (insert-file-contents errfile))
+              (let ((inhibit-read-only t))
+                (erase-buffer)
+                (insert-file-contents errfile)))
             (setq dired--ls-error-buffer errbuf)))
         (defvar dired--ls-error-file) ; Pacify byte-compiler.
         (setq dired--ls-error-file errfile)
